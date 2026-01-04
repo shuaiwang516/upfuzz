@@ -70,17 +70,14 @@ docker ps
 ls failure/
 ```
 
-**Stop Testing**
+**Stop Testing and Clean Up**
 ```bash
+# stop fuzzing server, client, and containers
 bin/clean.sh
-```
-
-**Remove Generated files**
-Long time fuzzing could generate lots of files (recorded tests, logs, failure reports...), which could take a large amount of the disk space. Usually after examining the bug reports, we use the following commands to remove useless files.
-```bash
+# remove generated files
+# Testing could generate lots of files (recorded tests, logs, failure reports...)
 bin/rm.sh
 ```
-
 
 ### Test HBase: 2.4.18 => 2.5.9
 
@@ -93,11 +90,7 @@ bash artifact/test-hbase.sh
 
 same as Cassandra
 
-**Stop Testing**
-
-same as Cassandra
-
-**Remove Generated files**
+**Stop Testing and Clean Up**
 
 same as Cassandra
 
@@ -112,11 +105,7 @@ bash artifact/test-hdfs.sh
 
 same as Cassandra
 
-**Stop Testing**
-
-same as Cassandra
-
-**Remove Generated files**
+**Stop Testing and Clean Up**
 
 same as Cassandra
 
@@ -174,10 +163,10 @@ cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19590 false
 ```
 
-4. CASSANDRA-19591
+4. CASSANDRA-19591 (Testing: s0)
 ```bash
 cd ~/project/upfuzz
-bash artifact/bug-reproduction/cass_repo_2_3.sh 19591 true
+bash artifact/bug-reproduction/cass_repo_2_3.sh 19591 false
 ```
 
 5. CASSANDRA-19623
@@ -225,7 +214,7 @@ cd ~/project/upfuzz
 bash artifact/bug-reproduction/hbase_repo.sh 28815 false
 ```
 
-12. HBASE-29021
+12. HBASE-29021 (Tested)
 ```bash
 # 2.5.9 => 3.0.0 (516c89e8597fb6)
 cd ~/project/upfuzz

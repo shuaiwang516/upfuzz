@@ -1,5 +1,5 @@
 #!/bin/bash
-f=$(grep -rl "MarshalException" failure | sort -t '_' -k2,2n | head -n 1)
+f=$(grep -rl "CommitLogReplayException" failure | sort -t '_' -k2,2n | head -n 1)
 
 # Add color to the output for better visibility
 GREEN='\033[0;32m'
