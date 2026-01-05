@@ -1,5 +1,5 @@
-#!/bin/bash
-f=$(bin/find_failure_with_SELECT.sh; cat input_file | bin/grep_and_newline_19689.sh | grep -i -B 20 "found")
+#!/bin/bash 
+f=$(find failure -iname 'inconsistency_*' | sort -t '_' -k2,2n | head -n 1)
 
 # Add color to the output for better visibility
 GREEN='\033[0;32m'

@@ -223,7 +223,7 @@ cd ~/project/upfuzz
 bash artifact/bug-reproduction/hbase_repo.sh 29021 false
 ```
 
-13. HDFS-16984
+13. HDFS-16984 (Testing: s2)
 ```bash
 # 2.10.2 => 3.3.6
 cd ~/project/upfuzz
