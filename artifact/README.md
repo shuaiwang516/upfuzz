@@ -44,6 +44,8 @@ git clone https://github.com/zlab-purdue/upfuzz.git
 cd ~/project/upfuzz
 ```
 
+TODO: add push-button script for instrumented testing
+
 ### Test Cassandra: 3.11.17 => 4.1.4
 
 **Start up testing process**
@@ -163,13 +165,13 @@ cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19590 false
 ```
 
-4. CASSANDRA-19591 (Testing: s0)
+4. CASSANDRA-19591 (Tested)
 ```bash
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19591 false
 ```
 
-5. CASSANDRA-19623
+5. CASSANDRA-19623 (Tested)
 ```bash
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19623 true
@@ -181,13 +183,13 @@ cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19639 true
 ```
 
-7. CASSANDRA-19689
+7. CASSANDRA-19689 (Testing: s0: BUGGY!!! bug is not triggered)
 ```bash
 cd ~/project/upfuzz
-bash artifact/bug-reproduction/cass_repo_2_3.sh 19689 false
+bash artifact/bug-reproduction/cass_repo_2_3.sh 19689 true
 ```
 
-8. CASSANDRA-20182
+8. CASSANDRA-20182 (Testing: s2)
 ```bash
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 20182 false
