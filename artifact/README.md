@@ -189,7 +189,7 @@ cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19689 true
 ```
 
-8. CASSANDRA-20182 (Testing: s2)
+8. CASSANDRA-20182 (Tested)
 ```bash
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 20182 false
@@ -227,6 +227,8 @@ bash artifact/bug-reproduction/hbase_repo.sh 29021 false
 ```bash
 # 2.10.2 => 3.3.6
 cd ~/project/upfuzz
+mkdir -p /tmp/upfuzz/hdfs
+cp -r artifact/bug-reproduction/nsdi26-ae/HDFS-16984/GUBIkxOc /tmp/upfuzz/hdfs/
 bash artifact/bug-reproduction/hdfs_repo.sh 16984 false
 ```
 14.HDFS-17219
@@ -240,6 +242,8 @@ bash artifact/bug-reproduction/hdfs_repo.sh 17219 false
 ```bash
 # 2.10.2 => 3.3.6
 cd ~/project/upfuzz
+mkdir -p /tmp/upfuzz/hdfs
+cp -r artifact/bug-reproduction/nsdi26-ae/HDFS-17219/GscWZRxS /tmp/upfuzz/hdfs/
 bash artifact/bug-reproduction/hdfs_repo.sh 17686 false
 ```
 
