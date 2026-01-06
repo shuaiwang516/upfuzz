@@ -247,11 +247,11 @@ cp -r artifact/bug-reproduction/bugs/HDFS-17686/pVfezjff /tmp/upfuzz/hdfs/
 bash artifact/bug-reproduction/hdfs_repo.sh 17686 false
 ```
 
-### Reproduce Table 2: triggering trace
+<!-- ### Reproduce Table 2: triggering trace
 
 We'll provide the detailed testing logs for the following 2 modes:
 * Baseline (BC) mode 
-* Final mode (BC + DF + VD)
+* Final mode (BC + DF + VD) -->
 
 ### Reproduce Table 4: Overhead
 Scripts are provided to reproduce the overhead measurements reported in the paper.
