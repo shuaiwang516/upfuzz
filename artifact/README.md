@@ -228,6 +228,7 @@ bash artifact/bug-reproduction/hbase_repo.sh 29021 false
 # 2.10.2 => 3.3.6
 cd ~/project/upfuzz
 mkdir -p /tmp/upfuzz/hdfs
+rm -rf /tmp/upfuzz/hdfs/GUBIkxOc
 cp -r artifact/bug-reproduction/bugs/HDFS-16984/GUBIkxOc /tmp/upfuzz/hdfs/
 bash artifact/bug-reproduction/hdfs_repo.sh 16984 false
 ```
@@ -243,7 +244,7 @@ bash artifact/bug-reproduction/hdfs_repo.sh 17219 false
 # 2.10.2 => 3.3.6
 cd ~/project/upfuzz
 mkdir -p /tmp/upfuzz/hdfs
-rm -rf /tmp/upfuzz/hdfs/pVfezjff # is this needed?
+rm -rf /tmp/upfuzz/hdfs/pVfezjff
 cp -r artifact/bug-reproduction/bugs/HDFS-17686/pVfezjff /tmp/upfuzz/hdfs/
 bash artifact/bug-reproduction/hdfs_repo.sh 17686 false
 ```
