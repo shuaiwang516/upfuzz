@@ -21,6 +21,7 @@ hbase_repo_func() {
   mkdir -p $UPFUZZ_DIR/prebuild/hadoop
   cd $UPFUZZ_DIR/prebuild/hadoop
 
+  rm -rf hadoop-2.10.2
   if [ ! -d "hadoop-2.10.2" ]; then
     wget https://github.com/zlab-purdue/upfuzz/releases/download/hadoop/hadoop-2.10.2.tar.gz
     tar -xzvf hadoop-2.10.2.tar.gz > /dev/null

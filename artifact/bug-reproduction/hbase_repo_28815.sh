@@ -20,13 +20,12 @@ hbase_repo_func() {
   mkdir -p $UPFUZZ_DIR/prebuild/hadoop
   cd $UPFUZZ_DIR/prebuild/hadoop
 
-  if [ ! -d "hadoop-2.10.2" ]; then
-    wget https://github.com/zlab-purdue/upfuzz/releases/download/hadoop/hadoop-2.10.2.tar.gz
-    tar -xzvf hadoop-2.10.2.tar.gz > /dev/null
-    cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/core-site.xml $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
-    cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/hdfs-site.xml $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
-    cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/hadoop-env.sh $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
-  fi
+  rm -rf hadoop-2.10.2 hadoop-2.10.2.tar.gz
+  wget https://github.com/zlab-purdue/upfuzz/releases/download/hadoop/hadoop-2.10.2.tar.gz
+  tar -xzvf hadoop-2.10.2.tar.gz > /dev/null
+  cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/core-site.xml $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
+  cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/hdfs-site.xml $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
+  cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/hadoop-env.sh $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
 
   cd $UPFUZZ_DIR
   mkdir -p $UPFUZZ_DIR/prebuild/hbase
