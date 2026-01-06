@@ -195,16 +195,16 @@ cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 20182 false
 ```
 
-9. HBASE-28583 (s0: retesting)
+9. HBASE-28583 (Tested)
 ```bash
 # 2.5.9 => 3.0.0 (516c89e8597fb6)
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/hbase_repo.sh 28583 false
 ```
 
-10. HBASE-28812 (s1)
+10. HBASE-28812 (Tested)
 ```bash
-# 2.6.0 => 3.0.0 (a030e8099840e640684a68b6e4a79e7c1d5a6823)
+# 2.6.0 => 3.0.0 (a030e8099840e64)
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/hbase_repo_28812.sh 28812 false
 ```
@@ -238,11 +238,12 @@ cd ~/project/upfuzz
 bash artifact/bug-reproduction/hdfs_repo.sh 17219 false
 ```
 
-15.HDFS-17686 (retesting: s2)
+15.HDFS-17686 (Tested)
 ```bash
 # 2.10.2 => 3.3.6
 cd ~/project/upfuzz
 mkdir -p /tmp/upfuzz/hdfs
+rm -rf /tmp/upfuzz/hdfs/pVfezjff # is this needed?
 cp -r artifact/bug-reproduction/bugs/HDFS-17686/pVfezjff /tmp/upfuzz/hdfs/
 bash artifact/bug-reproduction/hdfs_repo.sh 17686 false
 ```

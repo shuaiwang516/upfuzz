@@ -23,11 +23,11 @@ hdfs_repo_func() {
   cd prebuild/hdfs
 
   sudo rm -rf hadoop-$ORI_VERSION hadoop-$ORI_VERSION.tar.gz
-  wget https://github.com/zlab-purdue/upfuzz/releases/download/hadoop/hadoop-"$ORI_VERSION".tar.gz
+  wget https://github.com/zlab-purdue/upfuzz/releases/download/hadoop/hadoop-"$ORI_VERSION".tar.gz > /dev/null
   tar -xzvf hadoop-"$ORI_VERSION".tar.gz > /dev/null
 
   sudo rm -rf hadoop-$UP_VERSION hadoop-$UP_VERSION.tar.gz
-  wget https://github.com/zlab-purdue/upfuzz/releases/download/hadoop/hadoop-"$UP_VERSION".tar.gz
+  wget https://github.com/zlab-purdue/upfuzz/releases/download/hadoop/hadoop-"$UP_VERSION".tar.gz > /dev/null
   tar -xzvf hadoop-"$UP_VERSION".tar.gz > /dev/null
 
   cd ${UPFUZZ_DIR}
