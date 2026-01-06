@@ -35,7 +35,7 @@
   "nyxMode": false,
   "enableNyxInGroup2": false,
   "nyxFuzzSH": "nyx_mode/fuzz_no_pt.sh",
-  "debug": false,
+  "debug": true,
   "useExampleTestPlan": false,
   "startUpClusterForDebugging": false,
   "drain": false,

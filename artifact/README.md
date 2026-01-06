@@ -183,7 +183,7 @@ cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19639 true
 ```
 
-7. CASSANDRA-19689 (Testing: s0)
+7. CASSANDRA-19689 (Testing: s0: weird... only behave when debug is set???)
 ```bash
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19689 true
@@ -223,7 +223,7 @@ cd ~/project/upfuzz
 bash artifact/bug-reproduction/hbase_repo.sh 29021 false
 ```
 
-13. HDFS-16984 (Testing: s2)
+13. HDFS-16984 (Tested)
 ```bash
 # 2.10.2 => 3.3.6
 cd ~/project/upfuzz
