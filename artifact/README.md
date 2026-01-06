@@ -238,7 +238,7 @@ cd ~/project/upfuzz
 bash artifact/bug-reproduction/hdfs_repo.sh 17219 false
 ```
 
-15.HDFS-17686 (Testing: s2)
+15.HDFS-17686 (Tested)
 ```bash
 # 2.10.2 => 3.3.6
 cd ~/project/upfuzz
