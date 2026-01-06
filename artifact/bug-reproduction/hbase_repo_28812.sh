@@ -20,7 +20,7 @@ hbase_repo_func() {
   mkdir -p $UPFUZZ_DIR/prebuild/hadoop
   cd $UPFUZZ_DIR/prebuild/hadoop
 
-  rm -rf hadoop-2.10.2 hadoop-2.10.2.tar.gz
+  sudo rm -rf hadoop-2.10.2 hadoop-2.10.2.tar.gz
   wget https://github.com/zlab-purdue/upfuzz/releases/download/hadoop/hadoop-2.10.2.tar.gz
   tar -xzvf hadoop-2.10.2.tar.gz > /dev/null
   cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/core-site.xml $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
@@ -31,11 +31,11 @@ hbase_repo_func() {
   mkdir -p $UPFUZZ_DIR/prebuild/hbase
   cd $UPFUZZ_DIR/prebuild/hbase
 
-  rm -rf hbase-$ORI_VERSION hbase-$ORI_VERSION-bin.tar.gz
+  sudo rm -rf hbase-$ORI_VERSION hbase-$ORI_VERSION-bin.tar.gz
   wget https://github.com/zlab-purdue/upfuzz/releases/download/hbase/hbase-$ORI_VERSION-bin.tar.gz
   tar -xzvf hbase-"$ORI_VERSION"-bin.tar.gz > /dev/null
 
-  rm -rf hbase-$UP_VERSION hbase-3.0.0-beta-2-a030e809.tar.gz
+  sudo rm -rf hbase-$UP_VERSION hbase-3.0.0-beta-2-a030e809.tar.gz
   wget https://github.com/zlab-purdue/upfuzz/releases/download/hbase/hbase-3.0.0-beta-2-a030e809.tar.gz
   tar -xzvf hbase-3.0.0-beta-2-a030e809.tar.gz > /dev/null
 
