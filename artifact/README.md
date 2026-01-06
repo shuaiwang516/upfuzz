@@ -202,18 +202,18 @@ cd ~/project/upfuzz
 bash artifact/bug-reproduction/hbase_repo.sh 28583 false
 ```
 
-10. HBASE-28812 (TODO: add config)
+10. HBASE-28812 (s2)
 ```bash
 # 2.6.0 => 3.0.0 (a030e8099840e640684a68b6e4a79e7c1d5a6823)
 cd ~/project/upfuzz
-bash artifact/bug-reproduction/hbase_repo_28812.sh false
+bash artifact/bug-reproduction/hbase_repo_28812.sh 28812 false
 ```
 
-11. HBASE-28815 (TODO: add config)
+11. HBASE-28815 (s1)
 ```bash
 # 1.7.2 => 2.6.0
 cd ~/project/upfuzz
-bash artifact/bug-reproduction/hbase_repo_28815.sh false
+bash artifact/bug-reproduction/hbase_repo_28815.sh 28815 false
 ```
 
 12. HBASE-29021 (Tested)

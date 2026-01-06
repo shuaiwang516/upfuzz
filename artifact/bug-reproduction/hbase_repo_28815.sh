@@ -1,11 +1,9 @@
 hbase_repo_func() {
   # $1: BUG_ID
   # $2: SPECIAL_CONFIG (true/false)
-  # $3: REPO_28812 (true/false) - use alternate hbase 3.0.0 build
 
   local BUG_ID=$1
   local SPECIAL_CONFIG=${2:-false}
-  local REPO_28812=${3:-false}
   local SYSTEM="HBASE"
   local SYSTEM_SHORT="hbase"
   local UPFUZZ_DIR=~/project/upfuzz
@@ -49,11 +47,11 @@ hbase_repo_func() {
   cp $UPFUZZ_DIR/src/main/resources/hbase/compile-src/hbase-env.sh $UPFUZZ_DIR/prebuild/hbase/hbase-$UP_VERSION/conf/ -f
 
   # If testing 3.0.0
-  cp $UPFUZZ_DIR/src/main/resources/hbase/compile-src/hbase-env-jdk17.sh $UPFUZZ_DIR/prebuild/hbase/hbase-$UP_VERSION/conf/hbase-env.sh -f
+  # cp $UPFUZZ_DIR/src/main/resources/hbase/compile-src/hbase-env-jdk17.sh $UPFUZZ_DIR/prebuild/hbase/hbase-$UP_VERSION/conf/hbase-env.sh -f
 
   # for hbase version >= 2.4.0, use hbase_daemon3.py
   # for hbase version < 2.4.0, use hbase_daemon2.py
-  cp $UPFUZZ_DIR/src/main/resources/hbase/compile-src/hbase_daemon3.py $UPFUZZ_DIR/prebuild/hbase/hbase-$ORI_VERSION/bin/hbase_daemon.py
+  cp $UPFUZZ_DIR/src/main/resources/hbase/compile-src/hbase_daemon2.py $UPFUZZ_DIR/prebuild/hbase/hbase-$ORI_VERSION/bin/hbase_daemon.py
   cp $UPFUZZ_DIR/src/main/resources/hbase/compile-src/hbase_daemon3.py $UPFUZZ_DIR/prebuild/hbase/hbase-$UP_VERSION/bin/hbase_daemon.py
 
   docker pull hanke580/upfuzz-ae:hbase-${ORI_VERSION}_${UP_VERSION}

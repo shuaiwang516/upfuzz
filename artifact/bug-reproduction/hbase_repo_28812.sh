@@ -1,11 +1,9 @@
 hbase_repo_func() {
   # $1: BUG_ID
   # $2: SPECIAL_CONFIG (true/false)
-  # $3: REPO_28812 (true/false) - use alternate hbase 3.0.0 build
 
   local BUG_ID=$1
   local SPECIAL_CONFIG=${2:-false}
-  local REPO_28812=${3:-false}
   local SYSTEM="HBASE"
   local SYSTEM_SHORT="hbase"
   local UPFUZZ_DIR=~/project/upfuzz

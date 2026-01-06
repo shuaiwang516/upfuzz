@@ -74,6 +74,15 @@ docker tag \
   hanke580/upfuzz-ae:hbase-2.5.9_3.0.0
 docker push hanke580/upfuzz-ae:hbase-2.5.9_3.0.0
 
+docker tag \
+  upfuzz_hbase:hbase-1.7.2_hbase-2.6.0 \
+  hanke580/upfuzz-ae:hbase-1.7.2_2.6.0
+docker push hanke580/upfuzz-ae:hbase-1.7.2_2.6.0
+
+docker tag \
+  upfuzz_hbase:hbase-2.6.0_hbase-3.0.0 \
+  hanke580/upfuzz-ae:hbase-2.6.0_3.0.0
+docker push hanke580/upfuzz-ae:hbase-2.6.0_3.0.0
 
 docker tag \
   upfuzz_hdfs:hadoop-2.10.2_hadoop-3.3.6 \
