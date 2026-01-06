@@ -32,8 +32,17 @@ hdfs_repo_func() {
   fi
 
   cd ${UPFUZZ_DIR}
-  cp src/main/resources/FsShellDaemon2.java prebuild/hdfs/hadoop-"$ORI_VERSION"/FsShellDaemon.java
-  cp src/main/resources/FsShellDaemon_trunk.java prebuild/hdfs/hadoop-"$UP_VERSION"/FsShellDaemon.java
+  # old version hdfs daemon
+  cp $UPFUZZ_DIR/src/main/resources/FsShellDaemon2.java $UPFUZZ_DIR/prebuild/hdfs/hadoop-"$ORI_VERSION"/FsShellDaemon.java
+  cd $UPFUZZ_DIR/prebuild/hdfs/hadoop-"$ORI_VERSION"/
+  /usr/lib/jvm/java-8-openjdk-amd64/bin/javac -d . -cp "share/hadoop/hdfs/*:share/hadoop/common/*:share/hadoop/common/lib/*" FsShellDaemon.java
+  sed -i "s/elif \[ \"\$COMMAND\" = \"dfs\" \] ; then/elif [ \"\$COMMAND\" = \"dfsdaemon\" ] ; then\n  CLASS=org.apache.hadoop.fs.FsShellDaemon\n  HADOOP_OPTS=\"\$HADOOP_OPTS \$HADOOP_CLIENT_OPTS\"\n&/" bin/hdfs
+
+  # new version hdfs daemon
+  cp $UPFUZZ_DIR/src/main/resources/FsShellDaemon_trunk.java $UPFUZZ_DIR/prebuild/hdfs/hadoop-"$UP_VERSION"/FsShellDaemon.java
+  cd $UPFUZZ_DIR/prebuild/hdfs/hadoop-"$UP_VERSION"/
+  /usr/lib/jvm/java-8-openjdk-amd64/bin/javac -d . -cp "share/hadoop/hdfs/*:share/hadoop/common/*:share/hadoop/common/lib/*" FsShellDaemon.java
+  sed -i "s/  case \${subcmd} in/&\n    dfsdaemon)\n      HADOOP_CLASSNAME=\"org.apache.hadoop.fs.FsShellDaemon\"\n    ;;/" bin/hdfs
 
   docker pull hanke580/upfuzz-ae:hdfs-${ORI_VERSION}_${UP_VERSION}
   docker tag \
