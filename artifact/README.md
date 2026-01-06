@@ -183,7 +183,7 @@ cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19639 true
 ```
 
-7. CASSANDRA-19689 (Testing: s0: BUGGY!!! bug is not triggered)
+7. CASSANDRA-19689 (Tested)
 ```bash
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19689 true
