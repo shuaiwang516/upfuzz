@@ -195,7 +195,7 @@ cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 20182 false
 ```
 
-9. HBASE-28583 (Tested)
+9. HBASE-28583 (s0: retesting)
 ```bash
 # 2.5.9 => 3.0.0 (516c89e8597fb6)
 cd ~/project/upfuzz
