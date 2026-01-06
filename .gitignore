@@ -12,7 +12,6 @@ logs/
 hdfs-cl-*
 cass-cl*
 configtests
-bugs
 config/
 failure/
 failure_stat/

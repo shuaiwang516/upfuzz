@@ -1,0 +1,11 @@
+dfs -touchz /qxcKOnNw/ZtbuVsPJYFCsuPBrpE.txt
+dfs -touchz /qxcKOnNw/ZtbuVsPJYFCsuPBrpE.yaml
+dfs -appendToFile /tmp/upfuzz/hdfs/pVfezjff/ote /qxcKOnNw/ZtbuVsPJYFCsuPBrpE.txt
+dfs -cp -f -p -d /qxcKOnNw/ /qxcKOnNw/
+dfs -cp -f   /qxcKOnNw/ZtbuVsPJYFCsuPBrpE.yaml /qxcKOnNw/
+dfsadmin -disallowSnapshot /qxcKOnNw/
+dfs -put -f   /tmp/upfuzz/hdfs/pVfezjff/fhpetiuf /qxcKOnNw/
+dfsadmin -allowSnapshot /qxcKOnNw/
+dfs -cp  -p -d /qxcKOnNw/ /qxcKOnNw/
+dfs -cp -f -p  /qxcKOnNw/ /qxcKOnNw/
+dfs -createSnapshot /qxcKOnNw/ 

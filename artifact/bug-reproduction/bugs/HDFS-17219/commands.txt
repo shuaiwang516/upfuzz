@@ -1,0 +1,2 @@
+dfs -mkdir /GscWZRxS
+dfsadmin -setSpaceQuota 2 -storageType DISK /GscWZRxS
