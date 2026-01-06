@@ -183,7 +183,7 @@ cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19639 true
 ```
 
-7. CASSANDRA-19689 (Testing: s0: weird... only behave when debug is set???)
+7. CASSANDRA-19689 (Tested)
 ```bash
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19689 true
@@ -231,19 +231,19 @@ mkdir -p /tmp/upfuzz/hdfs
 cp -r artifact/bug-reproduction/bugs/HDFS-16984/GUBIkxOc /tmp/upfuzz/hdfs/
 bash artifact/bug-reproduction/hdfs_repo.sh 16984 false
 ```
-14.HDFS-17219 (Testing: s1)
+14.HDFS-17219 (Tested)
 ```bash
 # 2.10.2 => 3.3.6
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/hdfs_repo.sh 17219 false
 ```
 
-15.HDFS-17686
+15.HDFS-17686 (Testing: s2)
 ```bash
 # 2.10.2 => 3.3.6
 cd ~/project/upfuzz
 mkdir -p /tmp/upfuzz/hdfs
-cp -r artifact/bug-reproduction/bugs/HDFS-17219/GscWZRxS /tmp/upfuzz/hdfs/
+cp -r artifact/bug-reproduction/bugs/HDFS-17686/pVfezjff /tmp/upfuzz/hdfs/
 bash artifact/bug-reproduction/hdfs_repo.sh 17686 false
 ```
 

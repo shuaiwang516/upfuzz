@@ -23,11 +23,11 @@ hdfs_repo_func() {
   cd prebuild/hdfs
 
   if [ ! -d "hadoop-$ORI_VERSION" ]; then
-    wget https://archive.apache.org/dist/hadoop/common/hadoop-"$ORI_VERSION"/hadoop-"$ORI_VERSION".tar.gz
+    wget https://github.com/zlab-purdue/upfuzz/releases/download/hadoop/hadoop-"$ORI_VERSION".tar.gz
     tar -xzvf hadoop-"$ORI_VERSION".tar.gz > /dev/null
   fi
   if [ ! -d "hadoop-$UP_VERSION" ]; then
-    wget https://archive.apache.org/dist/hadoop/common/hadoop-"$UP_VERSION"/hadoop-"$UP_VERSION".tar.gz
+    wget https://github.com/zlab-purdue/upfuzz/releases/download/hadoop/hadoop-"$UP_VERSION".tar.gz
     tar -xzvf hadoop-"$UP_VERSION".tar.gz > /dev/null
   fi
 
