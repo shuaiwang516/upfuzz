@@ -1,3 +1,0 @@
-dfs -mkdir /GUBIkxOc
-dfs -put -f -p -d /tmp/upfuzz/hdfs/GUBIkxOc/bQfxf /GUBIkxOc/
-dfs -mkdir /GUBIkxOc/sKbTRjvS

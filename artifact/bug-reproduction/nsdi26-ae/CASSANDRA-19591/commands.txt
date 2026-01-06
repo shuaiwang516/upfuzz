@@ -1,5 +1,0 @@
-CREATE KEYSPACE ks WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 };
-CREATE TABLE ks.tb (c0 INT,c2 TEXT, PRIMARY KEY (c0));
-INSERT INTO ks.tb (c0, c2) VALUES (1,'BB');
-ALTER TABLE ks.tb DROP c2 ;
-ALTER TABLE ks.tb ADD c2 INT ;

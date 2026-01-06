@@ -47,14 +47,14 @@ cass_repo_func() {
 
   # copy config and triggering commands
   cd ${UPFUZZ_DIR}
-  cp artifact/bug-reproduction/nsdi26-ae/${SYSTEM}-${BUG_ID}/config.json config.json
-  cp artifact/bug-reproduction/nsdi26-ae/${SYSTEM}-${BUG_ID}/commands.txt examplecase/commands.txt
-  cp artifact/bug-reproduction/nsdi26-ae/${SYSTEM}-${BUG_ID}/validcommands.txt examplecase/validcommands.txt
+  cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/config.json config.json
+  cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/commands.txt examplecase/commands.txt
+  cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/validcommands.txt examplecase/validcommands.txt
 
   # special config (only for this bug)
   if [ "$SPECIAL_CONFIG" == "true" ]; then
-    cp artifact/bug-reproduction/nsdi26-ae/${SYSTEM}-${BUG_ID}/cassandra_ori.yaml prebuild/cassandra/apache-cassandra-${ORI_VERSION}/conf/cassandra.yaml
-    cp artifact/bug-reproduction/nsdi26-ae/${SYSTEM}-${BUG_ID}/cassandra_up.yaml prebuild/cassandra/apache-cassandra-${UP_VERSION}/conf/cassandra.yaml
+    cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/cassandra_ori.yaml prebuild/cassandra/apache-cassandra-${ORI_VERSION}/conf/cassandra.yaml
+    cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/cassandra_up.yaml prebuild/cassandra/apache-cassandra-${UP_VERSION}/conf/cassandra.yaml
   fi
 
   # Reproduction run

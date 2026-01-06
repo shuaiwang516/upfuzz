@@ -67,14 +67,14 @@ hbase_repo_func() {
 
   # copy config and triggering commands
   cd ${UPFUZZ_DIR}
-  cp artifact/bug-reproduction/nsdi26-ae/${SYSTEM}-${BUG_ID}/hbase_config.json hbase_config.json
-  cp artifact/bug-reproduction/nsdi26-ae/${SYSTEM}-${BUG_ID}/commands.txt examplecase/commands.txt
-  cp artifact/bug-reproduction/nsdi26-ae/${SYSTEM}-${BUG_ID}/validcommands.txt examplecase/validcommands.txt
+  cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/hbase_config.json hbase_config.json
+  cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/commands.txt examplecase/commands.txt
+  cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/validcommands.txt examplecase/validcommands.txt
 
   # special config (only for this bug)
   if [ "$SPECIAL_CONFIG" == "true" ]; then
-    cp artifact/bug-reproduction/nsdi26-ae/${SYSTEM}-${BUG_ID}/hbase_ori.yaml prebuild/hbase/hbase-${ORI_VERSION}/conf/hbase.yaml
-    cp artifact/bug-reproduction/nsdi26-ae/${SYSTEM}-${BUG_ID}/hbase_up.yaml prebuild/hbase/hbase-${UP_VERSION}/conf/hbase.yaml
+    cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/hbase_ori.yaml prebuild/hbase/hbase-${ORI_VERSION}/conf/hbase.yaml
+    cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/hbase_up.yaml prebuild/hbase/hbase-${UP_VERSION}/conf/hbase.yaml
   fi
 
   # Reproduction run

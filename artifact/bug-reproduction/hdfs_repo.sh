@@ -46,9 +46,9 @@ hdfs_repo_func() {
 
   # copy config and triggering commands
   cd ${UPFUZZ_DIR}
-  cp artifact/bug-reproduction/nsdi26-ae/${SYSTEM}-${BUG_ID}/hdfs_config.json hdfs_config.json
-  cp artifact/bug-reproduction/nsdi26-ae/${SYSTEM}-${BUG_ID}/commands.txt examplecase/commands.txt
-  cp artifact/bug-reproduction/nsdi26-ae/${SYSTEM}-${BUG_ID}/validcommands.txt examplecase/validcommands.txt
+  cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/hdfs_config.json hdfs_config.json
+  cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/commands.txt examplecase/commands.txt
+  cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/validcommands.txt examplecase/validcommands.txt
 
   # Reproduction run
   tmux kill-session -t 0
