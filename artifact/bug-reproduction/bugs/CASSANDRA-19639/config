@@ -1,0 +1,2 @@
+// cassandra.yaml
+column_index_size_in_kb: 1 

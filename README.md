@@ -1,6 +1,10 @@
-# Molt
+# upfuzz
 
 > A tool for testing distributed systems.
+
+## Artifact
+
+Check out [artifact/README.md](artifact/README.md)
 
 ## Feature
 * Coverage-guided fuzz testing

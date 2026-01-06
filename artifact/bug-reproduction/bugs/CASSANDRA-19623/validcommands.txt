@@ -1,0 +1,1 @@
+SELECT c7, c0, c3 FROM ks.tb WHERE c3 = 1 AND c7 = 1 ORDER BY c7 DESC;

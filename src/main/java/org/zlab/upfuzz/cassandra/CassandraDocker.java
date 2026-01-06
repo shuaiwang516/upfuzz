@@ -118,7 +118,7 @@ public class CassandraDocker extends Docker {
         // Set up /usr/bin/set_env
         String[] spStrings = curVersion.split("-");
         String pythonVersion = "python2";
-        String jdkPath = "/usr/local/openjdk-8/";
+        String jdkPath = "/opt/java/openjdk/";
         try {
             String version = spStrings[spStrings.length - 1];
             int main_version = Integer

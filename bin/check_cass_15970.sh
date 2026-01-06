@@ -8,5 +8,4 @@ if [[ -z "$DIR_NAME" ]]; then
   exit 1
 fi
 
-
 compute_triggering_time $DIR_NAME

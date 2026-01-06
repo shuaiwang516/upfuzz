@@ -1,0 +1,1 @@
+dfs -stat "%y" /qxcKOnNw/
