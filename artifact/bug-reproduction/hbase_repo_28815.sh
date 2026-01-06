@@ -31,16 +31,13 @@ hbase_repo_func() {
   mkdir -p $UPFUZZ_DIR/prebuild/hbase
   cd $UPFUZZ_DIR/prebuild/hbase
 
-  if [ ! -d "hbase-$ORI_VERSION" ]; then
-    wget https://github.com/zlab-purdue/upfuzz/releases/download/hbase/hbase-$ORI_VERSION-bin.tar.gz > /dev/null
-    tar -xzvf hbase-"$ORI_VERSION"-bin.tar.gz > /dev/null
-  fi
+  rm -rf hbase-$ORI_VERSION hbase-$ORI_VERSION-bin.tar.gz
+  wget https://github.com/zlab-purdue/upfuzz/releases/download/hbase/hbase-$ORI_VERSION-bin.tar.gz
+  tar -xzvf hbase-"$ORI_VERSION"-bin.tar.gz > /dev/null
 
-  # remove folder hbase-$UP_VERSION if it exists
-  if [ ! -d "hbase-$UP_VERSION" ]; then # useless
-      wget https://github.com/zlab-purdue/upfuzz/releases/download/hbase/hbase-$UP_VERSION-bin.tar.gz
-      tar -xzvf hbase-$UP_VERSION-bin.tar.gz > /dev/null
-  fi
+  rm -rf hbase-$UP_VERSION hbase-$UP_VERSION-bin.tar.gz
+  wget https://github.com/zlab-purdue/upfuzz/releases/download/hbase/hbase-$UP_VERSION-bin.tar.gz
+  tar -xzvf hbase-$UP_VERSION-bin.tar.gz > /dev/null
 
   cp $UPFUZZ_DIR/src/main/resources/hbase/compile-src/hbase-env.sh $UPFUZZ_DIR/prebuild/hbase/hbase-$ORI_VERSION/conf/ -f
   cp $UPFUZZ_DIR/src/main/resources/hbase/compile-src/hbase-env.sh $UPFUZZ_DIR/prebuild/hbase/hbase-$UP_VERSION/conf/ -f

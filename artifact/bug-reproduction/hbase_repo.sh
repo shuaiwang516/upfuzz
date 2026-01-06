@@ -21,32 +21,24 @@ hbase_repo_func() {
   mkdir -p $UPFUZZ_DIR/prebuild/hadoop
   cd $UPFUZZ_DIR/prebuild/hadoop
 
-  rm -rf hadoop-2.10.2
-  if [ ! -d "hadoop-2.10.2" ]; then
-    wget https://github.com/zlab-purdue/upfuzz/releases/download/hadoop/hadoop-2.10.2.tar.gz
-    tar -xzvf hadoop-2.10.2.tar.gz > /dev/null
-    cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/core-site.xml $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
-    cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/hdfs-site.xml $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
-    cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/hadoop-env.sh $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
-  fi
+  rm -rf hadoop-2.10.2 hadoop-2.10.2.tar.gz
+  wget https://github.com/zlab-purdue/upfuzz/releases/download/hadoop/hadoop-2.10.2.tar.gz
+  tar -xzvf hadoop-2.10.2.tar.gz > /dev/null
+  cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/core-site.xml $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
+  cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/hdfs-site.xml $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
+  cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/hadoop-env.sh $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
 
   cd $UPFUZZ_DIR
   mkdir -p $UPFUZZ_DIR/prebuild/hbase
   cd $UPFUZZ_DIR/prebuild/hbase
 
-  if [ ! -d "hbase-$ORI_VERSION" ]; then
-    wget https://github.com/zlab-purdue/upfuzz/releases/download/hbase/hbase-$ORI_VERSION-bin.tar.gz
-    tar -xzvf hbase-"$ORI_VERSION"-bin.tar.gz > /dev/null
-  fi
+  rm -rf hbase-$ORI_VERSION hbase-$ORI_VERSION-bin.tar.gz
+  wget https://github.com/zlab-purdue/upfuzz/releases/download/hbase/hbase-$ORI_VERSION-bin.tar.gz
+  tar -xzvf hbase-"$ORI_VERSION"-bin.tar.gz > /dev/null
 
-  # remove folder hbase-$UP_VERSION if it exists
-  if [ -d "hbase-$UP_VERSION" ]; then
-    rm -rf hbase-$UP_VERSION
-  fi
-  if [ ! -d "hbase-$UP_VERSION" ]; then # useless
-    wget https://github.com/zlab-purdue/upfuzz/releases/download/hbase/hbase-3.0.0-516c89e8597fb6-bin.tar.gz
-    tar -xzvf hbase-3.0.0-516c89e8597fb6-bin.tar.gz > /dev/null
-  fi
+  rm -rf hbase-$UP_VERSION hbase-3.0.0-516c89e8597fb6-bin.tar.gz
+  wget https://github.com/zlab-purdue/upfuzz/releases/download/hbase/hbase-3.0.0-516c89e8597fb6-bin.tar.gz
+  tar -xzvf hbase-3.0.0-516c89e8597fb6-bin.tar.gz > /dev/null
 
   cp $UPFUZZ_DIR/src/main/resources/hbase/compile-src/hbase-env.sh $UPFUZZ_DIR/prebuild/hbase/hbase-$ORI_VERSION/conf/ -f
   cp $UPFUZZ_DIR/src/main/resources/hbase/compile-src/hbase-env.sh $UPFUZZ_DIR/prebuild/hbase/hbase-$UP_VERSION/conf/ -f

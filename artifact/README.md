@@ -202,7 +202,7 @@ cd ~/project/upfuzz
 bash artifact/bug-reproduction/hbase_repo.sh 28583 false
 ```
 
-10. HBASE-28812 (Tested)
+10. HBASE-28812 (s1)
 ```bash
 # 2.6.0 => 3.0.0 (a030e8099840e640684a68b6e4a79e7c1d5a6823)
 cd ~/project/upfuzz
@@ -238,7 +238,7 @@ cd ~/project/upfuzz
 bash artifact/bug-reproduction/hdfs_repo.sh 17219 false
 ```
 
-15.HDFS-17686 (Tested)
+15.HDFS-17686 (retesting: s2)
 ```bash
 # 2.10.2 => 3.3.6
 cd ~/project/upfuzz
