@@ -23,12 +23,12 @@ hdfs_repo_func() {
   cd prebuild/hdfs
 
   if [ ! -d "hadoop-$ORI_VERSION" ]; then
-    wget https://archive.apache.org/dist/hadoop/common/hadoop-"$ORI_VERSION"/hadoop-"$ORI_VERSION".tar.gz > /dev/null 2>&1
-    tar -xzvf hadoop-"$ORI_VERSION".tar.gz > /dev/null
+    wget https://archive.apache.org/dist/hadoop/common/hadoop-"$ORI_VERSION"/hadoop-"$ORI_VERSION".tar.gz
+    tar -xzvf hadoop-"$ORI_VERSION".tar.gz
   fi
   if [ ! -d "hadoop-$UP_VERSION" ]; then
-    wget https://archive.apache.org/dist/hadoop/common/hadoop-"$UP_VERSION"/hadoop-"$UP_VERSION".tar.gz > /dev/null 2>&1
-    tar -xzvf hadoop-"$UP_VERSION".tar.gz > /dev/null
+    wget https://archive.apache.org/dist/hadoop/common/hadoop-"$UP_VERSION"/hadoop-"$UP_VERSION".tar.gz
+    tar -xzvf hadoop-"$UP_VERSION".tar.gz
   fi
 
   cd ${UPFUZZ_DIR}
@@ -67,7 +67,7 @@ hdfs_repo_func() {
 
   # Clean after one test (< 2 minutes)
   echo "Waiting for test completion (2 minutes)..."
-  total=480
+  total=240
   for ((i=1; i<=total; i++)); do
     percent=$((i * 100 / total))
     bar_length=50
