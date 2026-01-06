@@ -112,4 +112,4 @@ hbase_repo_func() {
   bin/check_${SYSTEM_SHORT}_${BUG_ID}.sh
 }
 
-hbase_repo_func "$1" "$2" "$3"
+hbase_repo_func "$1" "$2"

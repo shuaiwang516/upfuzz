@@ -22,7 +22,7 @@ hbase_repo_func() {
   cd $UPFUZZ_DIR/prebuild/hadoop
 
   if [ ! -d "hadoop-2.10.2" ]; then
-    wget https://archive.apache.org/dist/hadoop/common/hadoop-2.10.2/hadoop-2.10.2.tar.gz > /dev/null 2>&1
+    wget https://archive.apache.org/dist/hadoop/common/hadoop-2.10.2/hadoop-2.10.2.tar.gz > /dev/null
     tar -xzvf hadoop-2.10.2.tar.gz > /dev/null
     cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/core-site.xml $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
     cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/hdfs-site.xml $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
@@ -34,7 +34,7 @@ hbase_repo_func() {
   cd $UPFUZZ_DIR/prebuild/hbase
 
   if [ ! -d "hbase-$ORI_VERSION" ]; then
-    wget https://archive.apache.org/dist/hbase/"$ORI_VERSION"/hbase-"$ORI_VERSION"-bin.tar.gz > /dev/null 2>&1
+    wget https://github.com/zlab-purdue/upfuzz/releases/download/hbase/hbase-$ORI_VERSION-bin.tar.gz
     tar -xzvf hbase-"$ORI_VERSION"-bin.tar.gz > /dev/null
   fi
 
@@ -116,4 +116,4 @@ hbase_repo_func() {
   bin/check_${SYSTEM_SHORT}_${BUG_ID}.sh
 }
 
-hbase_repo_func "$1" "$2" "$3"
+hbase_repo_func "$1" "$2"
