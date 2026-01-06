@@ -6,7 +6,7 @@ This repository contains the source code and artifact materials for **UpFuzz**, 
 
 We provided our source code, the push-button script to run the testing framework and our experiment trace for evaluation. 
 
-## Experiment data
+## Experiment Data
 
 To evaluate upfuzz, we conducted a large number of experiments, totaling > five months of a single machine time (We paralleled experiments with more servers). In accordance with the artifact evaluation (AE) guidelines, we do not expect reviewers to rerun all experiments from scratch to validate our results.
 
@@ -167,30 +167,35 @@ bash artifact/bug-reproduction/cass_repo_2_3.sh 19590 false
 
 4. CASSANDRA-19591 (Tested)
 ```bash
+# 2.2.19 => 3.0.30
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19591 false
 ```
 
 5. CASSANDRA-19623 (Tested)
 ```bash
+# 2.2.19 => 3.0.30
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19623 true
 ```
 
 6. CASSANDRA-19639 (Tested)
 ```bash
+# 2.2.19 => 3.0.30
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19639 true
 ```
 
 7. CASSANDRA-19689 (Tested)
 ```bash
+# 2.2.19 => 3.0.30
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19689 true
 ```
 
 8. CASSANDRA-20182 (Tested)
 ```bash
+# 2.2.19 => 3.0.30
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 20182 false
 ```
@@ -240,6 +245,7 @@ bash artifact/bug-reproduction/hdfs_repo.sh 17219 false
 ```
 
 15.HDFS-17686 (Tested)
+> Note: this bug might require running the script multiple times to trigger
 ```bash
 # 2.10.2 => 3.3.6
 cd ~/project/upfuzz
