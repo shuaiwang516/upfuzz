@@ -231,7 +231,7 @@ mkdir -p /tmp/upfuzz/hdfs
 cp -r artifact/bug-reproduction/bugs/HDFS-16984/GUBIkxOc /tmp/upfuzz/hdfs/
 bash artifact/bug-reproduction/hdfs_repo.sh 16984 false
 ```
-14.HDFS-17219
+14.HDFS-17219 (Testing: s1)
 ```bash
 # 2.10.2 => 3.3.6
 cd ~/project/upfuzz
