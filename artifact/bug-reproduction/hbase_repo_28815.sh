@@ -99,7 +99,7 @@ hbase_repo_func() {
     sleep 1
   done
   echo -e "\nTest completed, starting cleanup..."
-  cd ~/project/upfuzz; sudo chmod 777 /var/run/docker.sock; bin/clean.sh --force;
+  cd ~/project/upfuzz; sudo chmod 777 /var/run/docker.sock; bin/clean.sh --force; > /dev/null
 
   # check failure reports
   ls failure
