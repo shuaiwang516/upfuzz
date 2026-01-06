@@ -22,13 +22,11 @@ cass_repo_func() {
   cd prebuild/cassandra
 
   if [ ! -d "apache-cassandra-$ORI_VERSION" ]; then
-    # wget https://archive.apache.org/dist/cassandra/"$ORI_VERSION"/apache-cassandra-"$ORI_VERSION"-bin.tar.gz > /dev/null 2>&1
-    wget https://github.com/zlab-purdue/upfuzz/releases/download/cassandra/apache-cassandra-4.1.6-bin.tar.gz > /dev/null 2>&1
+    wget -q https://github.com/zlab-purdue/upfuzz/releases/download/cassandra/apache-cassandra-4.1.6-bin.tar.gz
     tar -xzvf apache-cassandra-"$ORI_VERSION"-bin.tar.gz > /dev/null
   fi
   if [ ! -d "apache-cassandra-$UP_VERSION" ]; then
-    # wget https://archive.apache.org/dist/cassandra/"$UP_VERSION"/apache-cassandra-"$UP_VERSION"-bin.tar.gz > /dev/null 2>&1
-    wget https://github.com/zlab-purdue/upfuzz/releases/download/cassandra/apache-cassandra-5.0.2-bin.tar.gz > /dev/null 2>&1
+    wget -q https://github.com/zlab-purdue/upfuzz/releases/download/cassandra/apache-cassandra-5.0.2-bin.tar.gz
     tar -xzvf apache-cassandra-"$UP_VERSION"-bin.tar.gz > /dev/null
   fi
 
