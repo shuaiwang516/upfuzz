@@ -5,6 +5,7 @@ hbase_repo_func() {
 
   local BUG_ID=$1
   local SPECIAL_CONFIG=${2:-false}
+  local REPO_28812=${3:-false}
   local SYSTEM="HBASE"
   local SYSTEM_SHORT="hbase"
   local UPFUZZ_DIR=~/project/upfuzz
@@ -14,15 +15,15 @@ hbase_repo_func() {
     exit 1
   fi
 
-  local ORI_VERSION=2.5.9
-  local UP_VERSION=3.0.0
+  local ORI_VERSION=1.7.2
+  local UP_VERSION=2.6.0
 
   cd $UPFUZZ_DIR
   mkdir -p $UPFUZZ_DIR/prebuild/hadoop
   cd $UPFUZZ_DIR/prebuild/hadoop
 
   if [ ! -d "hadoop-2.10.2" ]; then
-    wget https://archive.apache.org/dist/hadoop/common/hadoop-2.10.2/hadoop-2.10.2.tar.gz > /dev/null 2>&1
+    wget https://archive.apache.org/dist/hadoop/common/hadoop-2.10.2/hadoop-2.10.2.tar.gz > /dev/null
     tar -xzvf hadoop-2.10.2.tar.gz > /dev/null
     cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/core-site.xml $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
     cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/hdfs-site.xml $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
@@ -34,17 +35,14 @@ hbase_repo_func() {
   cd $UPFUZZ_DIR/prebuild/hbase
 
   if [ ! -d "hbase-$ORI_VERSION" ]; then
-    wget https://archive.apache.org/dist/hbase/"$ORI_VERSION"/hbase-"$ORI_VERSION"-bin.tar.gz > /dev/null 2>&1
+    wget https://github.com/zlab-purdue/upfuzz/releases/download/hbase/hbase-$ORI_VERSION-bin.tar.gz > /dev/null
     tar -xzvf hbase-"$ORI_VERSION"-bin.tar.gz > /dev/null
   fi
 
   # remove folder hbase-$UP_VERSION if it exists
-  if [ -d "hbase-$UP_VERSION" ]; then
-    rm -rf hbase-$UP_VERSION
-  fi
   if [ ! -d "hbase-$UP_VERSION" ]; then # useless
-    wget https://github.com/zlab-purdue/upfuzz/releases/download/hbase/hbase-3.0.0-516c89e8597fb6-bin.tar.gz
-    tar -xzvf hbase-3.0.0-516c89e8597fb6-bin.tar.gz > /dev/null
+      wget https://github.com/zlab-purdue/upfuzz/releases/download/hbase/hbase-$UP_VERSION-bin.tar.gz
+      tar -xzvf hbase-$UP_VERSION-bin.tar.gz > /dev/null
   fi
 
   cp $UPFUZZ_DIR/src/main/resources/hbase/compile-src/hbase-env.sh $UPFUZZ_DIR/prebuild/hbase/hbase-$ORI_VERSION/conf/ -f
