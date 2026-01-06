@@ -1,9 +1,11 @@
 hbase_repo_func() {
   # $1: BUG_ID
   # $2: SPECIAL_CONFIG (true/false)
+  # $3: REPO_28812 (true/false) - use alternate hbase 3.0.0 build
 
   local BUG_ID=$1
-  local SPECIAL_CONFIG=$2
+  local SPECIAL_CONFIG=${2:-false}
+  local REPO_28812=${3:-false}
   local SYSTEM="HBASE"
   local SYSTEM_SHORT="hbase"
   local UPFUZZ_DIR=~/project/upfuzz
@@ -36,9 +38,19 @@ hbase_repo_func() {
     wget https://archive.apache.org/dist/hbase/"$ORI_VERSION"/hbase-"$ORI_VERSION"-bin.tar.gz > /dev/null 2>&1
     tar -xzvf hbase-"$ORI_VERSION"-bin.tar.gz > /dev/null
   fi
-  if [ ! -d "hbase-$UP_VERSION" ]; then
-    wget https://github.com/zlab-purdue/upfuzz/releases/download/hbase-3.0.0/hbase-3.0.0-516c89e8597fb6-bin.tar.gz > /dev/null 2>&1
-    tar -xzvf hbase-3.0.0-516c89e8597fb6-bin.tar.gz > /dev/null
+
+  # remove folder hbase-$UP_VERSION if it exists
+  if [ -d "hbase-$UP_VERSION" ]; then
+    rm -rf hbase-$UP_VERSION
+  fi
+  if [ ! -d "hbase-$UP_VERSION" ]; then # useless
+    if [ "$REPO_28812" == "true" ]; then
+      wget https://github.com/zlab-purdue/upfuzz/releases/download/hbase-3.0.0/hbase-3.0.0-beta-2-a030e809.tar.gz > /dev/null 2>&1
+      tar -xzvf hbase-3.0.0-beta-2-a030e809.tar.gz > /dev/null
+    else
+      wget https://github.com/zlab-purdue/upfuzz/releases/download/hbase-3.0.0/hbase-3.0.0-516c89e8597fb6-bin.tar.gz > /dev/null 2>&1
+      tar -xzvf hbase-3.0.0-516c89e8597fb6-bin.tar.gz > /dev/null
+    fi
   fi
 
   cp $UPFUZZ_DIR/src/main/resources/hbase/compile-src/hbase-env.sh $UPFUZZ_DIR/prebuild/hbase/hbase-$ORI_VERSION/conf/ -f
@@ -110,4 +122,4 @@ hbase_repo_func() {
   bin/check_${SYSTEM_SHORT}_${BUG_ID}.sh
 }
 
-hbase_repo_func "$1" "$2"
+hbase_repo_func "$1" "$2" "$3"
