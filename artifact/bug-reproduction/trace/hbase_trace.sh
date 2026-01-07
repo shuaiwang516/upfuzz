@@ -3,6 +3,7 @@ ls /proj/sosp21-upgrade-PG0/upfuzz_files/binary/hbase
 ls /proj/sosp21-upgrade-PG0/upfuzz_files/format_inst_binary/hbase
 
 # ===
+
 cd ~/project/upfuzz
 git checkout .
 git pull
@@ -57,11 +58,20 @@ cd $UPFUZZ_DIR
 cp configInfo/hbase-${ORI_VERSION}/* prebuild/hbase/hbase-${ORI_VERSION}/
 cp lib/ssgFatJar.jar prebuild/hbase/hbase-${ORI_VERSION}/lib/
 
-cd $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/
-docker build . -t upfuzz_hdfs:hadoop-2.10.2
+# cd $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/
+# docker build . -t upfuzz_hdfs:hadoop-2.10.2
 
-cd $UPFUZZ_DIR/src/main/resources/hbase/compile-src/
-docker build . -t upfuzz_hbase:hbase-"$ORI_VERSION"_hbase-"$UP_VERSION"
+# cd $UPFUZZ_DIR/src/main/resources/hbase/compile-src/
+# docker build . -t upfuzz_hbase:hbase-"$ORI_VERSION"_hbase-"$UP_VERSION"
+
+docker pull hanke580/upfuzz-ae:hbase-${ORI_VERSION}_${UP_VERSION} > /dev/null
+docker tag \
+hanke580/upfuzz-ae:hbase-${ORI_VERSION}_${UP_VERSION} \
+upfuzz_hbase:hbase-${ORI_VERSION}_hbase-${UP_VERSION}
+
+docker pull hanke580/upfuzz-ae:hdfs-2.10.2 > /dev/null
+docker tag hanke580/upfuzz-ae:hdfs-2.10.2 \
+upfuzz_hdfs:hadoop-2.10.2
 
 cd $UPFUZZ_DIR
 ./gradlew copyDependencies
@@ -71,47 +81,27 @@ cd $UPFUZZ_DIR
 
 cd ~/project/upfuzz
 git checkout .
-git checkout dev
 git pull
 ./gradlew copyDependencies
 ./gradlew :spotlessApply build
 
-# VD-no-skip
-# cp evaluation/HBASE-28583-config-format-vd-static-no-skip.json hbase_config.json
-# diff evaluation/HBASE-28583-config-format-vd-static-no-skip.json hbase_config.json
-# FC-no-skip
-# cp evaluation/HBASE-28583-config-format1-no-skip.json hbase_config.json
-# diff evaluation/HBASE-28583-config-format1-no-skip.json hbase_config.json
+# == VD ==
+cp evaluation/new/HBASE-28583-config-format-vd-static-no-skip.json hbase_config.json
+diff evaluation/new/HBASE-28583-config-format-vd-static-no-skip.json hbase_config.json
 
-# ======
-
-# VD
-# cp evaluation/HBASE-28583-config-format-skip-upgrade-vd-static.json hbase_config.json
-# diff evaluation/HBASE-28583-config-format-skip-upgrade-vd-static.json hbase_config.json
-# FC-skip (eval state exploration)
-# cp evaluation/HBASE-28583-config-format1-coverage-eval.json hbase_config.json 
-
-# FC-skip
-# cp evaluation/HBASE-28583-config-format1.json hbase_config.json
-# diff evaluation/HBASE-28583-config-format1.json hbase_config.json
-
-# BC-skip
-cp evaluation/new/HBASE-28583-config-normal-skip.json hbase_config.json
-diff evaluation/new/HBASE-28583-config-normal-skip.json hbase_config.json
-
-# BC (eval state exploration)
-# cp evaluation/HBASE-28583-config-normal-coverage-eval.json hbase_config.json
-# diff evaluation/HBASE-28583-config-normal-coverage-eval.json hbase_config.json
+# == BC ==
+# cp evaluation/new/HBASE-28583-config-normal.json hbase_config.json
+# diff evaluation/new/HBASE-28583-config-normal.json hbase_config.json
 
 # Clean
 cd ~/project/upfuzz; sudo chmod 777 /var/run/docker.sock; bin/clean.sh; bin/rm.sh; rm format_coverage.log 
-
-# Larget-scale Test
-tmux new-session -d -s 0 \; split-window -v \;
-tmux send-keys -t 0:0.0 C-m 'bin/start_server.sh hbase_config.json > server.log' C-m \;
-tmux send-keys -t 0:0.1 C-m 'sleep 4; bin/start_clients.sh 12 hbase_config.json' C-m
 
 # Test run
 tmux new-session -d -s 0 \; split-window -v \;
 tmux send-keys -t 0:0.0 C-m 'bin/start_server.sh hbase_config.json > server.log' C-m \;
 tmux send-keys -t 0:0.1 C-m 'sleep 4; bin/start_clients.sh 1 hbase_config.json' C-m
+
+# Larget-scale Test
+tmux new-session -d -s 0 \; split-window -v \;
+tmux send-keys -t 0:0.0 C-m 'bin/start_server.sh hbase_config.json > server.log' C-m \;
+tmux send-keys -t 0:0.1 C-m 'sleep 4; bin/start_clients.sh 12 hbase_config.json' C-m

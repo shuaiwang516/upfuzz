@@ -69,6 +69,20 @@ docker ps
 ls failure/
 ```
 
+Example server.log
+```
+-------------------------------------------------- TestStatus ---------------------------------------------------------------
+System: cassandra
+Upgrade Testing: apache-cassandra-2.2.19=>apache-cassandra-3.0.30
+=============================================================================================================================
+|              cur testID : 295|              total exec : 234|           skipped upgrade : 0|                              |
+|               run time : 889s|                     round : 7|          ori BC : 20460/49900|   up BC upgrade : 24893/63031|
+|                QueueType : BC|               queue size : 67|                     index : 6|                              |
+-----------------------------------------------------------------------------------------------------------------------------
+|            fullstop crash : 0|               event crash : 0|             inconsistency : 0|                 error log : 0|
+-----------------------------------------------------------------------------------------------------------------------------
+```
+
 **Stop Testing and Clean Up**
 ```bash
 # stop fuzzing server, client, and containers

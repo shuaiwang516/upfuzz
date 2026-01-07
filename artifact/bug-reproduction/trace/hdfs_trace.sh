@@ -56,7 +56,6 @@ cd $UPFUZZ_DIR
 
 cd ~/project/upfuzz
 git checkout .
-git checkout dev
 git pull
 ./gradlew copyDependencies
 ./gradlew :spotlessApply build

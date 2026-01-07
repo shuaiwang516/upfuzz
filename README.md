@@ -49,7 +49,6 @@ Requirement: java11, docker (Docker version 26.0.0, build a5ee5b1)
 ssh-keyscan github.com >> ~/.ssh/known_hosts
 git clone git@github.com:zlab-purdue/upfuzz.git
 cd upfuzz
-git checkout dev
 
 export UPFUZZ_DIR=$PWD
 export ORI_VERSION=5.0.4
@@ -86,7 +85,6 @@ bin/clean.sh
 ssh-keyscan github.com >> ~/.ssh/known_hosts
 git clone git@github.com:zlab-purdue/upfuzz.git
 cd upfuzz
-git checkout dev
 
 export UPFUZZ_DIR=$PWD
 export ORI_VERSION=4.1.9
@@ -123,7 +121,6 @@ bin/clean.sh
 ssh-keyscan github.com >> ~/.ssh/known_hosts
 git clone git@github.com:zlab-purdue/upfuzz.git
 cd upfuzz
-git checkout dev
 
 export UPFUZZ_DIR=$PWD
 export ORI_VERSION=3.11.17
@@ -161,7 +158,6 @@ bin/clean.sh
 ```bash
 git clone git@github.com:zlab-purdue/upfuzz.git
 cd upfuzz
-git checkout dev
 
 export UPFUZZ_DIR=$PWD
 export ORI_VERSION=4.1.9
