@@ -10,12 +10,12 @@ if [ ! -f "client_format.log" ]; then
   exit 1
 fi
 
-t1_normal=$(grep "Connect to cqlsh" client_normal.log | head -n 1 | awk '{print $2}')
-t2_normal=$(grep "Cqlsh connected" client_normal.log | head -n 1 | awk '{print $2}')
+t1_normal=$(grep "Connect to" client_normal.log | head -n 1 | awk '{print $2}')
+t2_normal=$(grep "connected" client_normal.log | head -n 1 | awk '{print $2}')
 t3_normal=$(grep "collect coverage" client_normal.log | head -n 1 | awk '{print $2}')
 
-t1_format=$(grep "Connect to cqlsh" client_format.log | head -n 1 | awk '{print $2}')
-t2_format=$(grep "Cqlsh connected" client_format.log | head -n 1 | awk '{print $2}')
+t1_format=$(grep "Connect to" client_format.log | head -n 1 | awk '{print $2}')
+t2_format=$(grep "connected" client_format.log | head -n 1 | awk '{print $2}')
 t3_format=$(grep "collect coverage" client_format.log | head -n 1 | awk '{print $2}')
 
 to_ms () {
