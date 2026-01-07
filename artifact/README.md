@@ -44,8 +44,6 @@ git clone https://github.com/zlab-purdue/upfuzz.git
 cd ~/project/upfuzz
 ```
 
-TODO: add push-button script for instrumented testing
-
 ### Test Cassandra: 3.11.17 => 4.1.4
 
 **Start up testing process**
@@ -266,3 +264,9 @@ We'll provide the detailed testing logs for the following 2 modes:
 Download our prebuilt instrumented binaries, run upfuzz with a test with/without collecting data format feedback and then compute the overhead.
 
 Prebuilt instrumented binaries: https://github.com/zlab-purdue/upfuzz/releases/tag/inst
+
+Cassandra
+```bash
+
+
+```

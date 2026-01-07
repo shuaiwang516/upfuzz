@@ -99,4 +99,11 @@ gh release create cassandra-4.1.6 \
   apache-cassandra-4.1.6-bin.tar.gz \
   --title "Official Binary" \
   --notes "Testing Purpose"
+
+
+# clean up
+bin/clean.sh; bin/rm.sh
+rm -rf /tmp/upfuzz 
+git checkout .
+git pull
 ```
