@@ -230,10 +230,7 @@ bash artifact/bug-reproduction/hbase_repo.sh 29021 false
 ```bash
 # 2.10.2 => 3.3.6
 cd ~/project/upfuzz
-mkdir -p /tmp/upfuzz/hdfs
-rm -rf /tmp/upfuzz/hdfs/GUBIkxOc
-cp -r artifact/bug-reproduction/bugs/HDFS-16984/GUBIkxOc /tmp/upfuzz/hdfs/
-bash artifact/bug-reproduction/hdfs_repo.sh 16984 false
+bash artifact/bug-reproduction/bugs/HDFS-16984/repo.sh
 ```
 14.HDFS-17219 (Tested)
 ```bash
@@ -247,10 +244,7 @@ bash artifact/bug-reproduction/hdfs_repo.sh 17219 false
 ```bash
 # 2.10.2 => 3.3.6
 cd ~/project/upfuzz
-mkdir -p /tmp/upfuzz/hdfs
-rm -rf /tmp/upfuzz/hdfs/pVfezjff
-cp -r artifact/bug-reproduction/bugs/HDFS-17686/pVfezjff /tmp/upfuzz/hdfs/
-bash artifact/bug-reproduction/hdfs_repo.sh 17686 false
+bash artifact/bug-reproduction/bugs/HDFS-17686/repo.sh
 ```
 
 <!-- ### Reproduce Table 2: triggering trace
@@ -261,11 +255,7 @@ We'll provide the detailed testing logs for the following 2 modes:
 
 ### Reproduce Table 4: Overhead
 
-Download our prebuilt instrumented binaries, run upfuzz with a test with/without collecting data format feedback and then compute the overhead.
-
-Prebuilt instrumented binaries: https://github.com/zlab-purdue/upfuzz/releases/tag/inst
-
-The script will directly print out the overhead, note that it's only ran for one and therefore there could be some fluctuations.
+The script will run upfuzz with/without collecting data format feedback and then print out the overhead.
 
 Cassandra-2.2.19
 ```bash
