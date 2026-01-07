@@ -108,12 +108,8 @@ System: hbase
 Upgrade Testing: hbase-2.5.9=>hbase-3.0.0
 =============================================================================================================================
 |                cur testID : 1|                total exec : 1|           skipped upgrade : 0|                              |
-|               run time : 192s|                     round : 0|         ori BC : 34560/131294|  up BC upgrade : 40779/137946|
-|                QueueType : FC|                queue size : 0|                     index : 0|                              |
+|               run time : 187s|                     round : 0|         ori BC : 31483/123458|  up BC upgrade : 40539/137340|
 |                QueueType : BC|                queue size : 1|                     index : 0|                              |
-|            QueueType : FC_MOD|                queue size : 1|                     index : 0|                              |
-|    QueueType : BoundaryChange|                queue size : 1|                     index : 0|                              |
-|             format num : 2380|           vd-format num : 192|          vd-multi-inv num : 1|                              |
 -----------------------------------------------------------------------------------------------------------------------------
 |            fullstop crash : 0|               event crash : 0|             inconsistency : 0|                 error log : 0|
 -----------------------------------------------------------------------------------------------------------------------------
