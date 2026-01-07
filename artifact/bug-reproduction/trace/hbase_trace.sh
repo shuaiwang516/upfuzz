@@ -94,14 +94,16 @@ diff evaluation/new/HBASE-28583-config-format-vd-static-no-skip.json hbase_confi
 # diff evaluation/new/HBASE-28583-config-normal.json hbase_config.json
 
 # Clean
-cd ~/project/upfuzz; sudo chmod 777 /var/run/docker.sock; bin/clean.sh; bin/rm.sh; rm format_coverage.log 
-
-# Test run
-tmux new-session -d -s 0 \; split-window -v \;
-tmux send-keys -t 0:0.0 C-m 'bin/start_server.sh hbase_config.json > server.log' C-m \;
-tmux send-keys -t 0:0.1 C-m 'sleep 4; bin/start_clients.sh 1 hbase_config.json' C-m
+cd ~/project/upfuzz; sudo chmod 777 /var/run/docker.sock; bin/clean.sh --force; bin/rm.sh; rm format_coverage.log 
 
 # Larget-scale Test
+tmux kill-session -t 0
 tmux new-session -d -s 0 \; split-window -v \;
 tmux send-keys -t 0:0.0 C-m 'bin/start_server.sh hbase_config.json > server.log' C-m \;
 tmux send-keys -t 0:0.1 C-m 'sleep 4; bin/start_clients.sh 12 hbase_config.json' C-m
+
+# Test run
+tmux kill-session -t 0
+tmux new-session -d -s 0 \; split-window -v \;
+tmux send-keys -t 0:0.0 C-m 'bin/start_server.sh hbase_config.json > server.log' C-m \;
+tmux send-keys -t 0:0.1 C-m 'sleep 4; bin/start_clients.sh 1 hbase_config.json' C-m
