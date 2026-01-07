@@ -1,4 +1,2 @@
-create 'tb1', {NAME => 'c0', VERSIONS => 1}
-snapshot 'tb1', 's1'
-disable 'tb1'
-restore_snapshot 's1'
+dfs -mkdir /GscWZRxS
+dfsadmin -setSpaceQuota 2 -storageType DISK /GscWZRxS

@@ -1,1 +1,1 @@
-SELECT * FROM myKS.monkey_species WHERE species='Monkey' and common_name=7 ;
+dfs -count -q -h -u /GscWZRxS

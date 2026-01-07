@@ -284,3 +284,9 @@ HBase-2.5.9
 cd ~/project/upfuzz
 bash artifact/overhead/hbase/hbase_overhead.sh
 ```
+
+HDFS-2.10.2
+```bash
+cd ~/project/upfuzz
+bash artifact/overhead/hdfs/hdfs_overhead.sh
+```
