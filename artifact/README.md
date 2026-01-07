@@ -278,3 +278,9 @@ Cassandra-4.1.6
 cd ~/project/upfuzz
 bash artifact/overhead/cassandra/cass_overhead_4.sh
 ```
+
+HBase-2.5.9
+```bash
+cd ~/project/upfuzz
+bash artifact/overhead/hbase/hbase_overhead.sh
+```
