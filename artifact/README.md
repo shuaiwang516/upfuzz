@@ -270,6 +270,11 @@ The script will directly print out the overhead, note that it's only ran for one
 Cassandra-2.2.19
 ```bash
 cd ~/project/upfuzz
-bash artifact/overhead/cassandra/cass_overhead.sh
+bash artifact/overhead/cassandra/cass_overhead_2.sh
 ```
 
+Cassandra-4.1.6
+```bash
+cd ~/project/upfuzz
+bash artifact/overhead/cassandra/cass_overhead_4.sh
+```

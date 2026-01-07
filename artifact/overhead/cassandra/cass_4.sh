@@ -19,14 +19,13 @@ cass_repo_func() {
   mkdir -p prebuild/cassandra
   cd prebuild/cassandra
 
-  if [ ! -d "apache-cassandra-$ORI_VERSION" ]; then
-    wget -q https://github.com/zlab-purdue/upfuzz/releases/download/inst/apache-cassandra-4.1.6-INST.tar.gz
-    tar -xzvf apache-cassandra-"$ORI_VERSION"-bin.tar.gz > /dev/null
-  fi
-  if [ ! -d "apache-cassandra-$UP_VERSION" ]; then
-    wget -q https://github.com/zlab-purdue/upfuzz/releases/download/cassandra/apache-cassandra-5.0.2-bin.tar.gz
-    tar -xzvf apache-cassandra-"$UP_VERSION"-bin.tar.gz > /dev/null
-  fi
+  rm -rf apache-cassandra-$ORI_VERSION apache-cassandra-$ORI_VERSION-bin.tar.gz
+  wget -q https://github.com/zlab-purdue/upfuzz/releases/download/inst/apache-cassandra-4.1.6-INST.tar.gz
+  tar -xzvf apache-cassandra-"$ORI_VERSION"-INST.tar.gz > /dev/null
+  
+  rm -rf apache-cassandra-$UP_VERSION apache-cassandra-$UP_VERSION-bin.tar.gz
+  wget -q https://github.com/zlab-purdue/upfuzz/releases/download/cassandra/apache-cassandra-5.0.2-bin.tar.gz
+  tar -xzvf apache-cassandra-"$UP_VERSION"-bin.tar.gz > /dev/null
 
   cd ${UPFUZZ_DIR}
   cp src/main/resources/cqlsh_daemon4.py prebuild/cassandra/apache-cassandra-"$ORI_VERSION"/bin/cqlsh_daemon.py
