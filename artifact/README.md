@@ -265,15 +265,11 @@ Download our prebuilt instrumented binaries, run upfuzz with a test with/without
 
 Prebuilt instrumented binaries: https://github.com/zlab-purdue/upfuzz/releases/tag/inst
 
-Cassandra
+The script will directly print out the overhead, note that it's only ran for one and therefore there could be some fluctuations.
+
+Cassandra-2.2.19
 ```bash
 cd ~/project/upfuzz
-bash artifact/overhead/cassandra/cass_2.sh true # with DF
-
-grep "Connect to cqlsh" client.log | head -n 1 | awk '{print $2}'
-grep "Cqlsh connected" client.log | head -n 1 | awk '{print $2}'
-grep "collect coverage" client.log | head -n 1 | awk '{print $2}'
-
-cd ~/project/upfuzz
-bash artifact/overhead/cassandra/cass_2.sh false # without DF
+bash artifact/overhead/cassandra/cass_overhead.sh
 ```
+
