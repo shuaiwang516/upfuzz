@@ -131,7 +131,7 @@ python3 run.py
 ls -l all.pdf
 ```
 
-### Reproduce Table 2: trigger newly detected bugs 
+### Reproduce Table 2: Triggering Newly Detected Bugs 
 
 In this mode, upfuzz runs directly using pre-generated command sequences to reproduce each bug individually. Reviews could simply run the reproducing mode and observe the triggering results.
 
