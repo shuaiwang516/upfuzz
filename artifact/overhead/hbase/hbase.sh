@@ -30,7 +30,7 @@ hbase_repo_func() {
 
   sudo rm -rf hbase-$ORI_VERSION hbase-$ORI_VERSION-INST.tar.gz
   wget -q https://github.com/zlab-purdue/upfuzz/releases/download/inst/hbase-2.5.9-bin-INST.tar.gz
-  tar -xzvf hbase-"$ORI_VERSION"-INST.tar.gz > /dev/null
+  tar -xzvf hbase-2.5.9-bin-INST.tar.gz > /dev/null
 
   sudo rm -rf hbase-$UP_VERSION hbase-3.0.0-516c89e8597fb6-bin.tar.gz
   wget -q https://github.com/zlab-purdue/upfuzz/releases/download/hbase/hbase-3.0.0-516c89e8597fb6-bin.tar.gz
