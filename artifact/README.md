@@ -267,6 +267,7 @@ Prebuilt instrumented binaries: https://github.com/zlab-purdue/upfuzz/releases/t
 
 Cassandra
 ```bash
-
-
+cd ~/project/upfuzz
+bash artifact/overhead/cassandra/cass_2.sh true # with DF
+bash artifact/overhead/cassandra/cass_2.sh false # without DF
 ```

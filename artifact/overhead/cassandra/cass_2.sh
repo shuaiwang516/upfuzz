@@ -21,7 +21,7 @@ cass_repo_func() {
 
   if [ ! -d "apache-cassandra-$ORI_VERSION" ]; then
     wget -q https://github.com/zlab-purdue/upfuzz/releases/download/inst/apache-cassandra-2.2.19-INST.tar.gz
-    tar -xzvf apache-cassandra-"$ORI_VERSION"-bin.tar.gz > /dev/null
+    tar -xzvf apache-cassandra-2.2.19-INST.tar.gz > /dev/null
   fi
   if [ ! -d "apache-cassandra-$UP_VERSION" ]; then
     wget -q https://github.com/zlab-purdue/upfuzz/releases/download/cassandra/apache-cassandra-3.0.30-bin.tar.gz

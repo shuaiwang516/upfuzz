@@ -104,6 +104,7 @@ gh release create cassandra-4.1.6 \
 # clean up
 bin/clean.sh; bin/rm.sh
 rm -rf /tmp/upfuzz 
+sudo rm -rf prebuild
 git checkout .
 git pull
 ```
