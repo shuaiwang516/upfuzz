@@ -1,2 +1,7 @@
 dfs -mkdir /GscWZRxS
 dfsadmin -setSpaceQuota 2 -storageType DISK /GscWZRxS
+dfs -mkdir /GUBIkxOc
+dfs -mkdir /GUBIkxOc/sKbTRjvS
+dfs -touchz /GUBIkxOc/a
+dfs -mv /GUBIkxOc/a /GUBIkxOc/b
+dfs -touchz /GUBIkxOc/c
