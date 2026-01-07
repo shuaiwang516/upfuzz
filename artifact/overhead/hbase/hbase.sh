@@ -70,9 +70,9 @@ hbase_repo_func() {
   # copy config and triggering commands
   cd ${UPFUZZ_DIR}
   if [ "$FORMAT" == "true" ]; then
-    cp evaluation/new/HBASE-28583-config-format-vd-static.json hbase_config.json
+    cp artifact/overhead/hbase/HBASE-28583-config-format-vd-static.json hbase_config.json
   else
-    cp evaluation/new/HBASE-28583-config-normal.json hbase_config.json
+    cp artifact/overhead/hbase/HBASE-28583-config-normal.json hbase_config.json
   fi
 
   cp artifact/overhead/hbase/commands.txt examplecase/commands.txt
@@ -113,7 +113,6 @@ hbase_repo_func() {
   ls failure
   echo "--------------------------------"
   echo
-  bin/check_${SYSTEM_SHORT}_${BUG_ID}.sh
 }
 
 hbase_repo_func "$1"
