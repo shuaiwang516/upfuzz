@@ -1,1 +1,1 @@
-SELECT * FROM ks.t1 WHERE k=100 ORDER BY c DESC;
+SELECT * FROM myKS.monkey_species WHERE species='Monkey' and common_name=7 ;
