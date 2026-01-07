@@ -1,10 +1,8 @@
 
 hdfs_repo_func() {
-  # $1: BUG_ID
-  # $2: SPECIAL_CONFIG (true/false)
+  # $1: FORMAT (true/false)
 
-  local BUG_ID=$1
-  local SPECIAL_CONFIG=$2
+  local FORMAT=$1
   local SYSTEM="HDFS"
   local SYSTEM_SHORT="hdfs"
   local UPFUZZ_DIR=~/project/upfuzz
@@ -22,9 +20,9 @@ hdfs_repo_func() {
   mkdir -p prebuild/hdfs
   cd prebuild/hdfs
 
-  sudo rm -rf hadoop-$ORI_VERSION hadoop-$ORI_VERSION.tar.gz
-  wget -q https://github.com/zlab-purdue/upfuzz/releases/download/hadoop/hadoop-"$ORI_VERSION".tar.gz
-  tar -xzvf hadoop-"$ORI_VERSION".tar.gz > /dev/null
+  sudo rm -rf hadoop-$ORI_VERSION hadoop-2.10.2-INST.tar.gz
+  wget -q https://github.com/zlab-purdue/upfuzz/releases/download/inst/hadoop-2.10.2-INST.tar.gz
+  tar -xzvf hadoop-2.10.2-INST.tar.gz > /dev/null
 
   sudo rm -rf hadoop-$UP_VERSION hadoop-$UP_VERSION.tar.gz
   wget -q https://github.com/zlab-purdue/upfuzz/releases/download/hadoop/hadoop-"$UP_VERSION".tar.gz
@@ -43,7 +41,14 @@ hdfs_repo_func() {
   /usr/lib/jvm/java-8-openjdk-amd64/bin/javac -d . -cp "share/hadoop/hdfs/*:share/hadoop/common/*:share/hadoop/common/lib/*" FsShellDaemon.java
   sed -i "s/  case \${subcmd} in/&\n    dfsdaemon)\n      HADOOP_CLASSNAME=\"org.apache.hadoop.fs.FsShellDaemon\"\n    ;;/" bin/hdfs
 
-  docker pull hanke580/upfuzz-ae:hdfs-${ORI_VERSION}_${UP_VERSION}
+  # ===== DF =====
+  cd $UPFUZZ_DIR
+  cp configInfo/hadoop-${ORI_VERSION}/* prebuild/hdfs/hadoop-${ORI_VERSION}/
+  cp lib/ssgFatJar.jar prebuild/hdfs/hadoop-${ORI_VERSION}/share/hadoop/common/lib/
+  cp lib/ssgFatJar.jar prebuild/hdfs/hadoop-${ORI_VERSION}/share/hadoop/hdfs/lib/
+  # ===== DF =====
+
+  docker pull hanke580/upfuzz-ae:hdfs-${ORI_VERSION}_${UP_VERSION} > /dev/null
   docker tag \
     hanke580/upfuzz-ae:hdfs-${ORI_VERSION}_${UP_VERSION} \
     upfuzz_hdfs:hadoop-${ORI_VERSION}_hadoop-${UP_VERSION}
@@ -54,15 +59,24 @@ hdfs_repo_func() {
 
   # copy config and triggering commands
   cd ${UPFUZZ_DIR}
-  cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/hdfs_config.json hdfs_config.json
-  cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/commands.txt examplecase/commands.txt
-  cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/validcommands.txt examplecase/validcommands.txt
+  if [ "$FORMAT" == "true" ]; then
+    cp artifact/overhead/hdfs/HDFS-17219-config-format-vd-static.json hdfs_config.json
+  else
+    cp artifact/overhead/hdfs/HDFS-17219-config-normal.json hdfs_config.json
+  fi
+  cp artifact/overhead/hdfs/commands.txt examplecase/commands.txt
+  cp artifact/overhead/hdfs/validcommands.txt examplecase/validcommands.txt
 
   # Reproduction run
   tmux kill-session -t 0
   tmux new-session -d -s 0 \; split-window -v \;
-  tmux send-keys -t 0:0.0 C-m 'bin/start_server.sh hdfs_config.json > server.log' C-m \;
-  tmux send-keys -t 0:0.1 C-m 'sleep 2; bin/start_clients.sh 1 hdfs_config.json > client.log' C-m
+  if [ "$FORMAT" == "true" ]; then
+    tmux send-keys -t 0:0.0 C-m 'bin/start_server.sh hdfs_config.json > server_format.log' C-m \;
+    tmux send-keys -t 0:0.1 C-m 'sleep 2; bin/start_clients.sh 1 hdfs_config.json > client_format.log' C-m
+  else
+    tmux send-keys -t 0:0.0 C-m 'bin/start_server.sh hdfs_config.json > server_normal.log' C-m \;
+    tmux send-keys -t 0:0.1 C-m 'sleep 2; bin/start_clients.sh 1 hdfs_config.json > client_normal.log' C-m
+  fi
 
   # Clean after one test (< 2 minutes)
   echo "Waiting for test completion (2 minutes)..."
@@ -88,7 +102,6 @@ hdfs_repo_func() {
   ls failure
   echo "--------------------------------"
   echo
-  bin/check_${SYSTEM_SHORT}_${BUG_ID}.sh
 }
 
-hdfs_repo_func "$1" "$2"
+hdfs_repo_func "$1"

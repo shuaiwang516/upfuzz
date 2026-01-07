@@ -50,12 +50,12 @@ hbase_repo_func() {
   cp $UPFUZZ_DIR/src/main/resources/hbase/compile-src/hbase_daemon3.py $UPFUZZ_DIR/prebuild/hbase/hbase-$ORI_VERSION/bin/hbase_daemon.py
   cp $UPFUZZ_DIR/src/main/resources/hbase/compile-src/hbase_daemon3.py $UPFUZZ_DIR/prebuild/hbase/hbase-$UP_VERSION/bin/hbase_daemon.py
 
-  docker pull hanke580/upfuzz-ae:hbase-${ORI_VERSION}_${UP_VERSION}
+  docker pull hanke580/upfuzz-ae:hbase-${ORI_VERSION}_${UP_VERSION} > /dev/null
   docker tag \
     hanke580/upfuzz-ae:hbase-${ORI_VERSION}_${UP_VERSION} \
     upfuzz_hbase:hbase-${ORI_VERSION}_hbase-${UP_VERSION}
 
-  docker pull hanke580/upfuzz-ae:hdfs-2.10.2
+  docker pull hanke580/upfuzz-ae:hdfs-2.10.2 > /dev/null
   docker tag hanke580/upfuzz-ae:hdfs-2.10.2 \
     upfuzz_hdfs:hadoop-2.10.2
 

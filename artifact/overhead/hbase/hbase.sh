@@ -54,12 +54,12 @@ hbase_repo_func() {
   cp lib/ssgFatJar.jar prebuild/hbase/hbase-${ORI_VERSION}/lib/
   # ===== DF =====
 
-  docker pull hanke580/upfuzz-ae:hbase-${ORI_VERSION}_${UP_VERSION}
+  docker pull hanke580/upfuzz-ae:hbase-${ORI_VERSION}_${UP_VERSION} > /dev/null
   docker tag \
     hanke580/upfuzz-ae:hbase-${ORI_VERSION}_${UP_VERSION} \
     upfuzz_hbase:hbase-${ORI_VERSION}_hbase-${UP_VERSION}
 
-  docker pull hanke580/upfuzz-ae:hdfs-2.10.2
+  docker pull hanke580/upfuzz-ae:hdfs-2.10.2 > /dev/null
   docker tag hanke580/upfuzz-ae:hdfs-2.10.2 \
     upfuzz_hdfs:hadoop-2.10.2
 

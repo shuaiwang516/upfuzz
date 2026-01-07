@@ -43,7 +43,7 @@ hdfs_repo_func() {
   /usr/lib/jvm/java-8-openjdk-amd64/bin/javac -d . -cp "share/hadoop/hdfs/*:share/hadoop/common/*:share/hadoop/common/lib/*" FsShellDaemon.java
   sed -i "s/  case \${subcmd} in/&\n    dfsdaemon)\n      HADOOP_CLASSNAME=\"org.apache.hadoop.fs.FsShellDaemon\"\n    ;;/" bin/hdfs
 
-  docker pull hanke580/upfuzz-ae:hdfs-${ORI_VERSION}_${UP_VERSION}
+  docker pull hanke580/upfuzz-ae:hdfs-${ORI_VERSION}_${UP_VERSION} > /dev/null
   docker tag \
     hanke580/upfuzz-ae:hdfs-${ORI_VERSION}_${UP_VERSION} \
     upfuzz_hdfs:hadoop-${ORI_VERSION}_hadoop-${UP_VERSION}

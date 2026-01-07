@@ -100,6 +100,11 @@ gh release create cassandra-4.1.6 \
   --title "Official Binary" \
   --notes "Testing Purpose"
 
+awk 'NR==1{split($0,a,":|,"); t1=(a[1]*3600+a[2]*60+a[3])*1000+a[4]} NR==2{split($0,a,":|,"); t2=(a[1]*3600+a[2]*60+a[3])*1000+a[4]} NR==3{split($0,a,":|,"); t3=(a[1]*3600+a[2]*60+a[3])*1000+a[4]} END{printf "t1->t2: %.3fs\nt2->t3: %.3fs\nt1->t3: %.3fs\n",(t2-t1)/1000,(t3-t2)/1000,(t3-t1)/1000}' < <(
+  grep "Connect to cqlsh" client.log | head -n 1 | awk '{print $2}'
+  grep "Cqlsh connected" client.log | head -n 1 | awk '{print $2}'
+  grep "collect coverage" client.log | head -n 1 | awk '{print $2}'
+)
 
 # clean up
 bin/clean.sh; bin/rm.sh

@@ -37,7 +37,7 @@ cass_repo_func() {
   cp lib/ssgFatJar.jar prebuild/cassandra/apache-cassandra-${ORI_VERSION}/lib/ssgFatJar.jar
   # ===== DF =====
 
-  docker pull hanke580/upfuzz-ae:cassandra-${ORI_VERSION}_${UP_VERSION}
+  docker pull hanke580/upfuzz-ae:cassandra-${ORI_VERSION}_${UP_VERSION} > /dev/null
   docker tag \
     hanke580/upfuzz-ae:cassandra-${ORI_VERSION}_${UP_VERSION} \
     upfuzz_cassandra:apache-cassandra-${ORI_VERSION}_apache-cassandra-${UP_VERSION}
@@ -49,9 +49,9 @@ cass_repo_func() {
   # copy config and triggering commands
   cd ${UPFUZZ_DIR}
   if [ "$FORMAT" == "true" ]; then
-    cp evaluation/new/CASSANDRA-18108-config-format-vd-static.json config.json
+    cp artifact/overhead/cassandra/CASSANDRA-18108-config-format-vd-static.json config.json
   else
-    cp evaluation/new/CASSANDRA-18108-config-normal.json config.json
+    cp artifact/overhead/cassandra/CASSANDRA-18108-config-normal.json config.json
   fi
 
   cp artifact/overhead/cassandra/commands.txt examplecase/commands.txt

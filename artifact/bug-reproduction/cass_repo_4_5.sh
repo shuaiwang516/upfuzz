@@ -34,7 +34,7 @@ cass_repo_func() {
   cp src/main/resources/cqlsh_daemon4.py prebuild/cassandra/apache-cassandra-"$ORI_VERSION"/bin/cqlsh_daemon.py
   cp src/main/resources/cqlsh_daemon5.py  prebuild/cassandra/apache-cassandra-"$UP_VERSION"/bin/cqlsh_daemon.py
 
-  docker pull hanke580/upfuzz-ae:cassandra-${ORI_VERSION}_${UP_VERSION}
+  docker pull hanke580/upfuzz-ae:cassandra-${ORI_VERSION}_${UP_VERSION} > /dev/null
   docker tag \
     hanke580/upfuzz-ae:cassandra-${ORI_VERSION}_${UP_VERSION} \
     upfuzz_cassandra:apache-cassandra-${ORI_VERSION}_apache-cassandra-${UP_VERSION}
