@@ -2,7 +2,7 @@
 
 ## Overview
 
-This repository contains the source code and artifact materials for **UpFuzz**, a framework for discovering data-format and upgrade bugs in distributed storage systems.
+This repository contains the source code and artifact materials for **upfuzz**, a framework for discovering data-format and upgrade bugs in distributed storage systems.
 
 We provided our source code, the push-button script to run the testing framework and our experiment trace for evaluation. 
 
@@ -116,7 +116,7 @@ To facilitate a push-button artifact evaluation workflow, we provide pre-built i
 We provide scripts and traces to reproduce all reported results.
 
 ### Reproduce Figure 14: State Exploration
-Run UpFuzz in state exploration mode.
+Run upfuzz in state exploration mode.
 
 Scripts are provided to generate the final figure.
 
@@ -133,7 +133,7 @@ ls -l all.pdf
 
 ### Reproduce Table 2: trigger newly detected bugs 
 
-In this mode, UpFuzz runs directly using pre-generated command sequences to reproduce each bug individually. Reviews could simply run the reproducing mode and observe the triggering results.
+In this mode, upfuzz runs directly using pre-generated command sequences to reproduce each bug individually. Reviews could simply run the reproducing mode and observe the triggering results.
 
 Each bug reproduction contains a reproduction script. As long as upfuzz repo is cloned, use the push-button script could reproduce the bug immediately (each bug takes < 5 minutes). The bug reports is under `upfuzz/failure` folder.
 
