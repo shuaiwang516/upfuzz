@@ -142,104 +142,104 @@ upfuzz (main*) $ ls failure
 failure_0
 ```
 
-1. CASSANDRA-18105 (Tested)
+1. [CASSANDRA-18105](https://issues.apache.org/jira/browse/CASSANDRA-18105)
 ```bash
 # 2.2.19 => 3.0.30
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 18105 false
 ```
 
-2. CASSANDRA-18108 (Tested)
+2. [CASSANDRA-18108](https://issues.apache.org/jira/browse/CASSANDRA-18108)
 ```bash
 # 4.1.6 => 5.0.2
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_4_5.sh 18108 false
 ```
 
-3. CASSANDRA-19590 (Tested)
+3. [CASSANDRA-19590](https://issues.apache.org/jira/browse/CASSANDRA-19590)
 ```bash
 # 2.2.19 => 3.0.30
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19590 false
 ```
 
-4. CASSANDRA-19591 (Tested)
+4. [CASSANDRA-19591](https://issues.apache.org/jira/browse/CASSANDRA-19591)
 ```bash
 # 2.2.19 => 3.0.30
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19591 false
 ```
 
-5. CASSANDRA-19623 (Tested)
+5. [CASSANDRA-19623](https://issues.apache.org/jira/browse/CASSANDRA-19623)
 ```bash
 # 2.2.19 => 3.0.30
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19623 true
 ```
 
-6. CASSANDRA-19639 (Tested)
+6. [CASSANDRA-19639](https://issues.apache.org/jira/browse/CASSANDRA-19639)
 ```bash
 # 2.2.19 => 3.0.30
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19639 true
 ```
 
-7. CASSANDRA-19689 (Tested)
+7. [CASSANDRA-19689](https://issues.apache.org/jira/browse/CASSANDRA-19689)
 ```bash
 # 2.2.19 => 3.0.30
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 19689 true
 ```
 
-8. CASSANDRA-20182 (Tested)
+8. [CASSANDRA-20182](https://issues.apache.org/jira/browse/CASSANDRA-20182)
 ```bash
 # 2.2.19 => 3.0.30
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/cass_repo_2_3.sh 20182 false
 ```
 
-9. HBASE-28583 (Tested)
+9. [HBASE-28583](https://issues.apache.org/jira/browse/HBASE-28583)
 ```bash
 # 2.5.9 => 3.0.0 (516c89e8597fb6)
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/hbase_repo.sh 28583 false
 ```
 
-10. HBASE-28812 (Tested)
+10. [HBASE-28812](https://issues.apache.org/jira/browse/HBASE-28812)
 ```bash
 # 2.6.0 => 3.0.0 (a030e8099840e64)
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/hbase_repo_28812.sh 28812 false
 ```
 
-11. HBASE-28815 (Tested)
+11. [HBASE-28815](https://issues.apache.org/jira/browse/HBASE-28815)
 ```bash
 # 1.7.2 => 2.6.0
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/hbase_repo_28815.sh 28815 false
 ```
 
-12. HBASE-29021 (Tested)
+12. [HBASE-29021](https://issues.apache.org/jira/browse/HBASE-29021)
 ```bash
 # 2.5.9 => 3.0.0 (516c89e8597fb6)
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/hbase_repo.sh 29021 false
 ```
 
-13. HDFS-16984 (Tested)
+13. [HDFS-16984](https://issues.apache.org/jira/browse/HDFS-16984)
 ```bash
 # 2.10.2 => 3.3.6
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/bugs/HDFS-16984/repo.sh
 ```
-14.HDFS-17219 (Tested)
+14. [HDFS-17219](https://issues.apache.org/jira/browse/HDFS-17219)
 ```bash
 # 2.10.2 => 3.3.6
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/hdfs_repo.sh 17219 false
 ```
 
-15.HDFS-17686 (Tested)
+15. [HDFS-17686](https://issues.apache.org/jira/browse/HDFS-17686)
 > Note: this bug might require running the script multiple times to trigger
 ```bash
 # 2.10.2 => 3.3.6
