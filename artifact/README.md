@@ -269,5 +269,11 @@ Cassandra
 ```bash
 cd ~/project/upfuzz
 bash artifact/overhead/cassandra/cass_2.sh true # with DF
+
+grep "Connect to cqlsh" client.log | head -n 1 | awk '{print $2}'
+grep "Cqlsh connected" client.log | head -n 1 | awk '{print $2}'
+grep "collect coverage" client.log | head -n 1 | awk '{print $2}'
+
+cd ~/project/upfuzz
 bash artifact/overhead/cassandra/cass_2.sh false # without DF
 ```
