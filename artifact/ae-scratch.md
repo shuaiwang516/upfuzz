@@ -1,11 +1,8 @@
 # Reproducing the Results from Scratch
 
-To streamline the artifact evaluation (AE) process, we provide pre-built instrumented binaries (Step 1) and pre-recorded bug-triggering traces, enabling a push-button evaluation workflow.  
-Reviewers could also reproduce results entirely from scratch; however, this requires a substantial amount of computation time.
+To streamline the artifact evaluation (AE) process, we provided pre-built instrumented binaries to enable a push-button evaluation workflow, shown in [artifact/README.md](artifact/README.md).
 
-All experiments were originally conducted in parallel using a large number of servers.
-
----
+Reviewers could also reproduce results entirely from scratch; however, this requires a substantial amount of computation time. All experiments were originally conducted in parallel using cloudlab machines.
 
 ## 1. Creating the Instrumented Binary
 
@@ -17,42 +14,36 @@ All experiments were originally conducted in parallel using a large number of se
 ### 1.2 Source Code Instrumentation
 
 - Repository: `dinv-monitor`: https://github.com/zlab-purdue/dinv-monitor
-- Instrument hooks to ssg-runtime (collect feedbacks) based on information from 1.1
+- Instrument hooks to collect data format feedbacks during test execution
 
-### 1.3 data format runtime collection (feedback)
+### 1.3 Data Format Runtime Collection (feedback)
 
 - Repository: `ssg-runtime`: https://github.com/zlab-purdue/ssg-runtime
 - Collect data format feedback during test execution and check whether the collected feedback is interesting.
 
----
+## 2. Testing
 
-## 2. Fuzz Testing
+- Repositories: `upfuzz`: https://github.com/zlab-purdue/upfuzz
 
-- Repositories: `upfuzz`
-
-### Reproducing Tables 2 and 3
+### Reproducing Tables 2
 
 **Expected time:** approximately **450 machine-days**.
 
-For each version pair, we configure UpFuzz to test under multiple settings and repeat each experiment three times.  
+For each version pair, we configure upfuzz to test under multiple settings and repeat each experiment three times.  
 Scripts are provided to automatically check whether a failure is successfully triggered.
-
----
 
 ### Reproducing Figure 14
 
 **Expected time:** approximately **27 machine-days**.
 
-We configure UpFuzz to run in the state-exploration mode.
-
----
+We configure upfuzz to run in the state-exploration mode.
 
 ### Reproducing Table 4
 
-This experiment follows the same procedure described in `ae.md`.
+This experiment follows the same procedure described in [artifact/README.md](artifact/README.md).
 
 
-## Misc (Not for reviewers)
+# Misc (Not for reviewers)
 ```bash
 # set remote url with ssh
 git remote set-url origin git@github.com:zlab-purdue/upfuzz.git
@@ -62,32 +53,6 @@ docker tag \
   upfuzz_cassandra:apache-cassandra-2.2.19_apache-cassandra-3.0.30 \
   hanke580/upfuzz-ae:cassandra-2.2.19_3.0.30
 docker push hanke580/upfuzz-ae:cassandra-2.2.19_3.0.30
-
-# HBase
-docker tag \
-  upfuzz_hbase:hbase-2.4.18_hbase-2.5.9 \
-  hanke580/upfuzz-ae:hbase-2.4.18_2.5.9
-docker push hanke580/upfuzz-ae:hbase-2.4.18_2.5.9
-
-docker tag \
-  upfuzz_hbase:hbase-2.5.9_hbase-3.0.0 \
-  hanke580/upfuzz-ae:hbase-2.5.9_3.0.0
-docker push hanke580/upfuzz-ae:hbase-2.5.9_3.0.0
-
-docker tag \
-  upfuzz_hbase:hbase-1.7.2_hbase-2.6.0 \
-  hanke580/upfuzz-ae:hbase-1.7.2_2.6.0
-docker push hanke580/upfuzz-ae:hbase-1.7.2_2.6.0
-
-docker tag \
-  upfuzz_hbase:hbase-2.6.0_hbase-3.0.0 \
-  hanke580/upfuzz-ae:hbase-2.6.0_3.0.0
-docker push hanke580/upfuzz-ae:hbase-2.6.0_3.0.0
-
-docker tag \
-  upfuzz_hdfs:hadoop-2.10.2_hadoop-3.3.6 \
-  hanke580/upfuzz-ae:hdfs-2.10.2_3.3.6
-docker push hanke580/upfuzz-ae:hdfs-2.10.2_3.3.6
 
 # pull images from docker hub
 docker pull hanke580/upfuzz-ae:cassandra-3.11.17_4.1.4

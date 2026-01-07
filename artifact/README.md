@@ -4,13 +4,13 @@
 
 This repository contains the source code and artifact materials for **upfuzz**, a framework for discovering data-format and upgrade bugs in distributed storage systems.
 
-We provided our source code, the push-button script to run the testing framework and our experiment trace for evaluation. 
+We provided our source code, the push-button script to run the testing framework and our experiment traces for evaluation.
 
 ## Experiment Data
 
 To evaluate upfuzz, we conducted a large number of experiments, totaling > five months of a single machine time (We paralleled experiments with more servers). In accordance with the artifact evaluation (AE) guidelines, we do not expect reviewers to rerun all experiments from scratch to validate our results.
 
-Instead, we release our **raw experimental data**, allowing reviewers to download the data and run scripts to reproduce all figures and tables reported in the paper.
+> Note: if reviewers want to build the instrumented binaries from scratch, check out [ae-scratch.md](ae-scratch.md) for more details. It's less automated than this README.
 
 For experiments that require substantial computational resources, we provide:
 - Pre-built instrumented binaries
@@ -18,7 +18,6 @@ For experiments that require substantial computational resources, we provide:
 
 These artifacts enable result reproduction without re-running the full-scale experiments.
 
----
 ## Requirements
 
 We strongly encourage you to run experiments using cloudlab machines, specifically `c220g5`. All our experiments were conducted using cloudlab `c220g5`.
