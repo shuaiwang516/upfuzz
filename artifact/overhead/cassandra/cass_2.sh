@@ -64,7 +64,7 @@ cass_repo_func() {
   tmux kill-session -t 0
   tmux new-session -d -s 0 \; split-window -v \;
   tmux send-keys -t 0:0.0 C-m 'bin/start_server.sh config.json > server.log' C-m \;
-  tmux send-keys -t 0:0.1 C-m 'sleep 2; bin/start_clients.sh 1 config.json' C-m
+  tmux send-keys -t 0:0.1 C-m 'sleep 2; bin/start_clients.sh 1 config.json > client.log' C-m
 
   # Clean after one test (< 2 minutes)
   echo "Waiting for test completion (2 minutes)..."
