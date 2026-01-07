@@ -39,7 +39,7 @@
   "useExampleTestPlan": false,
   "startUpClusterForDebugging": false,
   "drain": false,
-  "useFixedCommand": false,
+  "useFixedCommand": true,
   "eval_CASSANDRA13939": false,
   "enable_ORDERBY_IN_SELECT": false,
   "eval_14803_filter_forward_read": false,

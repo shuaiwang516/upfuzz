@@ -83,7 +83,7 @@ hbase_repo_func() {
   tmux send-keys -t 0:0.1 C-m 'sleep 2; bin/start_clients.sh 1 hbase_config.json' C-m
 
   # Clean after one test (< 2 minutes)
-  echo "Waiting for test completion (2 minutes)..."
+  echo "Waiting for test completion ..."
   total=480
   for ((i=1; i<=total; i++)); do
     percent=$((i * 100 / total))

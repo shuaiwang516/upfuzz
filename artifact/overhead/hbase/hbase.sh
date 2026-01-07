@@ -90,7 +90,7 @@ hbase_repo_func() {
   fi
 
   # Clean after one test (< 2 minutes)
-  echo "Waiting for test completion (2 minutes)..."
+  echo "Waiting for test completion ..."
   total=360
   for ((i=1; i<=total; i++)); do
     percent=$((i * 100 / total))
