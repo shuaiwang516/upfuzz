@@ -1,2 +1,3 @@
-create 'test', 'cf', CONFIGURATION => {'hbase.store.file-tracker.impl' => 'FILE'}
-put 'test', 'row', 'cf:q', 'value'
+create 'tb1', {NAME => 'c0', VERSIONS => 1}
+snapshot 'tb1', 's1'
+disable 'tb1'
