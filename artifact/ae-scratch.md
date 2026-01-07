@@ -2,7 +2,7 @@
 
 To streamline the artifact evaluation (AE) process, we provided pre-built instrumented binaries to enable a push-button evaluation workflow, shown in [artifact/README.md](artifact/README.md).
 
-Reviewers could also reproduce results entirely from scratch; however, this requires a substantial amount of computation time.
+Reviewers could also reproduce results entirely from scratch.
 
 ## 1. Creating the Instrumented Binary
 

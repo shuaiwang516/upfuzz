@@ -73,8 +73,7 @@ ls failure/
 ```bash
 # stop fuzzing server, client, and containers
 bin/clean.sh
-# remove generated files
-# Testing could generate lots of files (recorded tests, logs, failure reports...)
+# remove generated files (recorded tests, logs, failure reports...)
 bin/rm.sh
 ```
 
@@ -102,12 +101,29 @@ docker ps
 ls failure/
 ```
 
+Example server.log
+```
+-------------------------------------------------- TestStatus ---------------------------------------------------------------
+System: hbase
+Upgrade Testing: hbase-2.5.9=>hbase-3.0.0
+=============================================================================================================================
+|                cur testID : 1|                total exec : 1|           skipped upgrade : 0|                              |
+|               run time : 192s|                     round : 0|         ori BC : 34560/131294|  up BC upgrade : 40779/137946|
+|                QueueType : FC|                queue size : 0|                     index : 0|                              |
+|                QueueType : BC|                queue size : 1|                     index : 0|                              |
+|            QueueType : FC_MOD|                queue size : 1|                     index : 0|                              |
+|    QueueType : BoundaryChange|                queue size : 1|                     index : 0|                              |
+|             format num : 2380|           vd-format num : 192|          vd-multi-inv num : 1|                              |
+-----------------------------------------------------------------------------------------------------------------------------
+|            fullstop crash : 0|               event crash : 0|             inconsistency : 0|                 error log : 0|
+-----------------------------------------------------------------------------------------------------------------------------
+```
+
 **Stop Testing and Clean Up**
 ```bash
 # stop fuzzing server, client, and containers
 bin/clean.sh
-# remove generated files
-# Testing could generate lots of files (recorded tests, logs, failure reports...)
+# remove generated files (recorded tests, logs, failure reports...)
 bin/rm.sh
 ```
 
@@ -139,8 +155,7 @@ ls failure/
 ```bash
 # stop fuzzing server, client, and containers
 bin/clean.sh
-# remove generated files
-# Testing could generate lots of files (recorded tests, logs, failure reports...)
+# remove generated files (recorded tests, logs, failure reports...)
 bin/rm.sh
 ```
 
