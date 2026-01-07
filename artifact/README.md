@@ -10,7 +10,7 @@ We provided our source code, the push-button script to run the testing framework
 
 To evaluate upfuzz, we conducted a large number of experiments, totaling > five months of a single machine time (We paralleled experiments with more servers). In accordance with the artifact evaluation (AE) guidelines, we do not expect reviewers to rerun all experiments from scratch to validate our results.
 
-> Note: if reviewers want to build the instrumented binaries from scratch, check out [ae-scratch.md](ae-scratch.md) for more details. It's less automated than this README.
+> Note: if reviewers want to build the instrumented binaries from scratch, check out [ae-scratch.md](ae-scratch.md).
 
 For experiments that require substantial computational resources, we provide:
 - Pre-built instrumented binaries

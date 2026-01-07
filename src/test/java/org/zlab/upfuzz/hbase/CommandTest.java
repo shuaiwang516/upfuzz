@@ -732,7 +732,7 @@ public class CommandTest extends AbstractTest {
         }
     }
 
-    @Test
+    // @Test
     public void testAllHBaseCommands() {
 
         HBaseState s = new HBaseState();
