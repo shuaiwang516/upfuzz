@@ -1,9 +1,7 @@
 cass_repo_func() {
-  # $1: BUG_ID
-  # $2: SPECIAL_CONFIG (true/false)
+  # $1: FORMAT (true/false)
 
-  local BUG_ID=$1
-  local SPECIAL_CONFIG=$2
+  local FORMAT=$1
   local SYSTEM="CASSANDRA"
   local SYSTEM_SHORT="cass"
   local UPFUZZ_DIR=~/project/upfuzz
@@ -22,7 +20,7 @@ cass_repo_func() {
   cd prebuild/cassandra
 
   if [ ! -d "apache-cassandra-$ORI_VERSION" ]; then
-    wget -q https://github.com/zlab-purdue/upfuzz/releases/download/cassandra/apache-cassandra-4.1.6-bin.tar.gz
+    wget -q https://github.com/zlab-purdue/upfuzz/releases/download/inst/apache-cassandra-4.1.6-INST.tar.gz
     tar -xzvf apache-cassandra-"$ORI_VERSION"-bin.tar.gz > /dev/null
   fi
   if [ ! -d "apache-cassandra-$UP_VERSION" ]; then
@@ -33,6 +31,12 @@ cass_repo_func() {
   cd ${UPFUZZ_DIR}
   cp src/main/resources/cqlsh_daemon4.py prebuild/cassandra/apache-cassandra-"$ORI_VERSION"/bin/cqlsh_daemon.py
   cp src/main/resources/cqlsh_daemon5.py  prebuild/cassandra/apache-cassandra-"$UP_VERSION"/bin/cqlsh_daemon.py
+
+  # ===== DF =====
+  cd ${UPFUZZ_DIR}
+  cp configInfo/apache-cassandra-${ORI_VERSION}/* prebuild/cassandra/apache-cassandra-${ORI_VERSION}
+  cp lib/ssgFatJar.jar prebuild/cassandra/apache-cassandra-${ORI_VERSION}/lib/ssgFatJar.jar
+  # ===== DF =====
 
   docker pull hanke580/upfuzz-ae:cassandra-${ORI_VERSION}_${UP_VERSION}
   docker tag \
@@ -45,20 +49,25 @@ cass_repo_func() {
 
   # copy config and triggering commands
   cd ${UPFUZZ_DIR}
-  cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/config.json config.json
-  cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/commands.txt examplecase/commands.txt
-  cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/validcommands.txt examplecase/validcommands.txt
-
-  # special config (only for this bug)
-  if [ "$SPECIAL_CONFIG" == "true" ]; then
-    cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/cassandra_ori.yaml prebuild/cassandra/apache-cassandra-${ORI_VERSION}/conf/cassandra.yaml
-    cp artifact/bug-reproduction/bugs/${SYSTEM}-${BUG_ID}/cassandra_up.yaml prebuild/cassandra/apache-cassandra-${UP_VERSION}/conf/cassandra.yaml
+  if [ "$FORMAT" == "true" ]; then
+    cp evaluation/new/CASSANDRA-18108-config-format-vd-static.json config.json
+  else
+    cp evaluation/new/CASSANDRA-18108-config-normal.json config.json
   fi
+
+  cp artifact/overhead/cassandra/commands.txt examplecase/commands.txt
+  cp artifact/overhead/cassandra/validcommands.txt examplecase/validcommands.txt
 
   # Reproduction run
   tmux kill-session -t 0
   tmux new-session -d -s 0 \; split-window -v \;
-  tmux send-keys -t 0:0.0 C-m 'bin/start_server.sh config.json > server.log' C-m \;
+  if [ "$FORMAT" == "true" ]; then
+    tmux send-keys -t 0:0.0 C-m 'bin/start_server.sh config.json > server_format.log' C-m \;
+    tmux send-keys -t 0:0.1 C-m 'sleep 2; bin/start_clients.sh 1 config.json > client_format.log' C-m
+  else
+    tmux send-keys -t 0:0.0 C-m 'bin/start_server.sh config.json > server_normal.log' C-m \;
+    tmux send-keys -t 0:0.1 C-m 'sleep 2; bin/start_clients.sh 1 config.json > client_normal.log' C-m
+  fi
   tmux send-keys -t 0:0.1 C-m 'sleep 2; bin/start_clients.sh 1 config.json > client.log' C-m
 
   # Clean after one test (< 2 minutes)
@@ -85,7 +94,6 @@ cass_repo_func() {
   ls failure
   echo "--------------------------------"
   echo
-  bin/check_${SYSTEM_SHORT}_${BUG_ID}.sh
 }
 
 cass_repo_func "$1" "$2"

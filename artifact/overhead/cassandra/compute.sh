@@ -48,6 +48,6 @@ overhead2=$(awk "BEGIN {printf \"%.4f\", ($interval_2_3_ms_format - $interval_2_
 overhead1_pct=$(awk "BEGIN {printf \"%.2f\", $overhead1 * 100}")
 overhead2_pct=$(awk "BEGIN {printf \"%.2f\", $overhead2 * 100}")
 
-echo "Overhead 1: ${overhead1_pct}%"
-echo "Overhead 2: ${overhead2_pct}%"
+echo "System start up overhead: ${overhead1_pct}%"
+echo "Command execution overhead: ${overhead2_pct}%"
 

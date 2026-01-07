@@ -95,7 +95,6 @@ cass_repo_func() {
   ls failure
   echo "--------------------------------"
   echo
-  # TODO: check logs for overhead!
 }
 
 cass_repo_func "$1"
