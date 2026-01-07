@@ -46,7 +46,7 @@ cd ~/project/upfuzz
 
 ### Test Cassandra: 3.11.17 => 4.1.4
 
-**Start up testing process**
+**Start Testing**
 * It starts up one fuzzing server and one fuzzing client (parallel num = 1)
 
 ```bash
@@ -81,33 +81,69 @@ bin/rm.sh
 
 ### Test HBase: 2.4.18 => 2.5.9
 
+**Start Testing**
 ```bash
 cd ~/project/upfuzz
 bash artifact/test-hbase.sh
 ```
 
 **Check Testing Status**
+```bash
+cd ~/project/upfuzz
+# check logs
 
-same as Cassandra
+# server logs: contain testing coverage, failure info
+view server.log
+view client.log
+
+# check containers: you would see 1 container running
+docker ps
+
+# check failure (if any bug is detected)
+ls failure/
+```
 
 **Stop Testing and Clean Up**
-
-same as Cassandra
+```bash
+# stop fuzzing server, client, and containers
+bin/clean.sh
+# remove generated files
+# Testing could generate lots of files (recorded tests, logs, failure reports...)
+bin/rm.sh
+```
 
 ### Test HDFS: 2.10.2 => 3.3.6
 
+**Start Testing**
 ```bash
 cd ~/project/upfuzz
 bash artifact/test-hdfs.sh
 ```
 
 **Check Testing Status**
+```bash
+cd ~/project/upfuzz
+# check logs
 
-same as Cassandra
+# server logs: contain testing coverage, failure info
+view server.log
+view client.log
+
+# check containers: you would see 1 container running
+docker ps
+
+# check failure (if any bug is detected)
+ls failure/
+```
 
 **Stop Testing and Clean Up**
-
-same as Cassandra
+```bash
+# stop fuzzing server, client, and containers
+bin/clean.sh
+# remove generated files
+# Testing could generate lots of files (recorded tests, logs, failure reports...)
+bin/rm.sh
+```
 
 ## Full Evaluation Instructions
 
@@ -131,7 +167,7 @@ python3 run.py
 ls -l all.pdf
 ```
 
-### Reproduce Table 2: Triggering Newly Detected Bugs 
+### Reproduce Table 2: Triggering New Bugs 
 
 In this mode, upfuzz runs directly using pre-generated command sequences to reproduce each bug individually. Reviews could simply run the reproducing mode and observe the triggering results.
 
