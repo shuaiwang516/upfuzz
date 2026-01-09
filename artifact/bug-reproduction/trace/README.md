@@ -13,14 +13,14 @@ Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
 | [CASSANDRA-19591](https://issues.apache.org/jira/browse/CASSANDRA-19591)   |     NA      |    *Skipped    |
 | [CASSANDRA-19623](https://issues.apache.org/jira/browse/CASSANDRA-19623)   |     NA      |    *Skipped    |
 | [CASSANDRA-19639](https://issues.apache.org/jira/browse/CASSANDRA-19639)   |     NA      |    20.83h      |
-| [CASSANDRA-19689](https://issues.apache.org/jira/browse/CASSANDRA-19689)   |     NA      |    20.83h        |
+| [CASSANDRA-19689](https://issues.apache.org/jira/browse/CASSANDRA-19689)   |     NA      |    18.64h        |
 | [CASSANDRA-20182](https://issues.apache.org/jira/browse/CASSANDRA-20182)   |     NA      |    18.69h      |
 | [HBASE-28583](https://issues.apache.org/jira/browse/HBASE-28583)           |     NA      |    e6,7,8      |
 | [HBASE-28812](https://issues.apache.org/jira/browse/HBASE-28812)           |   Trivial   |    Trivial     |
 | [HBASE-28815](https://issues.apache.org/jira/browse/HBASE-28815)           |   Trivial   |    Trivial     |
 | [HBASE-29021](https://issues.apache.org/jira/browse/HBASE-29021)           |     0.53h   |    e6,7,8      |
-| [HDFS-16984](https://issues.apache.org/jira/browse/HDFS-16984)             |    h3,4,5   |                |
-| [HDFS-17219](https://issues.apache.org/jira/browse/HDFS-17219)             |             |                |
+| [HDFS-16984](https://issues.apache.org/jira/browse/HDFS-16984)             |             |                |
+| [HDFS-17219](https://issues.apache.org/jira/browse/HDFS-17219)             |     h3,4,5: 9.60h  |                |
 | [HDFS-17686](https://issues.apache.org/jira/browse/HDFS-17686)             |             |                |
 
 
@@ -32,8 +32,6 @@ and we record the shortest amount of time we observed.
 Scripts: compute the triggering time from the traces
 
 Untar each trace, and check the average triggering time.
-
-
 
 ```bash
 # TODO: add automated scripts to compute average time
