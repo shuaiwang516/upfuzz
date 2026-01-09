@@ -93,7 +93,14 @@ bash artifact/bug-reproduction/trace/scripts/hdfs_trace.sh final large
 ## Debug
 
 ```bash
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3.sh final dryrun
+
+
 # CASSANDRA-18105 (dryrun: parallel num = 1)
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3_18105.sh base dryrun
+
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/hdfs_trace.sh base dryrun
 ```
