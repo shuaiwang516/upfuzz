@@ -4,7 +4,7 @@ Provided 2 triggering traces: base and df+vd+s (our final testing mode)
 
 | Bug                                                                        | base (Time) | df+vd+s (Time) |
 |----------------------------------------------------------------------------|-------------|----------------|
-| [CASSANDRA-18105](https://issues.apache.org/jira/browse/CASSANDRA-18105)   |             |      e9,10,11          |
+| [CASSANDRA-18105](https://issues.apache.org/jira/browse/CASSANDRA-18105)   |             |    e9,10,11    |
 | [CASSANDRA-18108](https://issues.apache.org/jira/browse/CASSANDRA-18108)   |   e3,4,5    |    e0,1,2      |
 | [CASSANDRA-19590](https://issues.apache.org/jira/browse/CASSANDRA-19590)   |     NA      |    TODO        |
 | [CASSANDRA-19591](https://issues.apache.org/jira/browse/CASSANDRA-19591)   |     NA      |    *Skipped    |
