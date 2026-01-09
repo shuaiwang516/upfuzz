@@ -31,7 +31,35 @@ and we record the shortest amount of time we observed.
 
 Scripts: compute the triggering time from the traces
 
-Untar each trace, and use scripts to compute the average triggering time.
+Untar each trace, and check the average triggering time.
+
+
+
+```bash
+# TODO: add automated scripts to compute average time
+# Compute the average time for bugs...
+
+# Cassandra
+
+# Untar 
+
+cd ~/project/upfuzz/artifact/bug-reproduction/trace/cassandra/base/run1
+tar -xzvf run.tar.gz
+
+cd ~/project/upfuzz/artifact/bug-reproduction/trace/cassandra/base/run2
+tar -xzvf run.tar.gz
+
+cd ~/project/upfuzz/artifact/bug-reproduction/trace/cassandra/base/run3
+tar -xzvf run.tar.gz
+
+# CASSANDRA-19639
+
+time1=24
+time2=24
+time3=24
+
+~/project/upfuzz/bin/check_cass_19639.sh
+```
 
 
 ## Reproduce traces from scratch
