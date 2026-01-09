@@ -7,7 +7,7 @@ Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
 
 | Bug                                                                        | base (Time) | df+vd+s (Time) |
 |----------------------------------------------------------------------------|-------------|----------------|
-| [CASSANDRA-18105](https://issues.apache.org/jira/browse/CASSANDRA-18105)   |   s0,1,2    |    e9,10,11    |
+| [CASSANDRA-18105](https://issues.apache.org/jira/browse/CASSANDRA-18105)   |   s0,1,2:     |    e9,10,11: 3.69h    |
 | [CASSANDRA-18108](https://issues.apache.org/jira/browse/CASSANDRA-18108)   |   e3,4,5    |    e0,1,2      |
 | [CASSANDRA-19590](https://issues.apache.org/jira/browse/CASSANDRA-19590)   |     NA      |    h0,1,2      |
 | [CASSANDRA-19591](https://issues.apache.org/jira/browse/CASSANDRA-19591)   |     NA      |    *Skipped    |
@@ -131,4 +131,10 @@ bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3_18105.sh base dryrun
 
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/hdfs_trace.sh base dryrun
+
+
+# tar the trace
+tar -czvf run.tar.gz failure server.log
+
+
 ```
