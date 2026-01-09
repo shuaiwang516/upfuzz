@@ -42,12 +42,12 @@ cd ${UPFUZZ_DIR}
 git pull
 
 # == df+vd+s ==
-# cp evaluation/new/CASSANDRA-18108-config-format-vd-static.json config.json
-# diff evaluation/new/CASSANDRA-18108-config-format-vd-static.json config.json
+cp evaluation/new/CASSANDRA-18108-config-format-vd-static.json config.json
+diff evaluation/new/CASSANDRA-18108-config-format-vd-static.json config.json
 
 # == base ==
-cp evaluation/new/CASSANDRA-18108-config-normal.json config.json
-diff evaluation/new/CASSANDRA-18108-config-normal.json config.json
+# cp evaluation/new/CASSANDRA-18108-config-normal.json config.json
+# diff evaluation/new/CASSANDRA-18108-config-normal.json config.json
 
 # Clean
 cd ~/project/upfuzz; sudo chmod 777 /var/run/docker.sock; bin/clean.sh --force; bin/rm.sh; rm format_coverage.log 

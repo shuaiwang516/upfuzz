@@ -107,7 +107,6 @@ tmux send-keys -t 0:0.0 C-m 'bin/start_server.sh hbase_config.json > server.log'
 tmux send-keys -t 0:0.1 C-m 'sleep 4; bin/start_clients.sh 1 hbase_config.json' C-m
 
 
-
 # Larget-scale Test
 tmux kill-session -t 0
 tmux new-session -d -s 0 \; split-window -v \;
