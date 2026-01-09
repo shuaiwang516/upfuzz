@@ -17,8 +17,8 @@ mkdir -p $UPFUZZ_DIR/prebuild/hadoop
 cd $UPFUZZ_DIR/prebuild/hadoop
 if [ ! -d "hadoop-2.10.2" ]; then
   sudo rm -rf hadoop-2.10.2
-  HDFS_BIN_PATH=/proj/sosp21-upgrade-PG0/upfuzz_files/binary/hdfs/
-  tar -xzvf $HDFS_BIN_PATH/hadoop-2.10.2.tar.gz
+  wget -q https://github.com/zlab-purdue/upfuzz/releases/download/hadoop/hadoop-2.10.2.tar.gz
+  tar -xzvf hadoop-2.10.2.tar.gz > /dev/null
   cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/core-site.xml $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
   cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/hdfs-site.xml $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
   cp $UPFUZZ_DIR/src/main/resources/hdfs/hbase-pure/hadoop-env.sh $UPFUZZ_DIR/prebuild/hadoop/hadoop-2.10.2/etc/hadoop/ -f
@@ -30,14 +30,11 @@ cd $UPFUZZ_DIR/prebuild/hbase
 sudo rm -rf hbase-$ORI_VERSION
 sudo rm -rf hbase-$UP_VERSION
 
-HBASE_BIN_PATH=/proj/sosp21-upgrade-PG0/upfuzz_files/binary/hbase/
-HBASE_FORMAT_BIN_PATH=/proj/sosp21-upgrade-PG0/upfuzz_files/format_inst_binary/hbase/
+wget -q https://github.com/zlab-purdue/upfuzz/releases/download/inst/hbase-2.5.9-bin-INST.tar.gz
+tar -xzvf hbase-2.5.9-bin-INST.tar.gz > /dev/null
 
-# tar -xzvf $HBASE_BIN_PATH/hbase-"$ORI_VERSION".tar.gz
-tar -xzvf $HBASE_FORMAT_BIN_PATH/hbase-"$ORI_VERSION"-bin-INST.tar.gz
-# tar -xzvf $HBASE_FORMAT_BIN_PATH/hbase-"$ORI_VERSION"-bin-INST-global.tar.gz
-# tar -xzvf $HBASE_BIN_PATH/hbase-"$UP_VERSION".tar.gz
-tar -xzvf $HBASE_BIN_PATH/hbase-"$UP_VERSION"-516c89e8597fb6-bin.tar.gz 
+wget -q https://github.com/zlab-purdue/upfuzz/releases/download/hbase/hbase-3.0.0-516c89e8597fb6-bin.tar.gz
+tar -xzvf hbase-3.0.0-516c89e8597fb6-bin.tar.gz > /dev/null
 
 cp $UPFUZZ_DIR/src/main/resources/hbase/compile-src/hbase-env.sh $UPFUZZ_DIR/prebuild/hbase/hbase-$ORI_VERSION/conf/ -f
 cp $UPFUZZ_DIR/src/main/resources/hbase/compile-src/hbase-env.sh $UPFUZZ_DIR/prebuild/hbase/hbase-$UP_VERSION/conf/ -f

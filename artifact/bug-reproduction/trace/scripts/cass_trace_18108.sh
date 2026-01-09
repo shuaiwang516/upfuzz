@@ -12,11 +12,11 @@ cd prebuild/cassandra
 rm -rf apache-cassandra-$ORI_VERSION apache-cassandra-4.1.6-INST.tar.gz
 rm -rf apache-cassandra-$UP_VERSION apache-cassandra-5.0.2-bin.tar.gz
 
-wget https://github.com/zlab-purdue/upfuzz/releases/download/inst/apache-cassandra-4.1.6-INST.tar.gz
-tar -xzvf apache-cassandra-4.1.6-INST.tar.gz
+wget -q https://github.com/zlab-purdue/upfuzz/releases/download/inst/apache-cassandra-4.1.6-INST.tar.gz
+tar -xzvf apache-cassandra-4.1.6-INST.tar.gz > /dev/null
 
-wget https://github.com/zlab-purdue/upfuzz/releases/download/cassandra/apache-cassandra-5.0.2-bin.tar.gz
-tar -xzvf apache-cassandra-5.0.2-bin.tar.gz
+wget -q https://github.com/zlab-purdue/upfuzz/releases/download/cassandra/apache-cassandra-5.0.2-bin.tar.gz
+tar -xzvf apache-cassandra-5.0.2-bin.tar.gz > /dev/null
 
 # Data format
 cd ${UPFUZZ_DIR}

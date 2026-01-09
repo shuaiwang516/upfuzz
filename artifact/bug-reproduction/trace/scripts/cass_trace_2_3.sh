@@ -13,10 +13,10 @@ cd prebuild/cassandra
 rm -rf apache-cassandra-$ORI_VERSION
 rm -rf apache-cassandra-$UP_VERSION
 
-tar -xzvf /proj/sosp21-upgrade-PG0/upfuzz_files/format_inst_binary/cassandra/apache-cassandra-2.2.19-INST-patch-18105.tar.gz
-tar -xzvf /proj/sosp21-upgrade-PG0/upfuzz_files/binary/cassandra/apache-cassandra-3.0.30-bin.tar.gz
-# tar -xzvf /proj/sosp21-upgrade-PG0/upfuzz_files/format_inst_binary/cassandra/apache-cassandra-3.0.15-INST-patch-19590.tar.gz
-# tar -xzvf /proj/sosp21-upgrade-PG0/upfuzz_files/format_inst_binary/cassandra/apache-cassandra-3.0.30-13939-INST.tar.gz
+wget -q https://github.com/zlab-purdue/upfuzz/releases/download/inst/apache-cassandra-2.2.19-INST-patch-18105.tar.gz
+tar -xzvf apache-cassandra-2.2.19-INST-patch-18105.tar.gz > /dev/null
+wget -q https://github.com/zlab-purdue/upfuzz/releases/download/cassandra/apache-cassandra-3.0.30-bin.tar.gz
+tar -xzvf apache-cassandra-3.0.30-bin.tar.gz > /dev/null
 
 cd ${UPFUZZ_DIR}
 cp configInfo/apache-cassandra-${ORI_VERSION}/* prebuild/cassandra/apache-cassandra-${ORI_VERSION}

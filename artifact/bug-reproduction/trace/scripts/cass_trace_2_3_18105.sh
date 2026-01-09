@@ -31,10 +31,10 @@ rm -rf apache-cassandra-$ORI_VERSION
 rm -rf apache-cassandra-$UP_VERSION
 
 wget -q https://github.com/zlab-purdue/upfuzz/releases/download/inst/apache-cassandra-2.2.19-INST.tar.gz
-tar -xzvf apache-cassandra-2.2.19-INST.tar.gz
+tar -xzvf apache-cassandra-2.2.19-INST.tar.gz > /dev/null
 
 wget -q https://github.com/zlab-purdue/upfuzz/releases/download/cassandra/apache-cassandra-3.0.30-bin.tar.gz
-tar -xzvf apache-cassandra-3.0.30-bin.tar.gz
+tar -xzvf apache-cassandra-3.0.30-bin.tar.gz > /dev/null
 
 cd ${UPFUZZ_DIR}
 cp configInfo/apache-cassandra-${ORI_VERSION}/* prebuild/cassandra/apache-cassandra-${ORI_VERSION}
