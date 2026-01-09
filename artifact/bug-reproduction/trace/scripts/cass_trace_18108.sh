@@ -10,13 +10,14 @@ export UP_VERSION=3.0.30
 mkdir -p prebuild/cassandra
 cd prebuild/cassandra
 
-rm -rf apache-cassandra-$ORI_VERSION
-rm -rf apache-cassandra-$UP_VERSION
+rm -rf apache-cassandra-$ORI_VERSION apache-cassandra-2.2.19-INST-patch-18105.tar.gz
+rm -rf apache-cassandra-$UP_VERSION apache-cassandra-3.0.30-bin.tar.gz
 
-tar -xzvf /proj/sosp21-upgrade-PG0/upfuzz_files/format_inst_binary/cassandra/apache-cassandra-2.2.19-INST-patch-18105.tar.gz
-tar -xzvf /proj/sosp21-upgrade-PG0/upfuzz_files/binary/cassandra/apache-cassandra-3.0.30-bin.tar.gz
-# tar -xzvf /proj/sosp21-upgrade-PG0/upfuzz_files/format_inst_binary/cassandra/apache-cassandra-3.0.15-INST-patch-19590.tar.gz
-# tar -xzvf /proj/sosp21-upgrade-PG0/upfuzz_files/format_inst_binary/cassandra/apache-cassandra-3.0.30-13939-INST.tar.gz
+wget https://github.com/zlab-purdue/upfuzz/releases/download/inst/apache-cassandra-2.2.19-INST-patch-18105.tar.gz
+tar -xzvf apache-cassandra-2.2.19-INST-patch-18105.tar.gz
+
+wget https://github.com/zlab-purdue/upfuzz/releases/download/cassandra/apache-cassandra-3.0.30-bin.tar.gz
+tar -xzvf apache-cassandra-3.0.30-bin.tar.gz
 
 cd ${UPFUZZ_DIR}
 cp configInfo/apache-cassandra-${ORI_VERSION}/* prebuild/cassandra/apache-cassandra-${ORI_VERSION}
@@ -25,11 +26,6 @@ cp lib/ssgFatJar.jar prebuild/cassandra/apache-cassandra-${ORI_VERSION}/lib/ssgF
 cd ${UPFUZZ_DIR}
 cp src/main/resources/cqlsh_daemon2.py prebuild/cassandra/apache-cassandra-"$ORI_VERSION"/bin/cqlsh_daemon.py
 cp src/main/resources/cqlsh_daemon2.py  prebuild/cassandra/apache-cassandra-"$UP_VERSION"/bin/cqlsh_daemon.py
-
-# cd src/main/resources/cassandra/upgrade-testing/compile-src/
-# sed -i "s/ORI_VERSION=apache-cassandra-.*$/ORI_VERSION=apache-cassandra-$ORI_VERSION/" cassandra-clusternode.sh
-# sed -i "s/UP_VERSION=apache-cassandra-.*$/UP_VERSION=apache-cassandra-$UP_VERSION/" cassandra-clusternode.sh
-# docker build . -t upfuzz_cassandra:apache-cassandra-"$ORI_VERSION"_apache-cassandra-"$UP_VERSION"
 
 docker pull hanke580/upfuzz-ae:cassandra-${ORI_VERSION}_${UP_VERSION} > /dev/null
 docker tag \
@@ -45,11 +41,11 @@ cd ${UPFUZZ_DIR}
 # ================
 git pull
 
-# == VD-skip ==
+# == df+vd+s ==
 # cp evaluation/new/CASSANDRA-19623-config-format-vd-static.json config.json
 # diff evaluation/new/CASSANDRA-19623-config-format-vd-static.json config.json
 
-# == BC ==
+# == base ==
 cp evaluation/new/CASSANDRA-19623-config-normal.json config.json
 diff evaluation/new/CASSANDRA-19623-config-normal.json config.json
 
