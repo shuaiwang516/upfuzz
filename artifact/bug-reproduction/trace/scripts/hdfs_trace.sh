@@ -1,3 +1,21 @@
+#!/bin/bash
+
+# ================
+# Usage: ./hdfs_trace.sh <CONFIG_MODE> <TEST_MODE>
+#   CONFIG_MODE: "final" for df+vd+s, "base" for base
+#   TEST_MODE: "dryrun" for test run (1 client), "large" for large test (12 clients)
+# Example: ./hdfs_trace.sh final dryrun
+#          ./hdfs_trace.sh base large
+# ================
+
+CONFIG_MODE="${1:-final}"
+TEST_MODE="${2:-dryrun}"
+
+echo "CONFIG_MODE: $CONFIG_MODE"
+echo "TEST_MODE: $TEST_MODE"
+
+# ================
+
 # /proj/sosp21-upgrade-PG0/upfuzz_files/binary/hdfs
 
 cd ~/project/upfuzz
@@ -57,40 +75,38 @@ git pull
 ./gradlew copyDependencies
 ./gradlew :spotlessApply build
 
-# == config ==
-
-# VD-no-skip
-# cp evaluation/HDFS-17219-config-format-vd-static-adjust-read-ratio-no-skip.json hdfs_config.json
-# diff evaluation/HDFS-17219-config-format-vd-static-adjust-read-ratio-no-skip.json hdfs_config.json
-# FC-no-skip
-# cp evaluation/HDFS-17219-config-format1-adjust-read-ratio-no-skip.json hdfs_config.json
-# diff evaluation/HDFS-17219-config-format1-adjust-read-ratio-no-skip.json hdfs_config.json
-
-# ========
-
-# == VD ==
-cp evaluation/new/HDFS-17219-config-format-vd-static.json hdfs_config.json
-diff evaluation/new/HDFS-17219-config-format-vd-static.json hdfs_config.json
-
-# == BC ==
-cp evaluation/new/HDFS-17219-config-normal.json hdfs_config.json
-diff evaluation/new/HDFS-17219-config-normal.json hdfs_config.json
+# Select config based on CONFIG_MODE
+if [ "$CONFIG_MODE" = "final" ]; then
+  echo "Using final (df+vd+s) config"
+  cp evaluation/new/HDFS-17219-config-format-vd-static.json hdfs_config.json
+  diff evaluation/new/HDFS-17219-config-format-vd-static.json hdfs_config.json
+elif [ "$CONFIG_MODE" = "base" ]; then
+  echo "Using base config"
+  cp evaluation/new/HDFS-17219-config-normal.json hdfs_config.json
+  diff evaluation/new/HDFS-17219-config-normal.json hdfs_config.json
+else
+  echo "Unknown CONFIG_MODE: $CONFIG_MODE (use 'base' or 'final')"
+  exit 1
+fi
 
 # Clean
 cd ~/project/upfuzz; sudo chmod 777 /var/run/docker.sock; bin/clean.sh --force; bin/rm.sh; rm format_coverage.log
 
 # ===
 
-# Test run
-# tmux new-session -d -s 0 \; split-window -v \;
-# tmux send-keys -t 0:0.0 C-m 'bin/start_server.sh hdfs_config.json > server.log' C-m \;
-# tmux send-keys -t 0:0.1 C-m 'sleep 4; bin/start_clients.sh 1 hdfs_config.json' C-m
+# Select number of clients based on TEST_MODE
+if [ "$TEST_MODE" = "dryrun" ]; then
+  NUM_CLIENTS=1
+elif [ "$TEST_MODE" = "large" ]; then
+  NUM_CLIENTS=12
+else
+  echo "Unknown TEST_MODE: $TEST_MODE (use 'dryrun' or 'large')"
+  exit 1
+fi
 
-# no server.log
-# tmux send-keys -t 0:0.0 C-m 'bin/start_server.sh hdfs_config.json' C-m \;
-# tmux send-keys -t 0:0.1 C-m 'sleep 4; bin/start_clients.sh 1 hdfs_config.json' C-m
+echo "Running with $NUM_CLIENTS client(s)"
 
-# Large-scale test
+tmux kill-session -t 0
 tmux new-session -d -s 0 \; split-window -v \;
 tmux send-keys -t 0:0.0 C-m 'bin/start_server.sh hdfs_config.json > server.log' C-m \;
-tmux send-keys -t 0:0.1 C-m 'sleep 4; bin/start_clients.sh 12 hdfs_config.json' C-m       
+tmux send-keys -t 0:0.1 C-m "sleep 4; bin/start_clients.sh $NUM_CLIENTS hdfs_config.json" C-m

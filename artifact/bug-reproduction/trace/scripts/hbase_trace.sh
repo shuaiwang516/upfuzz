@@ -1,3 +1,21 @@
+#!/bin/bash
+
+# ================
+# Usage: ./hbase_trace.sh <CONFIG_MODE> <TEST_MODE>
+#   CONFIG_MODE: "final" for df+vd+s, "base" for base
+#   TEST_MODE: "dryrun" for test run (1 client), "large" for large test (12 clients)
+# Example: ./hbase_trace.sh final dryrun
+#          ./hbase_trace.sh base large
+# ================
+
+CONFIG_MODE="${1:-final}"
+TEST_MODE="${2:-dryrun}"
+
+echo "CONFIG_MODE: $CONFIG_MODE"
+echo "TEST_MODE: $TEST_MODE"
+
+# ================
+
 # Binary path
 ls /proj/sosp21-upgrade-PG0/upfuzz_files/binary/hbase
 ls /proj/sosp21-upgrade-PG0/upfuzz_files/format_inst_binary/hbase
@@ -86,27 +104,36 @@ git pull
 ./gradlew copyDependencies
 ./gradlew :spotlessApply build
 
-# == VD ==
-cp evaluation/new/HBASE-28583-config-format-vd-static-no-skip.json hbase_config.json
-diff evaluation/new/HBASE-28583-config-format-vd-static-no-skip.json hbase_config.json
-
-# == BC ==
-# cp evaluation/new/HBASE-28583-config-normal.json hbase_config.json
-# diff evaluation/new/HBASE-28583-config-normal.json hbase_config.json
+# Select config based on CONFIG_MODE
+if [ "$CONFIG_MODE" = "final" ]; then
+  echo "Using final (df+vd+s) config"
+  cp evaluation/new/HBASE-28583-config-format-vd-static-no-skip.json hbase_config.json
+  diff evaluation/new/HBASE-28583-config-format-vd-static-no-skip.json hbase_config.json
+elif [ "$CONFIG_MODE" = "base" ]; then
+  echo "Using base config"
+  cp evaluation/new/HBASE-28583-config-normal.json hbase_config.json
+  diff evaluation/new/HBASE-28583-config-normal.json hbase_config.json
+else
+  echo "Unknown CONFIG_MODE: $CONFIG_MODE (use 'base' or 'final')"
+  exit 1
+fi
 
 # Clean
 cd ~/project/upfuzz; sudo chmod 777 /var/run/docker.sock; bin/clean.sh --force; bin/rm.sh; rm format_coverage.log 
 
-# Test run
+# Select number of clients based on TEST_MODE
+if [ "$TEST_MODE" = "dryrun" ]; then
+  NUM_CLIENTS=1
+elif [ "$TEST_MODE" = "large" ]; then
+  NUM_CLIENTS=12
+else
+  echo "Unknown TEST_MODE: $TEST_MODE (use 'dryrun' or 'large')"
+  exit 1
+fi
+
+echo "Running with $NUM_CLIENTS client(s)"
+
 tmux kill-session -t 0
 tmux new-session -d -s 0 \; split-window -v \;
 tmux send-keys -t 0:0.0 C-m 'bin/start_server.sh hbase_config.json > server.log' C-m \;
-tmux send-keys -t 0:0.1 C-m 'sleep 4; bin/start_clients.sh 1 hbase_config.json' C-m
-
-
-# Larget-scale Test
-tmux kill-session -t 0
-tmux new-session -d -s 0 \; split-window -v \;
-tmux send-keys -t 0:0.0 C-m 'bin/start_server.sh hbase_config.json > server.log' C-m \;
-tmux send-keys -t 0:0.1 C-m 'sleep 4; bin/start_clients.sh 12 hbase_config.json' C-m
-
+tmux send-keys -t 0:0.1 C-m "sleep 4; bin/start_clients.sh $NUM_CLIENTS hbase_config.json" C-m
