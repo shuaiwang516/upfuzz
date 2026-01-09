@@ -9,7 +9,7 @@ Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
 |----------------------------------------------------------------------------|-------------|----------------|
 | [CASSANDRA-18105](https://issues.apache.org/jira/browse/CASSANDRA-18105)   |   s0,1,2    |    e9,10,11    |
 | [CASSANDRA-18108](https://issues.apache.org/jira/browse/CASSANDRA-18108)   |   e3,4,5    |    e0,1,2      |
-| [CASSANDRA-19590](https://issues.apache.org/jira/browse/CASSANDRA-19590)   |     NA      |    TODO        |
+| [CASSANDRA-19590](https://issues.apache.org/jira/browse/CASSANDRA-19590)   |     NA      |    h0,1,2      |
 | [CASSANDRA-19591](https://issues.apache.org/jira/browse/CASSANDRA-19591)   |     NA      |    *Skipped    |
 | [CASSANDRA-19623](https://issues.apache.org/jira/browse/CASSANDRA-19623)   |     NA      |    *Skipped    |
 | [CASSANDRA-19639](https://issues.apache.org/jira/browse/CASSANDRA-19639)   |     NA      |    20.83h      |
@@ -19,7 +19,7 @@ Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
 | [HBASE-28812](https://issues.apache.org/jira/browse/HBASE-28812)           |   Trivial   |    Trivial     |
 | [HBASE-28815](https://issues.apache.org/jira/browse/HBASE-28815)           |   Trivial   |    Trivial     |
 | [HBASE-29021](https://issues.apache.org/jira/browse/HBASE-29021)           |     0.53h   |    e6,7,8      |
-| [HDFS-16984](https://issues.apache.org/jira/browse/HDFS-16984)             |             |                |
+| [HDFS-16984](https://issues.apache.org/jira/browse/HDFS-16984)             |    h3,4,5   |                |
 | [HDFS-17219](https://issues.apache.org/jira/browse/HDFS-17219)             |             |                |
 | [HDFS-17686](https://issues.apache.org/jira/browse/HDFS-17686)             |             |                |
 

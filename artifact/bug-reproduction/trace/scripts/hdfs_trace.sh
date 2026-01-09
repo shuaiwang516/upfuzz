@@ -52,10 +52,10 @@ cd $UPFUZZ_DIR/prebuild/hdfs/hadoop-"$UP_VERSION"/
 /usr/lib/jvm/java-8-openjdk-amd64/bin/javac -d . -cp "share/hadoop/hdfs/*:share/hadoop/common/*:share/hadoop/common/lib/*" FsShellDaemon.java
 sed -i "s/  case \${subcmd} in/&\n    dfsdaemon)\n      HADOOP_CLASSNAME=\"org.apache.hadoop.fs.FsShellDaemon\"\n    ;;/" bin/hdfs
 
-cd $UPFUZZ_DIR/src/main/resources/hdfs/compile-src/
-sed -i "s/ORG_VERSION=hadoop-.*$/ORG_VERSION=hadoop-$ORI_VERSION/" hdfs-clusternode.sh
-sed -i "s/UPG_VERSION=hadoop-.*$/UPG_VERSION=hadoop-$UP_VERSION/" hdfs-clusternode.sh
-docker build . -t upfuzz_hdfs:hadoop-"$ORI_VERSION"_hadoop-"$UP_VERSION"
+docker pull hanke580/upfuzz-ae:hdfs-${ORI_VERSION}_${UP_VERSION} > /dev/null
+docker tag \
+  hanke580/upfuzz-ae:hdfs-${ORI_VERSION}_${UP_VERSION} \
+  upfuzz_hdfs:hadoop-${ORI_VERSION}_hadoop-${UP_VERSION}
 
 # FC
 cd $UPFUZZ_DIR
