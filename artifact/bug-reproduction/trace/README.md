@@ -1,6 +1,9 @@
 # Triggering Traces
 
-Provided 2 triggering traces: base and df+vd+s (our final testing mode)
+## Pre-recorded traces
+We provided triggering traces for base and our final testing mode (df+vd+s). All experiments are conducted using cloudlab `c220g5`. The recorded traces are put under current folder.
+
+Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
 
 | Bug                                                                        | base (Time) | df+vd+s (Time) |
 |----------------------------------------------------------------------------|-------------|----------------|
@@ -30,11 +33,23 @@ Scripts: compute the triggering time from the traces
 
 Untar each trace, and use scripts to compute the average triggering time.
 
-```bash
 
+## Reproduce traces from scratch
+
+We also provided push-button scripts to run the entire experiment and generate the traces. To compute the triggering time, reviewers need to run the scripts for 3 times, each time for 24 hours and then check the failure triggering time. 
+
+Note that this would need a large amount of computational resources.
+
+```bash
+# CASSANDRA-18105 (dryrun: parallel num = 1)
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3_18105.sh base dryrun
 
+# CASSANDRA-18105 base (parallel num = 30)
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3_18105.sh base large
+
+# CASSANDRA-18105 final (parallel num = 30)
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3_18105.sh final large
 ```
