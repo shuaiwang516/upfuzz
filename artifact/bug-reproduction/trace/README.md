@@ -40,16 +40,62 @@ We also provided push-button scripts to run the entire experiment and generate t
 
 Note that this would need a large amount of computational resources.
 
+### Cassandra
+Parallel num = 30
 ```bash
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3.sh base large
+
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3.sh final large
+
+# CASSANDRA-18105 base
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3_18105.sh base large
+
+# CASSANDRA-18105 final
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3_18105.sh final large
+
+# CASSANDRA-18108 base
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/cass_trace_18108.sh base large
+
+# CASSANDRA-18108 final
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/cass_trace_18108.sh final large
+```
+
+### HBase
+
+Parallel num = 12
+
+```bash
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/hbase_trace.sh base large
+
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/hbase_trace.sh final large
+```
+
+### HDFS
+
+Parallel num = 12
+
+```bash
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/hdfs_trace.sh base large
+
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/hdfs_trace.sh final large
+```
+
+## Debug
+
+```bash
+
 # CASSANDRA-18105 (dryrun: parallel num = 1)
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3_18105.sh base dryrun
 
-# CASSANDRA-18105 base (parallel num = 30)
-cd ~/project/upfuzz
-bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3_18105.sh base large
-
-# CASSANDRA-18105 final (parallel num = 30)
-cd ~/project/upfuzz
-bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3_18105.sh final large
 ```
