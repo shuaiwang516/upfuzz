@@ -17,13 +17,10 @@ FORMAT_BIN_PATH=/proj/sosp21-upgrade-PG0/upfuzz_files/format_inst_binary/hdfs/
 rm -rf hadoop-$ORI_VERSION
 rm -rf hadoop-$UP_VERSION
 
-# tar -xzvf $BIN_PATH/hadoop-$ORI_VERSION.tar.gz
-# tar -xzvf $FORMAT_BIN_PATH/hadoop-$ORI_VERSION-INST.tar.gz
-# 2.10.2: 17219
-tar -xzvf $FORMAT_BIN_PATH/hadoop-2.10.2-INST-17219.tar.gz
-tar -xzvf $BIN_PATH/hadoop-$UP_VERSION.tar.gz
-
-# ===
+wget -q https://github.com/zlab-purdue/upfuzz/releases/download/inst/hadoop-2.10.2-INST-17219.tar.gz
+tar -xzvf hadoop-2.10.2-INST-17219.tar.gz > /dev/null
+wget -q https://github.com/zlab-purdue/upfuzz/releases/download/hadoop/hadoop-3.3.6.tar.gz
+tar -xzvf hadoop-3.3.6.tar.gz > /dev/null
 
 # old version hdfs daemon: 2.10.2
 cp $UPFUZZ_DIR/src/main/resources/FsShellDaemon2.java $UPFUZZ_DIR/prebuild/hdfs/hadoop-"$ORI_VERSION"/FsShellDaemon.java
@@ -72,8 +69,12 @@ git pull
 # ========
 
 # == VD ==
+cp evaluation/new/HDFS-17219-config-format-vd-static.json hdfs_config.json
+diff evaluation/new/HDFS-17219-config-format-vd-static.json hdfs_config.json
 
 # == BC ==
+cp evaluation/new/HDFS-17219-config-normal.json hdfs_config.json
+diff evaluation/new/HDFS-17219-config-normal.json hdfs_config.json
 
 # Clean
 cd ~/project/upfuzz; sudo chmod 777 /var/run/docker.sock; bin/clean.sh --force; bin/rm.sh; rm format_coverage.log
