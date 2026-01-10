@@ -13,14 +13,14 @@ Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
 | [CASSANDRA-19591](https://issues.apache.org/jira/browse/CASSANDRA-19591)   |     NA      |    *Skipped    |
 | [CASSANDRA-19623](https://issues.apache.org/jira/browse/CASSANDRA-19623)   |     NA      |    *Skipped    |
 | [CASSANDRA-19639](https://issues.apache.org/jira/browse/CASSANDRA-19639)   |     NA      |    20.83h      |
-| [CASSANDRA-19689](https://issues.apache.org/jira/browse/CASSANDRA-19689)   |     NA      |    18.64h        |
+| [CASSANDRA-19689](https://issues.apache.org/jira/browse/CASSANDRA-19689)   |     NA      |    18.64h      |
 | [CASSANDRA-20182](https://issues.apache.org/jira/browse/CASSANDRA-20182)   |     NA      |    18.69h      |
 | [HBASE-28583](https://issues.apache.org/jira/browse/HBASE-28583)           |     NA      |    e6,7,8      |
 | [HBASE-28812](https://issues.apache.org/jira/browse/HBASE-28812)           |   Trivial   |    Trivial     |
 | [HBASE-28815](https://issues.apache.org/jira/browse/HBASE-28815)           |   Trivial   |    Trivial     |
 | [HBASE-29021](https://issues.apache.org/jira/browse/HBASE-29021)           |     0.53h   |    e6,7,8      |
 | [HDFS-16984](https://issues.apache.org/jira/browse/HDFS-16984)             |             |                |
-| [HDFS-17219](https://issues.apache.org/jira/browse/HDFS-17219)             |     h3,4,5: 9.60h  |                |
+| [HDFS-17219](https://issues.apache.org/jira/browse/HDFS-17219)             |     9.60h   |     h3,4,5     |
 | [HDFS-17686](https://issues.apache.org/jira/browse/HDFS-17686)             |             |                |
 
 
@@ -119,6 +119,10 @@ bash artifact/bug-reproduction/trace/scripts/hdfs_trace.sh final large
 ## Debug
 
 ```bash
+# Clean
+cd ~/project/upfuzz; sudo chmod 777 /var/run/docker.sock; bin/clean.sh --force; bin/rm.sh; rm -f format_coverage.log server.log
+
+
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3.sh final dryrun
 
@@ -128,7 +132,7 @@ cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3_18105.sh base dryrun
 
 cd ~/project/upfuzz
-bash artifact/bug-reproduction/trace/scripts/hdfs_trace.sh base dryrun
+bash artifact/bug-reproduction/trace/scripts/hdfs_trace.sh final dryrun
 
 
 # tar the trace
