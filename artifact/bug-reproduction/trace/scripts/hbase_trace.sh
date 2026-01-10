@@ -66,9 +66,9 @@ cp $UPFUZZ_DIR/src/main/resources/hbase/compile-src/hbase_daemon3.py $UPFUZZ_DIR
 cp $UPFUZZ_DIR/src/main/resources/hbase/compile-src/hbase_daemon3.py $UPFUZZ_DIR/prebuild/hbase/hbase-$UP_VERSION/bin/hbase_daemon.py
 
 # FC: Use global info analysis results
-# cd $UPFUZZ_DIR
-# cp configInfo/hbase-2.5.9-global/* configInfo/hbase-2.5.9/
-# cp configInfo/hbase-3.0.0-global/* configInfo/hbase-3.0.0/
+cd $UPFUZZ_DIR
+cp configInfo/hbase-2.5.9-global/* configInfo/hbase-2.5.9/
+cp configInfo/hbase-3.0.0-global/* configInfo/hbase-3.0.0/
 
 # == FC ==
 cd $UPFUZZ_DIR
