@@ -15,10 +15,10 @@ Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
 | [CASSANDRA-19639](https://issues.apache.org/jira/browse/CASSANDRA-19639)   |     NA      |    20.83h      |
 | [CASSANDRA-19689](https://issues.apache.org/jira/browse/CASSANDRA-19689)   |     NA      |    18.64h      |
 | [CASSANDRA-20182](https://issues.apache.org/jira/browse/CASSANDRA-20182)   |     NA      |    18.69h      |
-| [HBASE-28583](https://issues.apache.org/jira/browse/HBASE-28583)           |     NA      |    e6,7,8 (in progress)      |
+| [HBASE-28583](https://issues.apache.org/jira/browse/HBASE-28583)           |     NA      |    e6,7,8 (in progress), h0,1,2 (in progress, fix jar)       |
 | [HBASE-28812](https://issues.apache.org/jira/browse/HBASE-28812)           |   Trivial   |    Trivial     |
 | [HBASE-28815](https://issues.apache.org/jira/browse/HBASE-28815)           |   Trivial   |    Trivial     |
-| [HBASE-29021](https://issues.apache.org/jira/browse/HBASE-29021)           |    0.53h    |    e6,7,8 (in progress)      |
+| [HBASE-29021](https://issues.apache.org/jira/browse/HBASE-29021)           |    0.53h    |    e6,7,8 (in progress), h0,1,2 (in progress, fix jar)      |
 | [HDFS-16984](https://issues.apache.org/jira/browse/HDFS-16984)             |             |                |
 | [HDFS-17219](https://issues.apache.org/jira/browse/HDFS-17219)             |    9.60h    |    h3,4,5 (in progress)     |
 | [HDFS-17686](https://issues.apache.org/jira/browse/HDFS-17686)             |      e3,4,5 (in progress)       |        e9,10,11 (in progress)        |
@@ -28,6 +28,8 @@ Available servers
 * s (3 servers) 0,1,2
 * e (12 servers)
 * h (6 servers) 0,1,2
+
+s2 is broken...
 
 > Skipped: as described in the paper: Star (*) means the bug cannot be triggered consistently within 24 hours
 and we record the shortest amount of time we observed. 
@@ -131,12 +133,17 @@ bash artifact/bug-reproduction/trace/scripts/hdfs_trace_17686.sh final large
 
 # Debug (Not for artifact reviewers)
 
+## Clean
+
 ```bash
-# Clean
 cd ~/project/upfuzz; sudo chmod 777 /var/run/docker.sock; bin/clean.sh --force; bin/rm.sh; rm -f format_coverage.log server.log
 git checkout .
 git pull
+```
 
+## Dryrun
+
+```bash
 
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3.sh final dryrun
