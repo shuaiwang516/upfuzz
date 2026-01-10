@@ -24,9 +24,10 @@ Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
 | [HDFS-17686](https://issues.apache.org/jira/browse/HDFS-17686)             |             |                |
 
 
-Empty servers
-* s0,1,2
-* e3,4,5
+Available servers
+* s (3 servers) 0,1,2
+* e (12 servers) 3,4,5   9,10,11
+* h (6 servers) 0,1,2
 
 > Skipped: as described in the paper: Star (*) means the bug cannot be triggered consistently within 24 hours
 and we record the shortest amount of time we observed. 
