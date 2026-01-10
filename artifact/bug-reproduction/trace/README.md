@@ -21,12 +21,12 @@ Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
 | [HBASE-29021](https://issues.apache.org/jira/browse/HBASE-29021)           |    0.53h    |    e6,7,8 (in progress)      |
 | [HDFS-16984](https://issues.apache.org/jira/browse/HDFS-16984)             |             |                |
 | [HDFS-17219](https://issues.apache.org/jira/browse/HDFS-17219)             |    9.60h    |    h3,4,5 (in progress)     |
-| [HDFS-17686](https://issues.apache.org/jira/browse/HDFS-17686)             |      e3,4,5       |        e9,10,11        |
+| [HDFS-17686](https://issues.apache.org/jira/browse/HDFS-17686)             |      e3,4,5 (in progress)       |        e9,10,11 (in progress)        |
 
 
 Available servers
 * s (3 servers) 0,1,2
-* e (12 servers) 3,4,5   9,10,11
+* e (12 servers)
 * h (6 servers) 0,1,2
 
 > Skipped: as described in the paper: Star (*) means the bug cannot be triggered consistently within 24 hours
