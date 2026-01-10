@@ -142,5 +142,6 @@ bash artifact/bug-reproduction/trace/scripts/hdfs_trace.sh final dryrun
 
 
 # tar the trace
+bin/clean.sh --force
 tar -czvf run.tar.gz failure server.log
 ```
