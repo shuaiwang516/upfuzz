@@ -21,7 +21,7 @@ Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
 | [HBASE-29021](https://issues.apache.org/jira/browse/HBASE-29021)           |    0.53h    |    e6,7,8 (in progress)      |
 | [HDFS-16984](https://issues.apache.org/jira/browse/HDFS-16984)             |             |                |
 | [HDFS-17219](https://issues.apache.org/jira/browse/HDFS-17219)             |    9.60h    |    h3,4,5 (in progress)     |
-| [HDFS-17686](https://issues.apache.org/jira/browse/HDFS-17686)             |             |                |
+| [HDFS-17686](https://issues.apache.org/jira/browse/HDFS-17686)             |      e3,4,5       |        e9,10,11        |
 
 
 Available servers
@@ -114,10 +114,19 @@ Parallel num = 12
 
 ```bash
 cd ~/project/upfuzz
-bash artifact/bug-reproduction/trace/scripts/hdfs_trace.sh base large
+bash artifact/bug-reproduction/trace/scripts/hdfs_trace_17219.sh base large
 
 cd ~/project/upfuzz
-bash artifact/bug-reproduction/trace/scripts/hdfs_trace.sh final large
+bash artifact/bug-reproduction/trace/scripts/hdfs_trace_17219.sh final large
+
+
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/hdfs_trace_17686.sh base large
+
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/hdfs_trace_17686.sh final large
+
+
 ```
 
 # Debug (Not for artifact reviewers)
@@ -125,6 +134,8 @@ bash artifact/bug-reproduction/trace/scripts/hdfs_trace.sh final large
 ```bash
 # Clean
 cd ~/project/upfuzz; sudo chmod 777 /var/run/docker.sock; bin/clean.sh --force; bin/rm.sh; rm -f format_coverage.log server.log
+git checkout .
+git pull
 
 
 cd ~/project/upfuzz
@@ -143,6 +154,9 @@ bash artifact/bug-reproduction/trace/scripts/hbase_trace.sh final dryrun
 # HDFS
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/hdfs_trace.sh final dryrun
+
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/hdfs_trace_17686.sh base dryrun
 
 
 

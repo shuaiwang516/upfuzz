@@ -78,12 +78,12 @@ git pull
 # Select config based on CONFIG_MODE
 if [ "$CONFIG_MODE" = "final" ]; then
   echo "Using final (df+vd+s) config"
-  cp evaluation/new/HDFS-17219-config-format-vd-static.json hdfs_config.json
-  diff evaluation/new/HDFS-17219-config-format-vd-static.json hdfs_config.json
+  cp evaluation/new/HDFS-17686-config-format-vd-static.json hdfs_config.json
+  diff evaluation/new/HDFS-17686-config-format-vd-static.json hdfs_config.json
 elif [ "$CONFIG_MODE" = "base" ]; then
   echo "Using base config"
-  cp evaluation/new/HDFS-17219-config-normal.json hdfs_config.json
-  diff evaluation/new/HDFS-17219-config-normal.json hdfs_config.json
+  cp evaluation/new/HDFS-17686-config-normal.json hdfs_config.json
+  diff evaluation/new/HDFS-17686-config-normal.json hdfs_config.json
 else
   echo "Unknown CONFIG_MODE: $CONFIG_MODE (use 'base' or 'final')"
   exit 1
