@@ -7,7 +7,7 @@ Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
 
 | Bug                                                                        | base (Time) | df+vd+s (Time) |
 |----------------------------------------------------------------------------|-------------|----------------|
-| [CASSANDRA-18105](https://issues.apache.org/jira/browse/CASSANDRA-18105)   |   s0,1,2    |     3.69h      |
+| [CASSANDRA-18105](https://issues.apache.org/jira/browse/CASSANDRA-18105)   |   s0,1,2: 13.58h    |     3.69h      |
 | [CASSANDRA-18108](https://issues.apache.org/jira/browse/CASSANDRA-18108)   |   e3,4,5    |    e0,1,2      |
 | [CASSANDRA-19590](https://issues.apache.org/jira/browse/CASSANDRA-19590)   |     NA      |    11.48h      |
 | [CASSANDRA-19591](https://issues.apache.org/jira/browse/CASSANDRA-19591)   |     NA      |    *Skipped    |
