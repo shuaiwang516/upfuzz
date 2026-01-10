@@ -17,8 +17,8 @@ echo "TEST_MODE: $TEST_MODE"
 # ================
 
 # Binary path
-ls /proj/sosp21-upgrade-PG0/upfuzz_files/binary/hbase
-ls /proj/sosp21-upgrade-PG0/upfuzz_files/format_inst_binary/hbase
+# ls /proj/sosp21-upgrade-PG0/upfuzz_files/binary/hbase
+# ls /proj/sosp21-upgrade-PG0/upfuzz_files/format_inst_binary/hbase
 
 # ===
 

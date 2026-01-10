@@ -130,8 +130,15 @@ bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3.sh final dryrun
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3_18105.sh base dryrun
 
+
+# HBase
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/hbase_trace.sh final dryrun
+
+# HDFS
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/hdfs_trace.sh final dryrun
+
 
 
 # tar the trace
