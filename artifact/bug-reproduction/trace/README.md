@@ -7,22 +7,26 @@ Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
 
 | Bug                                                                        | base (Time) | df+vd+s (Time) |
 |----------------------------------------------------------------------------|-------------|----------------|
-| [CASSANDRA-18105](https://issues.apache.org/jira/browse/CASSANDRA-18105)   |   s0,1,2: 13.58h    |     3.69h      |
-| [CASSANDRA-18108](https://issues.apache.org/jira/browse/CASSANDRA-18108)   |   e3,4,5    |    e0,1,2      |
+| [CASSANDRA-18105](https://issues.apache.org/jira/browse/CASSANDRA-18105)   |   13.58h    |     3.69h      |
+| [CASSANDRA-18108](https://issues.apache.org/jira/browse/CASSANDRA-18108)   |   16.73h    |    e0,1,2 (in progress)      |
 | [CASSANDRA-19590](https://issues.apache.org/jira/browse/CASSANDRA-19590)   |     NA      |    11.48h      |
 | [CASSANDRA-19591](https://issues.apache.org/jira/browse/CASSANDRA-19591)   |     NA      |    *Skipped    |
 | [CASSANDRA-19623](https://issues.apache.org/jira/browse/CASSANDRA-19623)   |     NA      |    *Skipped    |
 | [CASSANDRA-19639](https://issues.apache.org/jira/browse/CASSANDRA-19639)   |     NA      |    20.83h      |
 | [CASSANDRA-19689](https://issues.apache.org/jira/browse/CASSANDRA-19689)   |     NA      |    18.64h      |
 | [CASSANDRA-20182](https://issues.apache.org/jira/browse/CASSANDRA-20182)   |     NA      |    18.69h      |
-| [HBASE-28583](https://issues.apache.org/jira/browse/HBASE-28583)           |     NA      |    e6,7,8 (TODO)      |
+| [HBASE-28583](https://issues.apache.org/jira/browse/HBASE-28583)           |     NA      |    e6,7,8 (in progress)      |
 | [HBASE-28812](https://issues.apache.org/jira/browse/HBASE-28812)           |   Trivial   |    Trivial     |
 | [HBASE-28815](https://issues.apache.org/jira/browse/HBASE-28815)           |   Trivial   |    Trivial     |
-| [HBASE-29021](https://issues.apache.org/jira/browse/HBASE-29021)           |    0.53h    |    e6,7,8 (TODO)      |
+| [HBASE-29021](https://issues.apache.org/jira/browse/HBASE-29021)           |    0.53h    |    e6,7,8 (in progress)      |
 | [HDFS-16984](https://issues.apache.org/jira/browse/HDFS-16984)             |             |                |
-| [HDFS-17219](https://issues.apache.org/jira/browse/HDFS-17219)             |    9.60h    |     h3,4,5 (in progress)     |
+| [HDFS-17219](https://issues.apache.org/jira/browse/HDFS-17219)             |    9.60h    |    h3,4,5 (in progress)     |
 | [HDFS-17686](https://issues.apache.org/jira/browse/HDFS-17686)             |             |                |
 
+
+Empty servers
+* s0,1,2
+* e3,4,5
 
 > Skipped: as described in the paper: Star (*) means the bug cannot be triggered consistently within 24 hours
 and we record the shortest amount of time we observed. 
