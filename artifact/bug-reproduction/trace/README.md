@@ -42,6 +42,10 @@ Untar each trace, and check the average triggering time.
 # Cassandra
 
 # Untar 
+bash ~/project/upfuzz/bin/untar.sh
+
+
+
 cd base;
 cd run1; tar -xzvf run.tar.gz; cd ..
 cd run2; tar -xzvf run.tar.gz; cd ..
