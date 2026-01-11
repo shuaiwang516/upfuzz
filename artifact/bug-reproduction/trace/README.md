@@ -44,19 +44,35 @@ Untar each trace, and check the average triggering time.
 # Untar 
 bash ~/project/upfuzz/bin/untar.sh
 
+bin/check_cass_18105.sh artifact/bug-reproduction/trace/recorded_traces/cass-18105/base/run1/failure
+bin/check_cass_18105.sh artifact/bug-reproduction/trace/recorded_traces/cass-18105/base/run2/failure
+bin/check_cass_18105.sh artifact/bug-reproduction/trace/recorded_traces/cass-18105/base/run3/failure
+
+bin/check_cass_18105.sh artifact/bug-reproduction/trace/recorded_traces/cass-18105/df_vd_s/run1/failure
+bin/check_cass_18105.sh artifact/bug-reproduction/trace/recorded_traces/cass-18105/df_vd_s/run2/failure
+bin/check_cass_18105.sh artifact/bug-reproduction/trace/recorded_traces/cass-18105/df_vd_s/run3/failure
+
+# 18108
+bin/check_cass_18108.sh artifact/bug-reproduction/trace/recorded_traces/cass-18108/base/run1/failure
+bin/check_cass_18108.sh artifact/bug-reproduction/trace/recorded_traces/cass-18108/base/run2/failure
+bin/check_cass_18108.sh artifact/bug-reproduction/trace/recorded_traces/cass-18108/base/run3/failure
+
+bin/check_cass_18108.sh artifact/bug-reproduction/trace/recorded_traces/cass-18108/df_vd_s/run1/failure
+bin/check_cass_18108.sh artifact/bug-reproduction/trace/recorded_traces/cass-18108/df_vd_s/run2/failure
+bin/check_cass_18108.sh artifact/bug-reproduction/trace/recorded_traces/cass-18108/df_vd_s/run3/failure
 
 
-cd base;
-cd run1; tar -xzvf run.tar.gz; cd ..
-cd run2; tar -xzvf run.tar.gz; cd ..
-cd run3; tar -xzvf run.tar.gz; cd ..
-cd ..
+bin/check_hbase_28583.sh artifact/bug-reproduction/trace/recorded_traces/hbase-28583/base/run1/failure
+bin/check_hbase_28583.sh artifact/bug-reproduction/trace/recorded_traces/hbase-28583/base/run2/failure
+bin/check_hbase_28583.sh artifact/bug-reproduction/trace/recorded_traces/hbase-28583/base/run3/failure
 
-cd df_vd_s;
-cd run1; tar -xzvf run.tar.gz; cd ..
-cd run2; tar -xzvf run.tar.gz; cd ..
-cd run3; tar -xzvf run.tar.gz; cd ..
-cd ..
+bin/check_hbase_28583.sh artifact/bug-reproduction/trace/recorded_traces/hbase-28583/df_vd_s/run1/failure
+bin/check_hbase_28583.sh artifact/bug-reproduction/trace/recorded_traces/hbase-28583/df_vd_s/run2/failure
+bin/check_hbase_28583.sh artifact/bug-reproduction/trace/recorded_traces/hbase-28583/df_vd_s/run3/failure
+
+
+
+
 
 
 # CASSANDRA-19639
