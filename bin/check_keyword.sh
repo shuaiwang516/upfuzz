@@ -11,12 +11,6 @@ fi
 KEYWORD="$2"
 source bin/compute_time.sh
 
-# Add color to the output for better visibility
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[0;33m'
-NC='\033[0m'   # no color
-
 f=$(fgrep -rl "$KEYWORD" "$FAILURE_DIR" \
 | while IFS= read -r f; do
     fid="$(basename "$(dirname "$(dirname "$f")")")"   # => failure_204
@@ -28,10 +22,9 @@ f=$(fgrep -rl "$KEYWORD" "$FAILURE_DIR" \
 | head -n1)
 
 if [[ -n "$f" && -f "$f" ]]; then
-  echo -e "${GREEN}[OK]${NC}   bug is triggered"
-  echo -e "${YELLOW}[FILE]${NC} $f"
+  echo "bug is triggered"
 else
-  echo -e "${RED}[FAIL]${NC} bug is not triggered"
+  echo "bug is not triggered"
   exit 1
 fi
 

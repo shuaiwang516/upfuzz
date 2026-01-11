@@ -33,5 +33,6 @@ compute_triggering_time() {
 
     # Output the results
     # echo "Bug Report: $FILENAME"
-    echo -e "${GREEN}[Time]${NC} $HOURS hours"
+    echo -e "[Time] $HOURS hours"
+    # exit 0
 }

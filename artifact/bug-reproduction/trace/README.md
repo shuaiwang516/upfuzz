@@ -52,14 +52,30 @@ bin/check_cass_18105.sh artifact/bug-reproduction/trace/recorded_traces/cass-181
 bin/check_cass_18105.sh artifact/bug-reproduction/trace/recorded_traces/cass-18105/df_vd_s/run2/failure
 bin/check_cass_18105.sh artifact/bug-reproduction/trace/recorded_traces/cass-18105/df_vd_s/run3/failure
 
-# 18108
-bin/check_cass_18108.sh artifact/bug-reproduction/trace/recorded_traces/cass-18108/base/run1/failure
-bin/check_cass_18108.sh artifact/bug-reproduction/trace/recorded_traces/cass-18108/base/run2/failure
-bin/check_cass_18108.sh artifact/bug-reproduction/trace/recorded_traces/cass-18108/base/run3/failure
 
-bin/check_cass_18108.sh artifact/bug-reproduction/trace/recorded_traces/cass-18108/df_vd_s/run1/failure
-bin/check_cass_18108.sh artifact/bug-reproduction/trace/recorded_traces/cass-18108/df_vd_s/run2/failure
-bin/check_cass_18108.sh artifact/bug-reproduction/trace/recorded_traces/cass-18108/df_vd_s/run3/failure
+# 18108
+echo "Checking CASSANDRA-18108"
+echo "--------------------------------"
+for mode in base df_vd_s; do
+  for run in run1 run2 run3; do
+    echo "Checking == $mode $run =="
+    bin/check_cass_18108.sh artifact/bug-reproduction/trace/recorded_traces/cass-18108/$mode/$run/failure
+  done
+  echo "--------------------------------"
+done
+echo "--------------------------------"
+
+
+echo "Checking CASSANDRA-18108 (base)"
+echo "--------------------------------"
+for run in run1 run2 run3; do
+    bin/check_cass_18108.sh artifact/bug-reproduction/trace/recorded_traces/cass-18108/base/$run/failure
+done
+echo "--------------------------------"
+
+
+
+
 
 
 bin/check_hbase_28583.sh artifact/bug-reproduction/trace/recorded_traces/hbase-28583/base/run1/failure
