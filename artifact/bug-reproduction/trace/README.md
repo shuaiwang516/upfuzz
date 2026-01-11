@@ -18,12 +18,12 @@ During the artifact preparation, we reran the experiment for 24 hours 3 times to
 | [HBASE-28812](https://issues.apache.org/jira/browse/HBASE-28812)           |   Trivial   |    Trivial     |
 | [HBASE-28815](https://issues.apache.org/jira/browse/HBASE-28815)           |   Trivial   |    Trivial     |
 | [HBASE-29021](https://issues.apache.org/jira/browse/HBASE-29021)           |    0.54h    |    0.45h       |
-| [HDFS-16984](https://issues.apache.org/jira/browse/HDFS-16984)             |     e0,1,2 (in progress)        |      e3,4,5 (in progress)          |
+| [HDFS-16984](https://issues.apache.org/jira/browse/HDFS-16984)             |     0.36h   |      0.07      |
 | [HDFS-17219](https://issues.apache.org/jira/browse/HDFS-17219)             |    9.60h    |    2.44h       |
 | [HDFS-17686](https://issues.apache.org/jira/browse/HDFS-17686)             |    9.99h    |    2.75h       |
 
 Available servers
-* e (12 servers)
+* e (12 servers) 0,1,2,3,4,5
 * h (6 servers) 0,1,2 3,4,5
 
 > Skipped: as described in the paper: Star (*) means the bug cannot be triggered consistently within 24 hours
@@ -160,20 +160,4 @@ bash artifact/bug-reproduction/trace/scripts/hdfs_trace_17686.sh base dryrun
 # tar the trace
 bin/clean.sh --force
 tar -czvf run.tar.gz failure server.log
-```
-
-
-untar
-```bash
-cd run1
-tar -xzvf run.tar.gz
-cd ..
-
-cd run2
-tar -xzvf run.tar.gz
-cd ..
-
-cd run3
-tar -xzvf run.tar.gz
-cd ..
 ```
