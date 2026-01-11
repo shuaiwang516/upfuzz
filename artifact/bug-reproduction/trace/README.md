@@ -42,15 +42,18 @@ Untar each trace, and check the average triggering time.
 # Cassandra
 
 # Untar 
+cd base;
+cd run1; tar -xzvf run.tar.gz; cd ..
+cd run2; tar -xzvf run.tar.gz; cd ..
+cd run3; tar -xzvf run.tar.gz; cd ..
+cd ..
 
-cd ~/project/upfuzz/artifact/bug-reproduction/trace/cassandra/base/run1
-tar -xzvf run.tar.gz
+cd df_vd_s;
+cd run1; tar -xzvf run.tar.gz; cd ..
+cd run2; tar -xzvf run.tar.gz; cd ..
+cd run3; tar -xzvf run.tar.gz; cd ..
+cd ..
 
-cd ~/project/upfuzz/artifact/bug-reproduction/trace/cassandra/base/run2
-tar -xzvf run.tar.gz
-
-cd ~/project/upfuzz/artifact/bug-reproduction/trace/cassandra/base/run3
-tar -xzvf run.tar.gz
 
 # CASSANDRA-19639
 
