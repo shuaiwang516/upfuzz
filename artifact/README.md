@@ -191,9 +191,15 @@ python3 run.py
 ls -l all.pdf
 ```
 
-### Reproduce Table 2: Triggering New Bugs 
+### Reproduce Table 2: Triggering New Bugs
 
-In this mode, upfuzz runs directly using pre-generated command sequences to reproduce each bug individually. Reviews could simply run the reproducing mode and observe the triggering results.
+#### Triggering time
+
+We provided the triggering time along with recorded logs (including server logs and failure reports) for two modes: base and df+vd+s (our final mode). For more details and access to the logs, see the [bug-reproduction/trace/README.md](bug-reproduction/trace/README.md).
+
+#### Reproduce all bugs with upfuzz
+
+In this mode, upfuzz runs directly using **pre-generated command sequences** to reproduce each bug individually. Reviews could simply run the reproducing mode and observe the triggering results.
 
 Each bug reproduction contains a reproduction script. As long as upfuzz repo is cloned, use the push-button script could reproduce the bug immediately (each bug takes < 5 minutes). The bug reports is under `upfuzz/failure` folder.
 
@@ -312,6 +318,7 @@ bash artifact/bug-reproduction/bugs/HDFS-17686/repo.sh
 We'll provide the detailed testing logs for the following 2 modes:
 * Baseline (BC) mode 
 * Final mode (BC + DF + VD) -->
+
 
 ### Reproduce Table 4: Overhead
 

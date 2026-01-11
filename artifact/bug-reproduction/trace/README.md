@@ -1,14 +1,13 @@
 # Triggering Traces
 
 ## Pre-recorded traces
-We provided triggering traces for base and our final testing mode (df+vd+s). All experiments are conducted using cloudlab `c220g5`. The recorded traces are put under current folder.
+We reran the experiment for 24 hours 3 times to compute the average triggering time. We provided triggering traces for base and our final testing mode (df+vd+s). All experiments are conducted using cloudlab `c220g5`. The recorded traces (logs and failure reports) are put under current folder.
 
-Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
-
+**Results**
 | Bug                                                                        | base (Time) | df+vd+s (Time) |
 |----------------------------------------------------------------------------|-------------|----------------|
 | [CASSANDRA-18105](https://issues.apache.org/jira/browse/CASSANDRA-18105)   |   13.58h    |     3.69h      |
-| [CASSANDRA-18108](https://issues.apache.org/jira/browse/CASSANDRA-18108)   |   16.73h    |      e(6,7,8,9,10,11)        |
+| [CASSANDRA-18108](https://issues.apache.org/jira/browse/CASSANDRA-18108)   |   16.73h    |      e(6,7,8,9,10,11): (in progress)        |
 | [CASSANDRA-19590](https://issues.apache.org/jira/browse/CASSANDRA-19590)   |     NA      |    11.48h      |
 | [CASSANDRA-19591](https://issues.apache.org/jira/browse/CASSANDRA-19591)   |     NA      |    *Skipped    |
 | [CASSANDRA-19623](https://issues.apache.org/jira/browse/CASSANDRA-19623)   |     NA      |    *Skipped    |
@@ -66,7 +65,7 @@ time3=24
 
 ## Reproduce traces from scratch
 
-We also provided push-button scripts to run the entire experiment and generate the traces. To compute the triggering time, reviewers need to run the scripts for 3 times, each time for 24 hours and then check the failure triggering time. 
+You could also run the entire experiment and generate the traces. We provided push-button scripts to run the entire experiment and generate the traces. To compute the triggering time, you need to run the scripts for 3 times, each time for 24 hours and then check the failure triggering time. 
 
 Note that this would need a large amount of computational resources.
 
@@ -144,6 +143,8 @@ git pull
 ```
 
 ## Dry Run
+
+Parallel num = 1, only to check the testing workflow works correctly.
 
 ```bash
 cd ~/project/upfuzz
