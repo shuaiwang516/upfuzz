@@ -8,7 +8,7 @@ Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
 | Bug                                                                        | base (Time) | df+vd+s (Time) |
 |----------------------------------------------------------------------------|-------------|----------------|
 | [CASSANDRA-18105](https://issues.apache.org/jira/browse/CASSANDRA-18105)   |   13.58h    |     3.69h      |
-| [CASSANDRA-18108](https://issues.apache.org/jira/browse/CASSANDRA-18108)   |   16.73h    |    NA          |
+| [CASSANDRA-18108](https://issues.apache.org/jira/browse/CASSANDRA-18108)   |   16.73h    |      NA        |
 | [CASSANDRA-19590](https://issues.apache.org/jira/browse/CASSANDRA-19590)   |     NA      |    11.48h      |
 | [CASSANDRA-19591](https://issues.apache.org/jira/browse/CASSANDRA-19591)   |     NA      |    *Skipped    |
 | [CASSANDRA-19623](https://issues.apache.org/jira/browse/CASSANDRA-19623)   |     NA      |    *Skipped    |
@@ -21,12 +21,12 @@ Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
 | [HBASE-29021](https://issues.apache.org/jira/browse/HBASE-29021)           |    0.53h    |    0.44h       |
 | [HDFS-16984](https://issues.apache.org/jira/browse/HDFS-16984)             |             |                |
 | [HDFS-17219](https://issues.apache.org/jira/browse/HDFS-17219)             |    9.60h    |    2.44h       |
-| [HDFS-17686](https://issues.apache.org/jira/browse/HDFS-17686)             |      e3,4,5 (in progress)       |        e9,10,11 (in progress)        |
+| [HDFS-17686](https://issues.apache.org/jira/browse/HDFS-17686)             |    9.99h    |    2.75h       |
 
 
 Available servers
 * s (3 servers) 0,1,2
-* e (12 servers) 0,1,2  6,7,8
+* e (12 servers) 0,1,2 3,4,5 6,7,8 9,10,11
 * h (6 servers) 0,1,2 3,4,5
 
 s2 is broken...
