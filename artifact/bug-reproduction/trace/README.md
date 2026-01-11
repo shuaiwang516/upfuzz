@@ -19,14 +19,14 @@ Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
 | [HBASE-28812](https://issues.apache.org/jira/browse/HBASE-28812)           |   Trivial   |    Trivial     |
 | [HBASE-28815](https://issues.apache.org/jira/browse/HBASE-28815)           |   Trivial   |    Trivial     |
 | [HBASE-29021](https://issues.apache.org/jira/browse/HBASE-29021)           |    0.53h    |    0.44h       |
-| [HDFS-16984](https://issues.apache.org/jira/browse/HDFS-16984)             |             |                |
+| [HDFS-16984](https://issues.apache.org/jira/browse/HDFS-16984)             |     e0,1,2 (in progress)        |      e3,4,5 (in progress)          |
 | [HDFS-17219](https://issues.apache.org/jira/browse/HDFS-17219)             |    9.60h    |    2.44h       |
 | [HDFS-17686](https://issues.apache.org/jira/browse/HDFS-17686)             |    9.99h    |    2.75h       |
 
 
 Available servers
 * s (3 servers) 0,1,2
-* e (12 servers) 0,1,2 3,4,5 6,7,8 9,10,11
+* e (12 servers) 6,7,8 9,10,11
 * h (6 servers) 0,1,2 3,4,5
 
 s2 is broken...
@@ -115,6 +115,13 @@ bash artifact/bug-reproduction/trace/scripts/hbase_trace.sh final large
 Parallel num = 12
 
 ```bash
+
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/hdfs_trace_16984.sh base large
+
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/hdfs_trace_16984.sh final large
+
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/hdfs_trace_17219.sh base large
 
@@ -159,6 +166,12 @@ cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/hbase_trace.sh final dryrun
 
 # HDFS
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/hdfs_trace_16984.sh base dryrun
+
+cd ~/project/upfuzz
+bash artifact/bug-reproduction/trace/scripts/hdfs_trace_16984.sh final dryrun
+
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/hdfs_trace.sh final dryrun
 
