@@ -130,8 +130,6 @@ Parallel num = 1, only to check the testing workflow works correctly.
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3.sh final dryrun
 
-
-# CASSANDRA-18105 (dryrun: parallel num = 1)
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3_18105.sh base dryrun
 
@@ -146,12 +144,6 @@ bash artifact/bug-reproduction/trace/scripts/hdfs_trace_16984.sh base dryrun
 
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/hdfs_trace_16984.sh final dryrun
-
-cd ~/project/upfuzz
-bash artifact/bug-reproduction/trace/scripts/hdfs_trace.sh final dryrun
-
-cd ~/project/upfuzz
-bash artifact/bug-reproduction/trace/scripts/hdfs_trace_17686.sh base dryrun
 ```
 
 ## Collect trace
