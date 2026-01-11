@@ -195,9 +195,9 @@ ls -l all.pdf
 
 #### Triggering time
 
-We provided the triggering time along with recorded logs (including server logs and failure reports) for two modes: base and df+vd+s (our final mode). For more details and access to the logs, see the [bug-reproduction/trace/README.md](bug-reproduction/trace/README.md).
+We provided the triggering time along with recorded traces (including testing logs and failure reports) for two modes: base and df+vd+s (our final mode). For more details and access to the logs, see the [bug-reproduction/trace/README.md](bug-reproduction/trace/README.md).
 
-#### Reproduce all bugs with upfuzz
+#### Reproduce all bugs
 
 In this mode, upfuzz runs directly using **pre-generated command sequences** to reproduce each bug individually. Reviews could simply run the reproducing mode and observe the triggering results.
 
