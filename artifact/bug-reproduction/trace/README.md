@@ -1,7 +1,7 @@
 # Triggering Traces
 
 ## Pre-recorded traces
-We reran the experiment for 24 hours 3 times to compute the average triggering time. We provided triggering traces for base and our final testing mode (df+vd+s). All experiments are conducted using cloudlab `c220g5`. The recorded traces (logs and failure reports) are put under current folder.
+During the artifact preparation, we reran the experiment for 24 hours 3 times to compute the average triggering time. We provided triggering traces (including testing logs and failure reports) for **base** and **df+vd+s** (our final mode) under current folder. All experiments are conducted using cloudlab `c220g5`.
 
 **Results**
 | Bug                                                                        | base (Time) | df+vd+s (Time) |
@@ -25,8 +25,6 @@ We reran the experiment for 24 hours 3 times to compute the average triggering t
 Available servers
 * e (12 servers)
 * h (6 servers) 0,1,2 3,4,5
-
-s2 is broken...
 
 > Skipped: as described in the paper: Star (*) means the bug cannot be triggered consistently within 24 hours
 and we record the shortest amount of time we observed. 

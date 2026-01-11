@@ -2,21 +2,17 @@
 
 ## Overview
 
-This repository contains the source code and artifact materials for **upfuzz**, a framework for discovering data-format and upgrade bugs in distributed storage systems.
-
-We provided our source code, the push-button script to run the testing framework and our experiment traces for evaluation.
+This repository contains the source code and artifact materials for **upfuzz**, a framework for discovering data-format incompatibility bugs in distributed storage systems.
 
 ## Experiment Data
 
 To evaluate upfuzz, we conducted a large number of experiments, totaling > five months of a single machine time (We paralleled experiments with more servers). In accordance with the artifact evaluation (AE) guidelines, we do not expect reviewers to rerun all experiments from scratch to validate our results.
 
-> Note: if reviewers want to build the instrumented binaries from scratch, check out [ae-scratch.md](ae-scratch.md).
-
 For experiments that require substantial computational resources, we provide:
 - Pre-built instrumented binaries
 - Experiment traces
 
-These artifacts enable result reproduction without re-running the full-scale experiments.
+> Note: if reviewers want to build the instrumented binaries from scratch, check out [ae-scratch.md](ae-scratch.md).
 
 ## Requirements
 
@@ -195,7 +191,7 @@ ls -l all.pdf
 
 #### Triggering time
 
-We provided the triggering time along with recorded traces (including testing logs and failure reports) for two modes: base and df+vd+s (our final mode). For more details and access to the logs, see the [bug-reproduction/trace/README.md](bug-reproduction/trace/README.md).
+We provided the triggering time along with recorded traces (including testing logs and failure reports) for two modes: **base** and **df+vd+s** (our final mode)in [bug-reproduction/trace/README.md](bug-reproduction/trace/README.md).
 
 #### Reproduce all bugs
 
