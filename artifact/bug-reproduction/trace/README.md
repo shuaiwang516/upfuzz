@@ -23,7 +23,7 @@ During the artifact preparation, we reran the experiment for 24 hours 3 times to
 | [HDFS-17686](https://issues.apache.org/jira/browse/HDFS-17686)             |    9.99h    |    2.75h       |
 
 Available servers
-* e (12 servers) 0,1,2,3,4,5
+* e (12 servers) 0,1,2 3,4,5
 * h (6 servers) 0,1,2 3,4,5
 
 > Skipped: as described in the paper: Star (*) means the bug cannot be triggered consistently within 24 hours
