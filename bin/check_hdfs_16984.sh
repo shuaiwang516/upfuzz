@@ -16,7 +16,7 @@ fi
 
 echo -e "${GREEN}[OK]${NC}   bug is triggered"
 echo -e "${YELLOW}[DIR]${NC}  $DIR_NAME"
-echo "--------------------"
-echo
+# echo "--------------------"
+# echo
 
 compute_triggering_time $DIR_NAME

@@ -10,9 +10,9 @@ NC='\033[0m'   # no color
 if [[ -n "$f" ]]; then
   echo -e "${GREEN}[OK]${NC}   bug is triggered"
   echo -e "${YELLOW}[FILE]${NC} $f"
-  echo "--------------------"
-  echo
-  cat "$f"
+  # echo "--------------------"
+  # echo
+  # cat "$f"
 else
   echo -e "${RED}[FAIL]${NC} bug is not triggered"
 fi

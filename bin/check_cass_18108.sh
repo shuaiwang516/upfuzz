@@ -20,8 +20,8 @@ if [[ -n "${d:-}" ]]; then
   if [[ -n "${r:-}" ]]; then
     log_ok "Bug is triggered!"
     echo -e "${YELLOW}[REPORT]${NC} $r"
-    echo "--------------------"
-    cat "$r"
+    # echo "--------------------"
+    # cat "$r"
   else
     log_err "Bug is not triggered (found dir but no *_crash.report inside)"
     echo -e "${YELLOW}[DIR]${NC} $d"
