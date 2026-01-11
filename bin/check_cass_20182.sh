@@ -1,2 +1,2 @@
 #!/bin/bash
-bin/check_crash.sh "$@"
+bin/check_keyword.sh "$@" "collectStats"
