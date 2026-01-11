@@ -1,5 +1,3 @@
-echo "Checking CASSANDRA-18108 (base)"
-echo "--------------------------------"
 
 sum=0
 cnt=0
@@ -15,13 +13,13 @@ fi
 
 CHECK_SCRIPT="$1"
 BUG_DIR="$2"
+MODE="$3"
 
-MODE="base"
-if [ "$3" == "df_vd_s" ]; then
-    MODE="df_vd_s"
-fi
+echo "Checking $CHECK_SCRIPT $BUG_DIR $MODE"
+echo "--------------------------------"
 
 for run in run1 run2 run3; do
+  echo "== $MODE $run =="
   out="$($CHECK_SCRIPT artifact/bug-reproduction/trace/recorded_traces/$BUG_DIR/$MODE/$run/failure)"
   echo "$out"
 
@@ -42,4 +40,8 @@ done
 avg="$(awk -v s="$sum" -v c="$cnt" 'BEGIN{printf "%.2f", s/c}')"
 
 echo "--------------------------------"
-echo "[AVG] over $cnt runs: $avg hours"
+# Print average with some color: [AVG] in green, script/mode in cyan, hours in yellow
+echo "[AVG] $CHECK_SCRIPT $MODE: $avg hours"
+echo "--------------------------------"
+echo
+echo
