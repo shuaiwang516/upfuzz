@@ -1,5 +1,10 @@
 #!/bin/bash
-f=$(grep -rl "illegal RT bounds sequence" failure | sort -t '_' -k2,2n | head -n 1)
+# Usage: ./check_cass_19623.sh [failure_dir]
+# Default: failure
+
+FAILURE_DIR="${1:-}"/failure
+
+f=$(grep -rl "illegal RT bounds sequence" "$FAILURE_DIR" | sort -t '_' -k2,2n | head -n 1)
 
 # Add color to the output for better visibility
 GREEN='\033[0;32m'
