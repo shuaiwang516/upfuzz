@@ -8,7 +8,7 @@ Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
 | Bug                                                                        | base (Time) | df+vd+s (Time) |
 |----------------------------------------------------------------------------|-------------|----------------|
 | [CASSANDRA-18105](https://issues.apache.org/jira/browse/CASSANDRA-18105)   |   13.58h    |     3.69h      |
-| [CASSANDRA-18108](https://issues.apache.org/jira/browse/CASSANDRA-18108)   |   16.73h    |    NA: e0,1,2 (in progress)      |
+| [CASSANDRA-18108](https://issues.apache.org/jira/browse/CASSANDRA-18108)   |   16.73h    |    NA          |
 | [CASSANDRA-19590](https://issues.apache.org/jira/browse/CASSANDRA-19590)   |     NA      |    11.48h      |
 | [CASSANDRA-19591](https://issues.apache.org/jira/browse/CASSANDRA-19591)   |     NA      |    *Skipped    |
 | [CASSANDRA-19623](https://issues.apache.org/jira/browse/CASSANDRA-19623)   |     NA      |    *Skipped    |
@@ -26,7 +26,7 @@ Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
 
 Available servers
 * s (3 servers) 0,1,2
-* e (12 servers) 6,7,8
+* e (12 servers) 0,1,2  6,7,8
 * h (6 servers) 0,1,2 3,4,5
 
 s2 is broken...
@@ -141,7 +141,7 @@ git checkout .
 git pull
 ```
 
-## Dryrun
+## Dry Run
 
 ```bash
 
@@ -164,11 +164,28 @@ bash artifact/bug-reproduction/trace/scripts/hdfs_trace.sh final dryrun
 
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/hdfs_trace_17686.sh base dryrun
+```
 
 ## Collect trace
 
 ```bash
 # tar the trace
-bin/clean.sh --force
 tar -czvf run.tar.gz failure server.log
+```
+
+
+untar
+```bash
+
+cd run1
+tar -xzvf run.tar.gz
+cd ..
+
+cd run2
+tar -xzvf run.tar.gz
+cd ..
+
+cd run3
+tar -xzvf run.tar.gz
+cd ..
 ```
