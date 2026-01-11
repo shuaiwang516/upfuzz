@@ -8,7 +8,7 @@ Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
 | Bug                                                                        | base (Time) | df+vd+s (Time) |
 |----------------------------------------------------------------------------|-------------|----------------|
 | [CASSANDRA-18105](https://issues.apache.org/jira/browse/CASSANDRA-18105)   |   13.58h    |     3.69h      |
-| [CASSANDRA-18108](https://issues.apache.org/jira/browse/CASSANDRA-18108)   |   16.73h    |      NA        |
+| [CASSANDRA-18108](https://issues.apache.org/jira/browse/CASSANDRA-18108)   |   16.73h    |      e(6,7,8,9,10,11)        |
 | [CASSANDRA-19590](https://issues.apache.org/jira/browse/CASSANDRA-19590)   |     NA      |    11.48h      |
 | [CASSANDRA-19591](https://issues.apache.org/jira/browse/CASSANDRA-19591)   |     NA      |    *Skipped    |
 | [CASSANDRA-19623](https://issues.apache.org/jira/browse/CASSANDRA-19623)   |     NA      |    *Skipped    |
@@ -23,10 +23,8 @@ Specifically, we kept (1) testing server logs and (2) bug reports for 24h.
 | [HDFS-17219](https://issues.apache.org/jira/browse/HDFS-17219)             |    9.60h    |    2.44h       |
 | [HDFS-17686](https://issues.apache.org/jira/browse/HDFS-17686)             |    9.99h    |    2.75h       |
 
-
 Available servers
-* s (3 servers) 0,1,2
-* e (12 servers) 6,7,8 9,10,11
+* e (12 servers) 
 * h (6 servers) 0,1,2 3,4,5
 
 s2 is broken...
@@ -115,7 +113,6 @@ bash artifact/bug-reproduction/trace/scripts/hbase_trace.sh final large
 Parallel num = 12
 
 ```bash
-
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/hdfs_trace_16984.sh base large
 
@@ -134,11 +131,9 @@ bash artifact/bug-reproduction/trace/scripts/hdfs_trace_17686.sh base large
 
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/hdfs_trace_17686.sh final large
-
-
 ```
 
-# Debug (Not for artifact reviewers)
+# Debug
 
 ## Clean
 
@@ -151,7 +146,6 @@ git pull
 ## Dry Run
 
 ```bash
-
 cd ~/project/upfuzz
 bash artifact/bug-reproduction/trace/scripts/cass_trace_2_3.sh final dryrun
 
@@ -189,7 +183,6 @@ tar -czvf run.tar.gz failure server.log
 
 untar
 ```bash
-
 cd run1
 tar -xzvf run.tar.gz
 cd ..
