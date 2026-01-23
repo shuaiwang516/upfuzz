@@ -4,9 +4,9 @@ This is the source code repo for **UpFuzz: Detecting Data Format Incompatibility
 
 ### Overview
 
-The instructions will reproduce the key results in Figure 14, Table 2, and Table 4. That is, the following instructions will lead you to (1) reproduce the bugs found by upfuzz and (2) generate the bug-triggering test plan.
+The instructions will reproduce the key results in Figure 14, Table 2, and Table 4. That is, the following instructions will lead you to run upfuzz and reproduce the bugs found by upfuzz.
 
-The entire artifact evaluation process can take about 3 hours.
+The entire artifact evaluation process can take about 3 hours. Experiments are designed independently, you could parallel the experiments with multiple servers.
 
 1. [Kick-the-tires Instructions](#kick-the-tires-instructions-30-mins)
 2. [Full Evaluation Instructions](#full-evaluation-instructions-25h)
