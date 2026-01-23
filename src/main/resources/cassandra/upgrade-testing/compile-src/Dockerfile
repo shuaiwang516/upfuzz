@@ -1,4 +1,5 @@
-FROM openjdk:8-jdk
+# FROM openjdk:8-jdk # Deprecated
+FROM eclipse-temurin:8-jdk-focal
 
 # 0. use tuna apt sources
 
@@ -41,7 +42,11 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 COPY cqlsh_init.sh /cassandra/cqlsh_init.sh
 
-RUN pip3 install cassandra-driver
+# RUN pip3 install cassandra-driver
+
+RUN pip3 install --only-binary=:all: cassandra-driver
+
+
 # This file contains relatively permanent configurations.
 # ADD cass-setup.sh /usr/local/bin/cass-setup.sh
 # RUN sh /usr/local/bin/cass-setup.sh

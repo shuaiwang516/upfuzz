@@ -2,6 +2,12 @@
 
 # Input: failure/failure_xxx
 # Output: print triggering time
+
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+NC='\033[0m'   # no color
+
 compute_triggering_time() {
     # Check if a directory argument was provided
     if [ -z "$1" ]; then
@@ -26,10 +32,7 @@ compute_triggering_time() {
     HOURS=$(echo "scale=2; $NUM / 3600" | bc)
 
     # Output the results
-    echo "Bug Report: $FILENAME"
-    # echo "Total time: $NUM seconds"
-    # echo "Triggering time: $HOURS hours"
-    # echo -e "Triggering time: \e[1m$HOURS hours\e[0m"
-    # echo -e "Triggering time: \e[1;32m$HOURS hours\e[0m"
-    echo -e "Triggering time: \e[1;31m$HOURS hours\e[0m"
+    # echo "Bug Report: $FILENAME"
+    echo -e "[Time] $HOURS hours"
+    # exit 0
 }

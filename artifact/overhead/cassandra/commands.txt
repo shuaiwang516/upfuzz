@@ -1,0 +1,12 @@
+CREATE KEYSPACE IF NOT EXISTS myKS WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 2 };
+CREATE TABLE IF NOT EXISTS myKS.monkey_species (species TEXT,common_name INT,population INT,average_size TEXT, PRIMARY KEY (species, common_name ));
+INSERT INTO myKS.monkey_species (species, common_name, population, average_size) VALUES ('Monkey', 0, 30, 'AAAAAAAAAAAAAAAAAAAAAAAAAAA');
+INSERT INTO myKS.monkey_species (species, common_name, population, average_size) VALUES ('Monkey', 1, 30, 'AAAAAAAAAAAAAAAAAAAAAAAAAAA');
+INSERT INTO myKS.monkey_species (species, common_name, population, average_size) VALUES ('Monkey', 2, 30, 'AAAAAAAAAAAAAAAAAAAAAAAAAAA');
+INSERT INTO myKS.monkey_species (species, common_name, population, average_size) VALUES ('Monkey', 3, 30, 'AAAAAAAAAAAAAAAAAAAAAAAAAAA');
+INSERT INTO myKS.monkey_species (species, common_name, population, average_size) VALUES ('Monkey', 4, 30, 'AAAAAAAAAAAAAAAAAAAAAAAAAAA');
+INSERT INTO myKS.monkey_species (species, common_name, population, average_size) VALUES ('Monkey', 5, 30, 'AAAAAAAAAAAAAAAAAAAAAAAAAAA');
+INSERT INTO myKS.monkey_species (species, common_name, population, average_size) VALUES ('Monkey', 6, 30, 'AAAAAAAAAAAAAAAAAAAAAAAAAAA');
+INSERT INTO myKS.monkey_species (species, common_name, population, average_size) VALUES ('Monkey', 7, 30, 'AAAAAAAAAAAAAAAAAAAAAAAAAAA');
+INSERT INTO myKS.monkey_species (species, common_name, population, average_size) VALUES ('Monkey', 8, 30, 'AAAAAAAAAAAAAAAAAAAAAAAAAAA');
+ALTER TABLE myKS.monkey_species DROP population ;

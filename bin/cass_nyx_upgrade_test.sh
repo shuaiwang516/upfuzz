@@ -4,9 +4,9 @@
 cd ~/upfuzz
 git checkout -b implement_nyx
 
-export UPFUZZ_DIR=$PWD
-export ORI_VERSION=3.11.15
-export UP_VERSION=4.1.3
+UPFUZZ_DIR=$PWD
+ORI_VERSION=3.11.15
+UP_VERSION=4.1.3
 mkdir -p "$UPFUZZ_DIR"/prebuild/cassandra
 cd ${UPFUZZ_DIR}/prebuild/cassandra
 wget https://archive.apache.org/dist/cassandra/"$ORI_VERSION"/apache-cassandra-"$ORI_VERSION"-bin.tar.gz ; tar -xzvf apache-cassandra-"$ORI_VERSION"-bin.tar.gz
