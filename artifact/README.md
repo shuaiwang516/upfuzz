@@ -68,9 +68,7 @@ This section demonstrates how to start upgrade testing immediately for Cassandra
 ### Clone the repo
 ```bash
 cd ~/project
-git clone https://github.com/zlab-purdue/upfuzz.git
-
-cd ~/project/upfuzz
+git clone https://github.com/zlab-purdue/upfuzz.git && cd upfuzz
 ```
 
 ### Test Cassandra: 3.11.17 => 4.1.4
@@ -237,7 +235,7 @@ We provided each bug an independent script to reproduce for better investigation
 > 
 > * **Reported**: the bug is reported, but not acknowledged as a bug yet by the developers.
 > 
-> * **Confirmed**: the bug is acknowledged by the developers in the JIRA ticket. Developers might confirm the bug in the comment (e.g. [HBASE-28812](https://issues.apache.org/jira/browse/HBASE-28812)). 
+> * **Confirmed**: the bug is acknowledged by the developers in the JIRA ticket. Developers usually confirm the bug in the comment (e.g. [HBASE-28812](https://issues.apache.org/jira/browse/HBASE-28812)). 
 >   * Cassandra developers might directly change the ticket status from "Triage Needed" to "OPEN" without adding comment, we have one bug confirmed this way: [CASSANDRA-19623](https://issues.apache.org/jira/browse/CASSANDRA-19623). You could click the jira ticket activity *History* button to view the ticket status change.
 >
 > * **Fixed**: the fix is merged into the main branch.
