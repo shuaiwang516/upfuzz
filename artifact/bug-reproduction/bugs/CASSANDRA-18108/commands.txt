@@ -1,0 +1,5 @@
+CREATE KEYSPACE  ks WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 };
+CREATE TABLE IF NOT EXISTS ks.tb (c1 INT,c3 INT,c2 TEXT, PRIMARY KEY (c1 )) WITH speculative_retry = 'ALWAYS';
+INSERT INTO ks.tb (c1, c2) VALUES (2,'val');
+ALTER TABLE ks.tb DROP c2 ;
+ALTER TABLE ks.tb RENAME c1 TO c2;

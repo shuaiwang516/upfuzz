@@ -1,1 +1,6 @@
-grep -rl 'old_table_schema' failure | sort -t '_' -k2,2n | head -n 2
+# !/bin/bash
+if [ $# -eq 0 ]; then
+  set -- failure
+fi
+
+bin/check_keyword.sh "$@" "old_table_schema"

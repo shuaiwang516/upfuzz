@@ -1,0 +1,1 @@
+SELECT * FROM myKS.monkey_species WHERE species='Monkey' and common_name=7 ;

@@ -152,8 +152,13 @@ public class CassandraCqlshDaemon extends ShellDaemon {
 
         // Assert: the cmd must be equal
         if (!cqlshPacket.cmd.equals(cmd)) {
+            logger.error("cmd size = " + cmd.length()
+                    + ", cqlshPacket.cmd size = " + cqlshPacket.cmd.length());
+            logger.error("cmd = " + cmd);
+            logger.error("cqlshPacket.cmd = " + cqlshPacket.cmd);
             throw new RuntimeException(
-                    "cqlshPacket.cmd != cmd: " + cqlshPacket.cmd + " != "
+                    "cqlshPacket.cmd not equal to cmd: " + cqlshPacket.cmd
+                            + " != "
                             + cmd);
         }
 

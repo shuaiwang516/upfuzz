@@ -1,0 +1,6 @@
+CREATE KEYSPACE IF NOT EXISTS ks WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 };
+CREATE TABLE  ks.tb (c3 TEXT,c4 TEXT,c2 INT,c1 TEXT, PRIMARY KEY (c1, c2, c3 ));
+INSERT INTO ks.tb (c3, c1, c2) VALUES ('val1','val2',1);
+CREATE INDEX IF NOT EXISTS tb ON ks.tb ( c3);
+TRUNCATE TABLE ks.tb;
+DROP INDEX IF EXISTS ks.tb;

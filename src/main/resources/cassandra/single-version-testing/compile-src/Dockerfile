@@ -1,4 +1,5 @@
-FROM openjdk:8-jdk
+# FROM openjdk:8-jdk # Deprecated
+FROM eclipse-temurin:8-jdk-focal
 
 # 0. use tuna apt sources
 

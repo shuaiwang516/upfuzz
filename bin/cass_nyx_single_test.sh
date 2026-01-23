@@ -4,8 +4,8 @@
 cd ~/upfuzz
 git checkout -b implement_nyx
 
-export UPFUZZ_DIR=$PWD
-export ORI_VERSION=3.11.15
+UPFUZZ_DIR=$PWD
+ORI_VERSION=3.11.15
 
 mkdir -p ${UPFUZZ_DIR}/prebuild/cassandra
 cd ${UPFUZZ_DIR}/prebuild/cassandra

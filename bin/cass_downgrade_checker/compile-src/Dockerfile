@@ -1,4 +1,5 @@
-FROM openjdk:8-jdk
+# FROM openjdk:8-jdk # Deprecated
+FROM eclipse-temurin:8-jdk-focal
 
 RUN apt install apt-transport-https ca-certificates
 RUN apt-get update && apt-get install -y openssh-server iproute2 net-tools iputils-ping supervisor vim ant maven python python3 python3-pip python-six psmisc

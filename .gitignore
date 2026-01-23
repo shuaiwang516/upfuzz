@@ -1,3 +1,6 @@
+recorded_traces.tar.gz
+recorded_traces
+results.txt
 clean.sh
 initSeed/
 Coutput
@@ -12,7 +15,6 @@ logs/
 hdfs-cl-*
 cass-cl*
 configtests
-bugs
 config/
 failure/
 failure_stat/
@@ -25,6 +27,7 @@ testGraph.ser
 fullSequences/
 format_coverage.log
 server.log
+client.log
 
 ##############################
 ## python
@@ -117,3 +120,13 @@ nb-configuration.xml
 
 *~
 bin/main/
+
+
+artifact/state-exploration/cassandra/
+artifact/state-exploration/hbase/
+artifact/state-exploration/hdfs/
+artifact/state-exploration/state-exploration-data.tar.gz
+artifact/state-exploration/all.pdf
+._cassandra
+._hbase
+._hdfs

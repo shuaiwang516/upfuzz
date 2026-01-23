@@ -1,0 +1,1 @@
+SELECT *  FROM ks.tb WHERE c3 = 2 AND c2 = 100;
