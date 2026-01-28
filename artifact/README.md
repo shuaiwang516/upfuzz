@@ -57,6 +57,13 @@ tmpfs                                           19G  1.9M   19G   1% /run
 /dev/sdb                                       1.1T   36K  1.1T   1% /mydata
 ```
 
+## Usage of `tmux`
+
+There are two ways to execute the scripts
+
+* Method 1: (recommended) directly run the scripts in terminal without `tmux` (the scripts would start up a tmux session named `0`).
+* Method 2: run the scripts in `tmux`, but you need to run it in a tmux session named **other than `0`** to avoid the **tmux session conflict error**.
+
 ## Kick-the-tires Instructions (~30 mins)
 
 The previous steps make sure there exists `~/project/` folder in HDD. 
