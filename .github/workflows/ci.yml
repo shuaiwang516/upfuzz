@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  cassandra-docker-build:
+    runs-on: ubuntu-latest
+    env:
+      CASS_IMAGE_NAME: upfuzz_cassandra:ci-build
+      CASS_IMAGE_CACHE_DIR: .cache/docker
+      CASS_IMAGE_TAR: .cache/docker/upfuzz_cassandra_ci_build.tar
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: CASSANDRA DOCKER IMAGE - Restore cache
+        id: cass-docker-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.CASS_IMAGE_CACHE_DIR }}
+          key: cassandra-docker-${{ hashFiles('src/main/resources/cassandra/upgrade-testing/compile-src/**') }}
+
+      - name: Load cached Cassandra image
+        if: steps.cass-docker-cache.outputs.cache-hit == 'true'
+        run: |
+          if [ ! -f "${{ env.CASS_IMAGE_TAR }}" ]; then
+            echo "ERROR: Cache hit but image tar not found at ${{ env.CASS_IMAGE_TAR }}"
+            exit 1
+          fi
+          docker load -i "${{ env.CASS_IMAGE_TAR }}"
+
+      - name: Build Cassandra image
+        if: steps.cass-docker-cache.outputs.cache-hit != 'true'
+        run: docker build src/main/resources/cassandra/upgrade-testing/compile-src -t "${{ env.CASS_IMAGE_NAME }}"
+
+      - name: Save Cassandra image to tar
+        if: steps.cass-docker-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "${{ env.CASS_IMAGE_CACHE_DIR }}"
+          docker save "${{ env.CASS_IMAGE_NAME }}" -o "${{ env.CASS_IMAGE_TAR }}"
+
+      - name: Validate Cassandra image
+        run: |
+          docker image inspect "${{ env.CASS_IMAGE_NAME }}"
+          if ! docker image inspect "${{ env.CASS_IMAGE_NAME }}" > /dev/null 2>&1; then
+            echo "ERROR: Docker image '${{ env.CASS_IMAGE_NAME }}' was not found."
+            exit 1
+          fi
+
+      - name: Save Cassandra image cache
+        if: steps.cass-docker-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.CASS_IMAGE_CACHE_DIR }}
+          key: cassandra-docker-${{ hashFiles('src/main/resources/cassandra/upgrade-testing/compile-src/**') }}
+
+  run-cassandra-test:
+    runs-on: ubuntu-latest
+    needs: cassandra-docker-build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Set up JDK 11 (with Gradle cache)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: gradle
+
+      - name: Run upfuzz unit test
+        run: ./gradlew :spotlessApply build
