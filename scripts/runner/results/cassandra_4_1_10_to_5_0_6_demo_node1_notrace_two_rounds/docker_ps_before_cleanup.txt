@@ -1,0 +1,4 @@
+NAMES                                                                  IMAGE                                                             STATUS
+cassandra-apache-cassandra-4.1.10_apache-cassandra-5.0.6_c05ITtMK_N0   upfuzz_cassandra:apache-cassandra-4.1.10_apache-cassandra-5.0.6   Up 3 seconds
+cassandra-apache-cassandra-4.1.10_apache-cassandra-5.0.6_0nGjq0zw_N0   upfuzz_cassandra:apache-cassandra-4.1.10_apache-cassandra-5.0.6   Up 3 seconds
+cassandra-apache-cassandra-4.1.10_apache-cassandra-5.0.6_5qdfcSpE_N0   upfuzz_cassandra:apache-cassandra-4.1.10_apache-cassandra-5.0.6   Up 3 seconds

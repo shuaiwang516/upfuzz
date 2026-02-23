@@ -1,0 +1,18 @@
+[Rolling] [Test plan execution failed at event5]
+executionId = gz9GxSSN
+ConfigIdx = test7
+nodeNum = 1
+test plan:
+[Command] Execute {CONSISTENCY ALL;}
+[Command] Execute {CREATE KEYSPACE distributed_test_keyspace WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 3 };}
+[Command] Execute {CREATE TABLE distributed_test_keyspace.tbl (   k int,    c int,    s1 int static,    s2 set<int> static,    v1 int,    v2 set<int>,    PRIMARY KEY (k, c));}
+[Command] Execute {INSERT INTO distributed_test_keyspace.tbl (k, c, s1, s2, v1, v2) VALUES (1, 1, 2, {1, 2, 3, 4, 5}, 3, {6, 7, 8, 9, 10});}
+[Command] Execute {INSERT INTO distributed_test_keyspace.tbl (k, c, s1, s2, v1, v2) VALUES (1, 2, 3, {2, 3, 4, 5, 6}, 4, {7, 8, 9, 10, 11});}
+[UpgradeOp] Upgrade Node[0]
+[Command] Execute {CONSISTENCY ALL;}
+[Command] Execute {SELECT v1 FROM distributed_test_keyspace.tbl WHERE k = 1;}
+test plan end
+validation commands: 
+SELECT * FROM ks.t1 WHERE k=100 ORDER BY c DESC;
+
+

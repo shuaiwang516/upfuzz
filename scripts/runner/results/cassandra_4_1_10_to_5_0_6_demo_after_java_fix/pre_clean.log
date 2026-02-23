@@ -1,0 +1,11 @@
+Killing upfuzz processes...
+Removing upfuzz containers...
+No upfuzz containers found.
+Cleaning up unused Docker resources...
+Deleted Networks:
+2026-02-22-16-20-12-ol7iimpb_network_cassandra_apache-cassandra-4.1.10_to_apache-cassandra-5.0.6_73f07608-4d04-4c12-a1ff-b5feb27e5b9b
+2026-02-22-16-20-13-9krne6qx_network_cassandra_apache-cassandra-4.1.10_to_apache-cassandra-5.0.6_521151a8-9d8b-4f86-919a-47564808e296
+2026-02-22-16-20-13-70ejwcpq_network_cassandra_apache-cassandra-4.1.10_to_apache-cassandra-5.0.6_bf7841bb-c648-472f-b090-9711482f6e29
+
+Total reclaimed space: 0B
+Cleanup completed!

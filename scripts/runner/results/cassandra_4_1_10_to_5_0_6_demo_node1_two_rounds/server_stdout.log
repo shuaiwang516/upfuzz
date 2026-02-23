@@ -1,0 +1,7 @@
+[34m2026-02-22 16:31:26,697 [main] INFO  Main.java:main:86: start server
+[m[34m2026-02-22 16:31:26,765 [Thread-0] INFO  FuzzingServerSocket.java:run:26: fuzzing server start at localhost/127.0.0.1:7399
+[m[34m2026-02-22 16:31:29,619 [Thread-1] INFO  FuzzingServerHandler.java:run:66: live client number: 1
+[m[32m2026-02-22 16:31:29,631 [Thread-1] DEBUG Packet.java:read:123: received packet length : 97
+[m[34m2026-02-22 16:31:29,632 [Thread-1] INFO  FuzzingServer.java:getOneTest:575: execute example test plan
+[m[32m2026-02-22 16:31:29,696 [Thread-1] DEBUG FuzzingServer.java:generateExampleTestPlan:998: example test plan size = 8
+[m

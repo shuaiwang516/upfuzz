@@ -210,7 +210,8 @@ public class Config {
         // 2: mixed test using MixedTestPlan
         // 3: Bug Reproduction: Rolling upgrade (given a test plan)
         // 4: full-stop upgrade + rolling upgrade iteratively (Final Version)
-        // 5: Only test rolling upgrade (Not done)
+        // 5: Only test rolling upgrade using test plans
+        // (differential or regular)
         public int testingMode = 0;
         public boolean testSingleVersion = false;
         // This make the test plan interleave with
@@ -324,6 +325,10 @@ public class Config {
 
         public boolean useEditDistance = false;
         public boolean useJaccardSimilarity = true;
+
+        // Jaccard similarity threshold: test is "interesting" if
+        // similarity drops below this value
+        public double jaccardSimilarityThreshold = 0.3;
 
         /**
          * ---------------Version Specific-----------------

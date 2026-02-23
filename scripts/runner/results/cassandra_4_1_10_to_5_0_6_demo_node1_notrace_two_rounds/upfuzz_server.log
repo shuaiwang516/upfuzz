@@ -1,0 +1,16 @@
+2026-02-22 16:40:35,932 [main] INFO  Main.java:main:86: start server
+2026-02-22 16:40:35,998 [Thread-0] INFO  FuzzingServerSocket.java:run:26: fuzzing server start at localhost/127.0.0.1:7399
+2026-02-22 16:40:38,847 [Thread-1] INFO  FuzzingServerHandler.java:run:66: live client number: 1
+2026-02-22 16:40:38,860 [Thread-1] DEBUG Packet.java:read:123: received packet length : 97
+2026-02-22 16:40:38,861 [Thread-1] INFO  FuzzingServer.java:getOneTest:575: execute example test plan
+2026-02-22 16:40:38,921 [Thread-1] DEBUG FuzzingServer.java:generateExampleTestPlan:998: example test plan size = 8
+2026-02-22 16:47:40,144 [Thread-1] DEBUG Packet.java:read:123: received packet length : 514683
+2026-02-22 16:47:40,389 [Thread-1] INFO  FuzzingServer.java:updateStatus:1452: TestPlanDiffFeedbackPacket received
+2026-02-22 16:47:40,427 [Thread-1] INFO  FuzzingServer.java:updateStatus:1593: Added test plan to corpus (newOriBC=true, newUpgradeBC=false, lowSimilarity=false)
+2026-02-22 16:47:40,514 [Thread-1] INFO  FuzzingServer.java:getOneTest:575: execute example test plan
+2026-02-22 16:47:40,585 [Thread-1] DEBUG FuzzingServer.java:generateExampleTestPlan:998: example test plan size = 8
+2026-02-22 16:53:48,655 [Thread-1] DEBUG Packet.java:read:123: received packet length : 511812
+2026-02-22 16:53:48,791 [Thread-1] INFO  FuzzingServer.java:updateStatus:1452: TestPlanDiffFeedbackPacket received
+2026-02-22 16:53:48,813 [Thread-1] INFO  FuzzingServer.java:updateStatus:1593: Added test plan to corpus (newOriBC=true, newUpgradeBC=false, lowSimilarity=false)
+2026-02-22 16:53:48,845 [Thread-1] INFO  FuzzingServer.java:getOneTest:575: execute example test plan
+2026-02-22 16:53:48,972 [Thread-1] DEBUG FuzzingServer.java:generateExampleTestPlan:998: example test plan size = 8

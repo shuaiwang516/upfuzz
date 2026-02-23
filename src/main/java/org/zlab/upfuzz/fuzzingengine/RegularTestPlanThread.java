@@ -289,6 +289,7 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
                             .executeCommands(
                                     testPlanPacket
                                             .getTestPlan().validationCommands);
+                    testPlanFeedbackPacket.validationReadResults = testPlanReadResults;
                     compareRes = executor
                             .checkResultConsistency(
                                     testPlanPacket

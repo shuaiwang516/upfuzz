@@ -7,6 +7,8 @@ import org.zlab.upfuzz.fuzzingengine.FeedBack;
 
 import java.io.DataInputStream;
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 
 public class TestPlanFeedbackPacket extends Packet implements Serializable {
     static Logger logger = LogManager.getLogger(TestPlanFeedbackPacket.class);
@@ -31,6 +33,9 @@ public class TestPlanFeedbackPacket extends Packet implements Serializable {
     public FeedBack[] feedBacks;
 
     public Trace[] trace;
+
+    // Validation read results for cross-cluster comparison
+    public List<String> validationReadResults = new ArrayList<>();
 
     // TODO: We might want to compare the state between
     // (1) Rolling upgrade and (2) Full-stop upgrade

@@ -1,0 +1,19 @@
+Killing upfuzz processes...
+Removing upfuzz containers...
+Found upfuzz containers:
+cassandra-apache-cassandra-4.1.10_apache-cassandra-5.0.6_c05ITtMK_N0
+cassandra-apache-cassandra-4.1.10_apache-cassandra-5.0.6_0nGjq0zw_N0
+cassandra-apache-cassandra-4.1.10_apache-cassandra-5.0.6_5qdfcSpE_N0
+
+Force mode: removing containers without confirmation...
+cassandra-apache-cassandra-4.1.10_apache-cassandra-5.0.6_c05ITtMK_N0
+cassandra-apache-cassandra-4.1.10_apache-cassandra-5.0.6_0nGjq0zw_N0
+cassandra-apache-cassandra-4.1.10_apache-cassandra-5.0.6_5qdfcSpE_N0
+Cleaning up unused Docker resources...
+Deleted Networks:
+2026-02-22-16-53-49-0ngjq0zw_network_cassandra_apache-cassandra-4.1.10_to_apache-cassandra-5.0.6_faa2b643-bcd4-45c4-a2b3-91e702835383
+2026-02-22-16-53-49-c05ittmk_network_cassandra_apache-cassandra-4.1.10_to_apache-cassandra-5.0.6_1b50f76a-fca4-49f4-a065-d780931b81ad
+2026-02-22-16-53-49-5qdfcspe_network_cassandra_apache-cassandra-4.1.10_to_apache-cassandra-5.0.6_c0172a92-1482-4c44-a799-87ba85f9bbfe
+
+Total reclaimed space: 0B
+Cleanup completed!

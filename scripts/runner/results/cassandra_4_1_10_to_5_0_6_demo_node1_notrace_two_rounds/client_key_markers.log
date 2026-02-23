@@ -1,0 +1,10 @@
+3:2026-02-22 16:40:38,938 [Thread-1] INFO  FuzzingClient.java:executeTestPlanPacketDifferential:1337: [Fuzzing Client] executeTestPlanPacketDifferential
+4:2026-02-22 16:40:38,938 [Thread-1] INFO  FuzzingClient.java:executeTestPlanPacketDifferential:1345: [HKLOG] configPath = configtests/apache-cassandra-4.1.10_apache-cassandra-5.0.6/test6
+253:2026-02-22 16:47:36,525 [pool-3-thread-2] ERROR Executor.java:handleUpgradeOp:636: upgrade failed due to an exception java.lang.RuntimeException: [HKLOG] executor ID = JZK8W28g  cannot connect to cqlsh at 192.168.47.2
+260:2026-02-22 16:47:39,865 [Thread-1] DEBUG FuzzingClient.java:executeTestPlanPacketDifferential:1394: [HKLOG] trace diff: all three packets are collected
+263:2026-02-22 16:47:40,603 [Thread-1] INFO  FuzzingClient.java:executeTestPlanPacketDifferential:1337: [Fuzzing Client] executeTestPlanPacketDifferential
+264:2026-02-22 16:47:40,604 [Thread-1] INFO  FuzzingClient.java:executeTestPlanPacketDifferential:1345: [HKLOG] configPath = configtests/apache-cassandra-4.1.10_apache-cassandra-5.0.6/test7
+490:2026-02-22 16:53:46,200 [pool-4-thread-2] ERROR Executor.java:handleUpgradeOp:636: upgrade failed due to an exception java.lang.RuntimeException: [HKLOG] executor ID = gz9GxSSN  cannot connect to cqlsh at 192.168.223.2
+496:2026-02-22 16:53:48,340 [Thread-1] DEBUG FuzzingClient.java:executeTestPlanPacketDifferential:1394: [HKLOG] trace diff: all three packets are collected
+499:2026-02-22 16:53:48,994 [Thread-1] INFO  FuzzingClient.java:executeTestPlanPacketDifferential:1337: [Fuzzing Client] executeTestPlanPacketDifferential
+500:2026-02-22 16:53:48,995 [Thread-1] INFO  FuzzingClient.java:executeTestPlanPacketDifferential:1345: [HKLOG] configPath = configtests/apache-cassandra-4.1.10_apache-cassandra-5.0.6/test8

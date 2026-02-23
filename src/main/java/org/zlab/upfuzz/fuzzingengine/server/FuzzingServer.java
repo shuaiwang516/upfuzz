@@ -594,12 +594,15 @@ public class FuzzingServer {
             isFullStopUpgrade = !isFullStopUpgrade;
             return packet;
         } else if (Config.getConf().testingMode == 5) {
-            // TODO: only test rolling upgrade (test plan)
-            throw new RuntimeException("Not implemented yet");
-            // if (testPlanPackets.isEmpty())
-            // fuzzTestPlan();
-            // assert !testPlanPackets.isEmpty();
-            // return testPlanPackets.poll();
+            // Only test rolling upgrade using test plans
+            if (testPlanPackets.isEmpty()) {
+                if (!fuzzTestPlan()) {
+                    // No seeds in fullStopCorpus yet, generate example
+                    return generateExampleTestplanPacket();
+                }
+            }
+            assert !testPlanPackets.isEmpty();
+            return testPlanPackets.poll();
         }
         throw new RuntimeException(
                 String.format("testing Mode [%d] is not in correct scope",
@@ -978,9 +981,11 @@ public class FuzzingServer {
         int configIdx = configGen.generateConfig();
         String configFileName = "test" + configIdx;
 
+        TestPlan testPlan = generateExampleTestPlan();
+        testID2TestPlan.put(testID, testPlan);
         return new TestPlanPacket(
                 Config.getConf().system, testID++, configFileName,
-                generateExampleTestPlan());
+                testPlan);
     }
 
     public TestPlan generateExampleTestPlan() {
@@ -1444,7 +1449,6 @@ public class FuzzingServer {
 
     public synchronized void updateStatus(
             TestPlanDiffFeedbackPacket testPlanDiffFeedbackPacket) {
-        // TODO: compute diff...
         logger.info("TestPlanDiffFeedbackPacket received");
 
         TestPlanFeedbackPacket[] testPlanFeedbackPackets = testPlanDiffFeedbackPacket.testPlanFeedbackPackets;
@@ -1454,70 +1458,264 @@ public class FuzzingServer {
                     "TestPlanDiffFeedbackPacket length is not 3: there should be (1) Old (2) RU and (3) New");
         }
 
+        // --- Trace processing ---
         Trace[] serializedTraces = new Trace[testPlanFeedbackPackets.length];
 
-        for (int i = 0; i < testPlanFeedbackPackets.length; i++) {
-            TestPlanFeedbackPacket testPlanFeedbackPacket = testPlanFeedbackPackets[i];
+        if (Config.getConf().useTrace) {
+            for (int i = 0; i < testPlanFeedbackPackets.length; i++) {
+                TestPlanFeedbackPacket testPlanFeedbackPacket = testPlanFeedbackPackets[i];
 
-            assert testPlanFeedbackPacket.trace != null;
-            Trace serializedTrace = Trace
-                    .mergeBasedOnTimestamp(testPlanFeedbackPacket.trace);
-            serializedTraces[i] = serializedTrace;
+                if (testPlanFeedbackPacket.trace != null) {
+                    serializedTraces[i] = Trace
+                            .mergeBasedOnTimestamp(
+                                    testPlanFeedbackPacket.trace);
 
-            // debug
-            logger.info("TestPlanFeedbackPacket " + i + ", type = "
-                    + testPlanID2Setup.get(i) + ": trace:");
-            if (testPlanFeedbackPacket.trace != null) {
-                for (int j = 0; j < testPlanFeedbackPacket.trace.length; j++) {
-                    logger.info("trace[" + j + "] len = "
-                            + testPlanFeedbackPacket.trace[j].size());
+                    logger.info("TestPlanFeedbackPacket " + i + ", type = "
+                            + testPlanID2Setup.get(i) + ": trace:");
+                    for (int j = 0; j < testPlanFeedbackPacket.trace.length; j++) {
+                        logger.info("trace[" + j + "] len = "
+                                + testPlanFeedbackPacket.trace[j].size());
 
-                    // Check changed message
-                    List<TraceEntry> entries = testPlanFeedbackPacket.trace[j]
-                            .getTraceEntries();
-                    boolean hasChangedMessage = false;
-                    for (TraceEntry traceEntry : entries) {
-                        if (traceEntry.changedMessage) {
-                            hasChangedMessage = true;
-                            break;
+                        List<TraceEntry> entries = testPlanFeedbackPacket.trace[j]
+                                .getTraceEntries();
+                        boolean hasChangedMessage = false;
+                        for (TraceEntry traceEntry : entries) {
+                            if (traceEntry.changedMessage) {
+                                hasChangedMessage = true;
+                                break;
+                            }
+                        }
+                        if (hasChangedMessage) {
+                            logger.info("Trace contains changed message");
+                        } else {
+                            logger.info(
+                                    "Trace does not contain changed message");
                         }
                     }
-                    if (hasChangedMessage) {
-                        logger.info("Trace contains changed message");
-                    } else {
-                        logger.info("Trace does not contain changed message");
-                    }
+                } else {
+                    logger.error("trace is null for cluster " + i);
+                    serializedTraces[i] = new Trace();
                 }
-            } else {
-                logger.error("trace is null");
+            }
+
+            if (Config.getConf().printTrace) {
+                for (int i = 0; i < serializedTraces.length; i++) {
+                    String clusterType = testPlanID2Setup.get(i);
+                    logger.info("=== Merged Trace " + i + " ("
+                            + clusterType + "), size="
+                            + serializedTraces[i].size() + " ===");
+                    int entryIdx = 0;
+                    for (TraceEntry entry : serializedTraces[i]
+                            .getTraceEntries()) {
+                        logger.info("[" + clusterType + "] entry["
+                                + entryIdx + "] " + entry);
+                        entryIdx++;
+                    }
+                    // Print hashcode sequence for Jaccard analysis
+                    logger.info("[" + clusterType
+                            + "] hashcode sequence: "
+                            + serializedTraces[i].getHashCodes());
+                }
             }
         }
 
-        if (Config.getConf().printTrace) {
-            for (int i = 0; i < serializedTraces.length; i++) {
-                logger.info("Serialized Trace " + i + ":");
-                serializedTraces[i].print();
+        // --- Branch coverage processing (from all 3 clusters) ---
+        // Old-Old (index 0, direction=0): originalCodeCoverage = old version
+        FeedBack fbOld = mergeCoverage(testPlanFeedbackPackets[0].feedBacks);
+        // Rolling (index 1, direction=0): original = old, upgraded = new
+        FeedBack fbRolling = mergeCoverage(
+                testPlanFeedbackPackets[1].feedBacks);
+        // New-New (index 2, direction=1): originalCodeCoverage = new version
+        // (swapped!)
+        FeedBack fbNew = mergeCoverage(testPlanFeedbackPackets[2].feedBacks);
+
+        boolean newOriBC = false;
+        boolean newUpgradeBC = false;
+
+        if (Config.getConf().useBranchCoverage) {
+            // Merge old version coverage into curOriCoverage
+            if (Utilities.hasNewBits(curOriCoverage,
+                    fbOld.originalCodeCoverage)) {
+                curOriCoverage.merge(fbOld.originalCodeCoverage);
+                newOriBC = true;
+            }
+            if (Utilities.hasNewBits(curOriCoverage,
+                    fbRolling.originalCodeCoverage)) {
+                curOriCoverage.merge(fbRolling.originalCodeCoverage);
+                newOriBC = true;
+            }
+            // Merge new version coverage into curUpCoverageAfterUpgrade
+            if (Utilities.hasNewBits(curUpCoverageAfterUpgrade,
+                    fbRolling.upgradedCodeCoverage)) {
+                curUpCoverageAfterUpgrade
+                        .merge(fbRolling.upgradedCodeCoverage);
+                newUpgradeBC = true;
+            }
+            if (Utilities.hasNewBits(curUpCoverageAfterUpgrade,
+                    fbNew.originalCodeCoverage)) {
+                curUpCoverageAfterUpgrade.merge(fbNew.originalCodeCoverage);
+                newUpgradeBC = true;
             }
         }
 
-        // Compute diff
-        if (Config.getConf().useEditDistance) {
+        // --- Jaccard similarity "interesting" check ---
+        boolean lowSimilarity = false;
+        if (Config.getConf().useJaccardSimilarity
+                && Config.getConf().useTrace) {
+            double[] jaccardSim = DiffComputeJaccardSimilarity.compute(
+                    serializedTraces[0], serializedTraces[1],
+                    serializedTraces[2]);
+            logger.info("Jaccard Similarity[0] = " + jaccardSim[0]
+                    + ", Jaccard Similarity[1] = " + jaccardSim[1]);
+
+            if (jaccardSim[0] < Config.getConf().jaccardSimilarityThreshold
+                    || jaccardSim[1] < Config
+                            .getConf().jaccardSimilarityThreshold) {
+                lowSimilarity = true;
+                logger.info(
+                        "Low Jaccard similarity detected — test is interesting");
+            }
+        }
+
+        if (Config.getConf().useEditDistance && Config.getConf().useTrace) {
             int[] diff = DiffComputeEditDistance.compute(serializedTraces[0],
                     serializedTraces[1], serializedTraces[2]);
-            assert diff.length == 2
-                    : "Diff length should be 2: (1) RU and Old and (2) RU and New";
             logger.info("Diff[0] = " + diff[0] + ", Diff[1] = " + diff[1]);
         }
 
-        if (Config.getConf().useJaccardSimilarity) {
-            double[] diff = DiffComputeJaccardSimilarity.compute(
-                    serializedTraces[0], serializedTraces[1],
-                    serializedTraces[2]);
-            assert diff.length == 2
-                    : "Diff length should be 2: (1) RU and Old and (2) RU and New";
-            logger.info("Jaccard Similarity[0] = " + diff[0]
-                    + ", Jaccard Similarity[1] = " + diff[1]);
+        // --- Corpus update ---
+        boolean addToCorpus = newOriBC || newUpgradeBC || lowSimilarity;
+        if (addToCorpus) {
+            TestPlan testPlan = testID2TestPlan
+                    .get(testPlanDiffFeedbackPacket.testPacketID);
+            if (testPlan != null) {
+                testPlanCorpus.addTestPlan(testPlan);
+                logger.info(
+                        "Added test plan to corpus (newOriBC=" + newOriBC
+                                + ", newUpgradeBC=" + newUpgradeBC
+                                + ", lowSimilarity=" + lowSimilarity + ")");
+            }
         }
+
+        // --- Bug detection ---
+        Path failureDir = null;
+        TestPlanFeedbackPacket rollingFb = testPlanFeedbackPackets[1];
+
+        // 1. Check if all 3 clusters failed with the same event failure
+        boolean allFailed = testPlanFeedbackPackets[0].isEventFailed
+                && testPlanFeedbackPackets[1].isEventFailed
+                && testPlanFeedbackPackets[2].isEventFailed;
+        if (allFailed) {
+            logger.info(
+                    "All 3 clusters failed — discarding (likely test issue, not upgrade bug)");
+        } else {
+            // 2. Rolling upgrade process crash (only rolling failed)
+            if (rollingFb.isEventFailed) {
+                failureDir = ensureFailureDir(failureDir,
+                        rollingFb.configFileName, rollingFb.fullSequence);
+                saveEventCrashReport(failureDir,
+                        testPlanDiffFeedbackPacket.testPacketID,
+                        "[Rolling] " + rollingFb.eventFailedReport);
+            }
+
+            // 3. Cross-cluster inconsistency
+            if (hasValidationResults(testPlanFeedbackPackets)) {
+                String crossClusterReport = checkCrossClusterInconsistency(
+                        testPlanFeedbackPackets);
+                if (crossClusterReport != null) {
+                    failureDir = ensureFailureDir(failureDir,
+                            rollingFb.configFileName, rollingFb.fullSequence);
+                    saveInconsistencyReport(failureDir,
+                            testPlanDiffFeedbackPacket.testPacketID,
+                            crossClusterReport);
+                }
+            }
+
+            // 4. Per-cluster inconsistency (existing oracle comparison)
+            for (int i = 0; i < 3; i++) {
+                if (testPlanFeedbackPackets[i].isInconsistent) {
+                    failureDir = ensureFailureDir(failureDir,
+                            rollingFb.configFileName, rollingFb.fullSequence);
+                    saveInconsistencyReport(failureDir,
+                            testPlanDiffFeedbackPacket.testPacketID,
+                            "[" + testPlanID2Setup.get(i) + "] "
+                                    + testPlanFeedbackPackets[i].inconsistencyReport);
+                }
+            }
+
+            // 5. ERROR logs from any cluster
+            for (int i = 0; i < 3; i++) {
+                if (testPlanFeedbackPackets[i].hasERRORLog) {
+                    failureDir = ensureFailureDir(failureDir,
+                            rollingFb.configFileName, rollingFb.fullSequence);
+                    saveErrorReport(failureDir,
+                            "[" + testPlanID2Setup.get(i) + "] "
+                                    + testPlanFeedbackPackets[i].errorLogReport,
+                            testPlanDiffFeedbackPacket.testPacketID);
+                }
+            }
+        }
+
+        // --- Cleanup and status update ---
+        testID2TestPlan.remove(testPlanDiffFeedbackPacket.testPacketID);
+        finishedTestID++;
+        printInfo();
+        System.out.println();
+    }
+
+    // Check cross-cluster inconsistency (compare validation results)
+    private String checkCrossClusterInconsistency(
+            TestPlanFeedbackPacket[] packets) {
+        List<String> oldResults = packets[0].validationReadResults;
+        List<String> rollingResults = packets[1].validationReadResults;
+        List<String> newResults = packets[2].validationReadResults;
+
+        if (oldResults == null || rollingResults == null
+                || newResults == null)
+            return null;
+        if (oldResults.isEmpty() && rollingResults.isEmpty()
+                && newResults.isEmpty())
+            return null;
+
+        // Check if rolling differs from both old-old and new-new
+        boolean rollingDiffersFromOld = !oldResults.equals(rollingResults);
+        boolean rollingDiffersFromNew = !newResults.equals(rollingResults);
+        boolean oldNewAgree = oldResults.equals(newResults);
+
+        if (rollingDiffersFromOld && rollingDiffersFromNew && oldNewAgree) {
+            // Rolling upgrade introduced behavioral divergence
+            StringBuilder sb = new StringBuilder();
+            sb.append("Cross-cluster inconsistency detected!\n");
+            sb.append(
+                    "Old-Old and New-New agree but Rolling differs.\n");
+            sb.append("Old-Old results: ").append(oldResults).append("\n");
+            sb.append("Rolling results: ").append(rollingResults)
+                    .append("\n");
+            sb.append("New-New results: ").append(newResults).append("\n");
+            return sb.toString();
+        }
+        return null;
+    }
+
+    // Helper to lazily create failure dir (reuses existing pattern)
+    private Path ensureFailureDir(Path failureDir, String configFileName,
+            String fullSequence) {
+        if (failureDir == null) {
+            return createFailureDirAndSaveFullSequence(configFileName,
+                    fullSequence);
+        }
+        return failureDir;
+    }
+
+    // Check if packets have validation results
+    private boolean hasValidationResults(
+            TestPlanFeedbackPacket[] packets) {
+        for (TestPlanFeedbackPacket p : packets) {
+            if (p.validationReadResults != null
+                    && !p.validationReadResults.isEmpty())
+                return true;
+        }
+        return false;
     }
 
     public Path createFailureDirAndSaveFullSequence(
@@ -2574,6 +2772,14 @@ public class FuzzingServer {
                     "ori BC downgrade : "
                             + oriCoveredBranchesAfterDowngrade + "/"
                             + oriProbeNumAfterDowngrade);
+        }
+
+        // Differential Execution Info
+        if (Config.getConf().differentialExecution) {
+            System.out.format("|%30s|%30s|\n",
+                    "Jaccard threshold : "
+                            + Config.getConf().jaccardSimilarityThreshold,
+                    "testPlanCorpus : " + testPlanCorpus.queue.size());
         }
 
         System.out.println(

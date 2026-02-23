@@ -7,11 +7,13 @@ plugins {
 group 'org.zlab'
 version '1.0-SNAPSHOT'
 
-// java {
-// 	toolchain {
-// 		languageVersion = JavaLanguageVersion.of(11)
-// 	}
-// }
+sourceCompatibility = '11'
+targetCompatibility = '11'
+
+tasks.withType(JavaCompile) {
+	options.fork = true
+	options.forkOptions.javaHome = file('/usr/lib/jvm/java-17-openjdk-amd64')
+}
 
 repositories {
 	mavenCentral()
@@ -44,6 +46,7 @@ dependencies {
 
 test {
 	useJUnitPlatform()
+	executable = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java'
 	testLogging {
 		showExceptions true
 		showStackTraces true

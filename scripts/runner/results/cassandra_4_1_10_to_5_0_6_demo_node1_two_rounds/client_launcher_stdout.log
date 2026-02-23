@@ -1,0 +1,198 @@
+using /home/shuai/xlab/rupfuzz/upfuzz-shuai/scripts/runner/results/cassandra_4_1_10_to_5_0_6_demo_node1_two_rounds/config.json
+CLIENT_NUM: 1
+[34m2026-02-22 16:31:29,591 [main] INFO  Main.java:main:86: start client
+[m[32m2026-02-22 16:31:29,703 [Thread-1] DEBUG TestPlanPacket.java:read:117: packet length: 1537
+[m[34m2026-02-22 16:31:29,712 [Thread-1] INFO  FuzzingClient.java:executeTestPlanPacketDifferential:1337: [Fuzzing Client] executeTestPlanPacketDifferential
+[m[34m2026-02-22 16:31:29,712 [Thread-1] INFO  FuzzingClient.java:executeTestPlanPacketDifferential:1345: [HKLOG] configPath = configtests/apache-cassandra-4.1.10_apache-cassandra-5.0.6/test3
+[m[32m2026-02-22 16:31:29,740 [pool-3-thread-2] DEBUG AgentServerSocket.java:<init>:25: Executor: BP5jjTRw  Client socket Server start at: /0.0.0.0:46019
+[m[32m2026-02-22 16:31:29,740 [pool-3-thread-1] DEBUG AgentServerSocket.java:<init>:25: Executor: AGxbPKSF  Client socket Server start at: /0.0.0.0:43357
+[m[32m2026-02-22 16:31:29,740 [pool-3-thread-3] DEBUG AgentServerSocket.java:<init>:25: Executor: AiWw5ZFV  Client socket Server start at: /0.0.0.0:42447
+[m[34m2026-02-22 16:31:29,753 [pool-3-thread-2] INFO  CassandraDockerCluster.java:build:60: apache-cassandra-4.1.10 -> apache-cassandra-5.0.6
+[m[34m2026-02-22 16:31:29,753 [pool-3-thread-3] INFO  CassandraDockerCluster.java:build:60: apache-cassandra-4.1.10 -> apache-cassandra-5.0.6
+[m[34m2026-02-22 16:31:29,753 [pool-3-thread-1] INFO  CassandraDockerCluster.java:build:60: apache-cassandra-4.1.10 -> apache-cassandra-5.0.6
+[m[34m2026-02-22 16:31:29,765 [pool-3-thread-2] INFO  CassandraExecutor.java:startup:90: Cassandra Start...
+[m[34m2026-02-22 16:31:29,765 [pool-3-thread-1] INFO  CassandraExecutor.java:startup:90: Cassandra Start...
+[m[34m2026-02-22 16:31:29,765 [pool-3-thread-3] INFO  CassandraExecutor.java:startup:90: Cassandra Start...
+[m[34m2026-02-22 16:31:30,666 [pool-3-thread-1] INFO  CassandraCqlshDaemon.java:<init>:56: [HKLOG] executor ID = AGxbPKSF  Connect to cqlsh:192.168.43.2...
+[m[32m2026-02-22 16:31:30,668 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AGxbPKSF  Connect to cqlsh:192.168.43.2...0
+[m[34m2026-02-22 16:31:30,675 [pool-3-thread-2] INFO  CassandraCqlshDaemon.java:<init>:56: [HKLOG] executor ID = BP5jjTRw  Connect to cqlsh:192.168.124.2...
+[m[32m2026-02-22 16:31:30,675 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = BP5jjTRw  Connect to cqlsh:192.168.124.2...0
+[m[34m2026-02-22 16:31:30,679 [pool-3-thread-3] INFO  CassandraCqlshDaemon.java:<init>:56: [HKLOG] executor ID = AiWw5ZFV  Connect to cqlsh:192.168.222.2...
+[m[32m2026-02-22 16:31:30,679 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AiWw5ZFV  Connect to cqlsh:192.168.222.2...0
+[m[32m2026-02-22 16:31:32,924 [Thread-8] DEBUG AgentServerHandler.java:register:141: Agent/192.168.124.2:50386 cassandra-BP5jjTRw_original-0-org.apache.cassandra.service.CassandraDaemon registered
+[m[32m2026-02-22 16:31:32,953 [Thread-9] DEBUG AgentServerHandler.java:register:141: Agent/192.168.43.2:54818 cassandra-AGxbPKSF_original-0-org.apache.cassandra.service.CassandraDaemon registered
+[m[32m2026-02-22 16:31:33,176 [Thread-10] DEBUG AgentServerHandler.java:register:141: Agent/192.168.222.2:41540 cassandra-AiWw5ZFV_upgraded-0-org.apache.cassandra.service.CassandraDaemon registered
+[m[32m2026-02-22 16:31:40,670 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AGxbPKSF  Connect to cqlsh:192.168.43.2...10
+[m[32m2026-02-22 16:31:40,677 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = BP5jjTRw  Connect to cqlsh:192.168.124.2...10
+[m[32m2026-02-22 16:31:40,681 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AiWw5ZFV  Connect to cqlsh:192.168.222.2...10
+[m[32m2026-02-22 16:31:51,147 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AiWw5ZFV  Connect to cqlsh:192.168.222.2...20
+[m[32m2026-02-22 16:31:51,148 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = BP5jjTRw  Connect to cqlsh:192.168.124.2...20
+[m[32m2026-02-22 16:31:51,149 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AGxbPKSF  Connect to cqlsh:192.168.43.2...20
+[m[32m2026-02-22 16:32:02,059 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AGxbPKSF  Connect to cqlsh:192.168.43.2...30
+[m[32m2026-02-22 16:32:02,059 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AiWw5ZFV  Connect to cqlsh:192.168.222.2...30
+[m[32m2026-02-22 16:32:02,063 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = BP5jjTRw  Connect to cqlsh:192.168.124.2...30
+[m[32m2026-02-22 16:32:12,973 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = BP5jjTRw  Connect to cqlsh:192.168.124.2...40
+[m[32m2026-02-22 16:32:12,973 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AiWw5ZFV  Connect to cqlsh:192.168.222.2...40
+[m[32m2026-02-22 16:32:12,974 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AGxbPKSF  Connect to cqlsh:192.168.43.2...40
+[m[32m2026-02-22 16:32:23,858 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AGxbPKSF  Connect to cqlsh:192.168.43.2...50
+[m[32m2026-02-22 16:32:23,864 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = BP5jjTRw  Connect to cqlsh:192.168.124.2...50
+[m[32m2026-02-22 16:32:23,865 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AiWw5ZFV  Connect to cqlsh:192.168.222.2...50
+[m[32m2026-02-22 16:32:34,723 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = BP5jjTRw  Connect to cqlsh:192.168.124.2...60
+[m[32m2026-02-22 16:32:34,725 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AGxbPKSF  Connect to cqlsh:192.168.43.2...60
+[m[32m2026-02-22 16:32:34,731 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AiWw5ZFV  Connect to cqlsh:192.168.222.2...60
+[m[32m2026-02-22 16:32:45,543 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AiWw5ZFV  Connect to cqlsh:192.168.222.2...70
+[m[34m2026-02-22 16:32:45,544 [pool-3-thread-3] INFO  CassandraCqlshDaemon.java:<init>:69: [HKLOG] executor ID = AiWw5ZFV  Cqlsh connected: 192.168.222.2
+[m[34m2026-02-22 16:32:45,545 [pool-3-thread-3] INFO  RegularTestPlanThread.java:call:182: [HKLOG] error log checking
+[m[32m2026-02-22 16:32:45,549 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AGxbPKSF  Connect to cqlsh:192.168.43.2...70
+[m[34m2026-02-22 16:32:45,549 [pool-3-thread-1] INFO  CassandraCqlshDaemon.java:<init>:69: [HKLOG] executor ID = AGxbPKSF  Cqlsh connected: 192.168.43.2
+[m[34m2026-02-22 16:32:45,550 [pool-3-thread-1] INFO  RegularTestPlanThread.java:call:182: [HKLOG] error log checking
+[m[32m2026-02-22 16:32:45,550 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = BP5jjTRw  Connect to cqlsh:192.168.124.2...70
+[m[34m2026-02-22 16:32:45,551 [pool-3-thread-2] INFO  CassandraCqlshDaemon.java:<init>:69: [HKLOG] executor ID = BP5jjTRw  Cqlsh connected: 192.168.124.2
+[m[34m2026-02-22 16:32:45,551 [pool-3-thread-2] INFO  RegularTestPlanThread.java:call:182: [HKLOG] error log checking
+[m[34m2026-02-22 16:32:45,764 [pool-3-thread-1] INFO  Executor.java:execute:215: 
+handle [Command] Execute {CONSISTENCY ALL;}
+
+[m[34m2026-02-22 16:32:45,776 [pool-3-thread-1] INFO  Executor.java:execute:215: 
+handle [Command] Execute {CREATE KEYSPACE distributed_test_keyspace WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 3 };}
+
+[m[34m2026-02-22 16:32:45,785 [pool-3-thread-3] INFO  Executor.java:execute:215: 
+handle [Command] Execute {CONSISTENCY ALL;}
+
+[m[34m2026-02-22 16:32:45,791 [pool-3-thread-2] INFO  Executor.java:execute:215: 
+handle [Command] Execute {CONSISTENCY ALL;}
+
+[m[34m2026-02-22 16:32:45,793 [pool-3-thread-3] INFO  Executor.java:execute:215: 
+handle [Command] Execute {CREATE KEYSPACE distributed_test_keyspace WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 3 };}
+
+[m[34m2026-02-22 16:32:45,798 [pool-3-thread-2] INFO  Executor.java:execute:215: 
+handle [Command] Execute {CREATE KEYSPACE distributed_test_keyspace WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 3 };}
+
+[m[34m2026-02-22 16:32:45,914 [pool-3-thread-1] INFO  Executor.java:execute:215: 
+handle [Command] Execute {CREATE TABLE distributed_test_keyspace.tbl (   k int,    c int,    s1 int static,    s2 set<int> static,    v1 int,    v2 set<int>,    PRIMARY KEY (k, c));}
+
+[m[34m2026-02-22 16:32:45,957 [pool-3-thread-2] INFO  Executor.java:execute:215: 
+handle [Command] Execute {CREATE TABLE distributed_test_keyspace.tbl (   k int,    c int,    s1 int static,    s2 set<int> static,    v1 int,    v2 set<int>,    PRIMARY KEY (k, c));}
+
+[m[34m2026-02-22 16:32:45,985 [pool-3-thread-3] INFO  Executor.java:execute:215: 
+handle [Command] Execute {CREATE TABLE distributed_test_keyspace.tbl (   k int,    c int,    s1 int static,    s2 set<int> static,    v1 int,    v2 set<int>,    PRIMARY KEY (k, c));}
+
+[m[34m2026-02-22 16:32:46,179 [pool-3-thread-1] INFO  Executor.java:execute:215: 
+handle [Command] Execute {INSERT INTO distributed_test_keyspace.tbl (k, c, s1, s2, v1, v2) VALUES (1, 1, 2, {1, 2, 3, 4, 5}, 3, {6, 7, 8, 9, 10});}
+
+[m[34m2026-02-22 16:32:46,251 [pool-3-thread-2] INFO  Executor.java:execute:215: 
+handle [Command] Execute {INSERT INTO distributed_test_keyspace.tbl (k, c, s1, s2, v1, v2) VALUES (1, 1, 2, {1, 2, 3, 4, 5}, 3, {6, 7, 8, 9, 10});}
+
+[m[34m2026-02-22 16:32:46,307 [pool-3-thread-3] INFO  Executor.java:execute:215: 
+handle [Command] Execute {INSERT INTO distributed_test_keyspace.tbl (k, c, s1, s2, v1, v2) VALUES (1, 1, 2, {1, 2, 3, 4, 5}, 3, {6, 7, 8, 9, 10});}
+
+[m[34m2026-02-22 16:32:46,336 [pool-3-thread-1] INFO  Executor.java:execute:215: 
+handle [Command] Execute {INSERT INTO distributed_test_keyspace.tbl (k, c, s1, s2, v1, v2) VALUES (1, 2, 3, {2, 3, 4, 5, 6}, 4, {7, 8, 9, 10, 11});}
+
+[m[34m2026-02-22 16:32:46,406 [pool-3-thread-2] INFO  Executor.java:execute:215: 
+handle [Command] Execute {INSERT INTO distributed_test_keyspace.tbl (k, c, s1, s2, v1, v2) VALUES (1, 2, 3, {2, 3, 4, 5, 6}, 4, {7, 8, 9, 10, 11});}
+
+[m[34m2026-02-22 16:32:46,460 [pool-3-thread-3] INFO  Executor.java:execute:215: 
+handle [Command] Execute {INSERT INTO distributed_test_keyspace.tbl (k, c, s1, s2, v1, v2) VALUES (1, 2, 3, {2, 3, 4, 5, 6}, 4, {7, 8, 9, 10, 11});}
+
+[m[34m2026-02-22 16:32:46,497 [pool-3-thread-1] INFO  Executor.java:execute:215: 
+handle [Fault] RestartFailure: Node[0]
+
+[m[34m2026-02-22 16:32:46,564 [pool-3-thread-2] INFO  Executor.java:execute:215: 
+handle [UpgradeOp] Upgrade Node[0]
+
+[m[34m2026-02-22 16:32:46,620 [pool-3-thread-3] INFO  Executor.java:execute:215: 
+handle [Fault] RestartFailure: Node[0]
+
+[m[34m2026-02-22 16:32:46,630 [pool-3-thread-1] INFO  DockerCluster.java:collectTrace:334: [HKLOG] collecting network traces for node 0
+[m[31m2026-02-22 16:32:46,631 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:338: Exception occur when collecting trace of docker  0, executorID = AGxbPKSF, exception = java.net.ConnectException: Connection refused
+[m[31m2026-02-22 16:32:46,631 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: java.base/sun.nio.ch.Net.connect0(Native Method)
+[m[31m2026-02-22 16:32:46,631 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: java.base/sun.nio.ch.Net.connect(Net.java:579)
+[m[31m2026-02-22 16:32:46,631 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: java.base/sun.nio.ch.Net.connect(Net.java:568)
+[m[31m2026-02-22 16:32:46,632 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:593)
+[m[31m2026-02-22 16:32:46,632 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:327)
+[m[31m2026-02-22 16:32:46,632 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: java.base/java.net.Socket.connect(Socket.java:633)
+[m[31m2026-02-22 16:32:46,632 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: java.base/java.net.Socket.connect(Socket.java:583)
+[m[31m2026-02-22 16:32:46,632 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: java.base/java.net.Socket.<init>(Socket.java:507)
+[m[31m2026-02-22 16:32:46,632 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: java.base/java.net.Socket.<init>(Socket.java:287)
+[m[31m2026-02-22 16:32:46,632 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.docker.Docker.collectTrace(Docker.java:74)
+[m[31m2026-02-22 16:32:46,632 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.docker.DockerCluster.collectTrace(DockerCluster.java:336)
+[m[31m2026-02-22 16:32:46,633 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.fuzzingengine.executor.Executor.collectTrace(Executor.java:131)
+[m[31m2026-02-22 16:32:46,633 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.fuzzingengine.executor.Executor.updateTrace(Executor.java:137)
+[m[31m2026-02-22 16:32:46,633 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.fuzzingengine.executor.Executor.handleFault(Executor.java:566)
+[m[31m2026-02-22 16:32:46,633 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.fuzzingengine.executor.Executor.execute(Executor.java:235)
+[m[31m2026-02-22 16:32:46,633 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.fuzzingengine.RegularTestPlanThread.call(RegularTestPlanThread.java:197)
+[m[31m2026-02-22 16:32:46,633 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.fuzzingengine.RegularTestPlanThread.call(RegularTestPlanThread.java:20)
+[m[31m2026-02-22 16:32:46,633 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+[m[31m2026-02-22 16:32:46,634 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+[m[31m2026-02-22 16:32:46,634 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+[m[31m2026-02-22 16:32:46,634 [pool-3-thread-1] ERROR DockerCluster.java:collectTrace:344: java.base/java.lang.Thread.run(Thread.java:840)
+[m[34m2026-02-22 16:32:46,728 [pool-3-thread-2] INFO  Executor.java:collectSingleNodeCoverage:444: [Executor] Invoked single node coverage collection
+[m[34m2026-02-22 16:32:46,729 [pool-3-thread-2] INFO  Executor.java:collectSingleNodeCoverage:455: collect conn cassandra-BP5jjTRw_original-0-org.apache.cassandra.service.CassandraDaemon
+[m[32m2026-02-22 16:32:46,729 [pool-3-thread-2] DEBUG AgentServerHandler.java:collect:211: collect coverage for cassandra-BP5jjTRw_original-0-org.apache.cassandra.service.CassandraDaemon...
+[m[34m2026-02-22 16:32:46,754 [pool-3-thread-3] INFO  DockerCluster.java:collectTrace:334: [HKLOG] collecting network traces for node 0
+[m[31m2026-02-22 16:32:46,754 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:338: Exception occur when collecting trace of docker  0, executorID = AiWw5ZFV, exception = java.net.ConnectException: Connection refused
+[m[31m2026-02-22 16:32:46,755 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: java.base/sun.nio.ch.Net.connect0(Native Method)
+[m[31m2026-02-22 16:32:46,755 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: java.base/sun.nio.ch.Net.connect(Net.java:579)
+[m[31m2026-02-22 16:32:46,755 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: java.base/sun.nio.ch.Net.connect(Net.java:568)
+[m[31m2026-02-22 16:32:46,755 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:593)
+[m[31m2026-02-22 16:32:46,755 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:327)
+[m[31m2026-02-22 16:32:46,755 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: java.base/java.net.Socket.connect(Socket.java:633)
+[m[31m2026-02-22 16:32:46,755 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: java.base/java.net.Socket.connect(Socket.java:583)
+[m[31m2026-02-22 16:32:46,755 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: java.base/java.net.Socket.<init>(Socket.java:507)
+[m[31m2026-02-22 16:32:46,756 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: java.base/java.net.Socket.<init>(Socket.java:287)
+[m[31m2026-02-22 16:32:46,756 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.docker.Docker.collectTrace(Docker.java:74)
+[m[31m2026-02-22 16:32:46,756 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.docker.DockerCluster.collectTrace(DockerCluster.java:336)
+[m[31m2026-02-22 16:32:46,756 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.fuzzingengine.executor.Executor.collectTrace(Executor.java:131)
+[m[31m2026-02-22 16:32:46,756 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.fuzzingengine.executor.Executor.updateTrace(Executor.java:137)
+[m[31m2026-02-22 16:32:46,756 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.fuzzingengine.executor.Executor.handleFault(Executor.java:566)
+[m[31m2026-02-22 16:32:46,756 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.fuzzingengine.executor.Executor.execute(Executor.java:235)
+[m[31m2026-02-22 16:32:46,756 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.fuzzingengine.RegularTestPlanThread.call(RegularTestPlanThread.java:197)
+[m[31m2026-02-22 16:32:46,756 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.fuzzingengine.RegularTestPlanThread.call(RegularTestPlanThread.java:20)
+[m[31m2026-02-22 16:32:46,757 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+[m[31m2026-02-22 16:32:46,757 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+[m[31m2026-02-22 16:32:46,757 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+[m[31m2026-02-22 16:32:46,757 [pool-3-thread-3] ERROR DockerCluster.java:collectTrace:344: java.base/java.lang.Thread.run(Thread.java:840)
+[m[34m2026-02-22 16:32:46,996 [pool-3-thread-2] INFO  DockerCluster.java:collectTrace:334: [HKLOG] collecting network traces for node 0
+[m[31m2026-02-22 16:32:46,997 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:338: Exception occur when collecting trace of docker  0, executorID = BP5jjTRw, exception = java.net.ConnectException: Connection refused
+[m[31m2026-02-22 16:32:46,997 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: java.base/sun.nio.ch.Net.connect0(Native Method)
+[m[31m2026-02-22 16:32:46,997 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: java.base/sun.nio.ch.Net.connect(Net.java:579)
+[m[31m2026-02-22 16:32:46,997 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: java.base/sun.nio.ch.Net.connect(Net.java:568)
+[m[31m2026-02-22 16:32:46,998 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:593)
+[m[31m2026-02-22 16:32:46,998 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:327)
+[m[31m2026-02-22 16:32:46,998 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: java.base/java.net.Socket.connect(Socket.java:633)
+[m[31m2026-02-22 16:32:46,998 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: java.base/java.net.Socket.connect(Socket.java:583)
+[m[31m2026-02-22 16:32:46,999 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: java.base/java.net.Socket.<init>(Socket.java:507)
+[m[31m2026-02-22 16:32:46,999 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: java.base/java.net.Socket.<init>(Socket.java:287)
+[m[31m2026-02-22 16:32:46,999 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.docker.Docker.collectTrace(Docker.java:74)
+[m[31m2026-02-22 16:32:46,999 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.docker.DockerCluster.collectTrace(DockerCluster.java:336)
+[m[31m2026-02-22 16:32:47,000 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.fuzzingengine.executor.Executor.collectTrace(Executor.java:131)
+[m[31m2026-02-22 16:32:47,000 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.fuzzingengine.executor.Executor.updateTrace(Executor.java:137)
+[m[31m2026-02-22 16:32:47,000 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.fuzzingengine.executor.Executor.execute(Executor.java:286)
+[m[31m2026-02-22 16:32:47,000 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.fuzzingengine.RegularTestPlanThread.call(RegularTestPlanThread.java:197)
+[m[31m2026-02-22 16:32:47,000 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: org.zlab.upfuzz.fuzzingengine.RegularTestPlanThread.call(RegularTestPlanThread.java:20)
+[m[31m2026-02-22 16:32:47,001 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+[m[31m2026-02-22 16:32:47,001 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+[m[31m2026-02-22 16:32:47,001 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+[m[31m2026-02-22 16:32:47,001 [pool-3-thread-2] ERROR DockerCluster.java:collectTrace:344: java.base/java.lang.Thread.run(Thread.java:840)
+[m[34m2026-02-22 16:32:47,001 [pool-3-thread-2] INFO  DockerCluster.java:upgrade:442: Upgrade Node[0]
+[m[32m2026-02-22 16:32:47,361 [pool-3-thread-2] DEBUG CassandraDocker.java:shutdown:350: cassandra shutdown ret = 1
+[m[32m2026-02-22 16:32:54,000 [pool-3-thread-2] DEBUG CassandraDocker.java:upgrade:247: upgrade version start: 0
+upfuzz_cassandra:cqlsh: stoppedupfuzz_cassandra:cassandra: stoppedupfuzz_cassandra:cassandra: startedupfuzz_cassandra:cqlsh: started
+[m[34m2026-02-22 16:32:54,000 [pool-3-thread-2] INFO  CassandraCqlshDaemon.java:<init>:56: [HKLOG] executor ID = BP5jjTRw  Connect to cqlsh:192.168.124.2...
+[m[32m2026-02-22 16:32:54,000 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = BP5jjTRw  Connect to cqlsh:192.168.124.2...0
+[m[32m2026-02-22 16:32:54,089 [Thread-12] DEBUG AgentServerHandler.java:register:141: Agent/192.168.124.2:39884 cassandra-BP5jjTRw_upgraded-0-org.apache.cassandra.service.CassandraDaemon registered
+[m[34m2026-02-22 16:32:54,150 [pool-3-thread-1] INFO  CassandraCqlshDaemon.java:<init>:56: [HKLOG] executor ID = AGxbPKSF  Connect to cqlsh:192.168.43.2...
+[m[32m2026-02-22 16:32:54,150 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AGxbPKSF  Connect to cqlsh:192.168.43.2...0
+[m[34m2026-02-22 16:32:55,408 [pool-3-thread-3] INFO  CassandraCqlshDaemon.java:<init>:56: [HKLOG] executor ID = AiWw5ZFV  Connect to cqlsh:192.168.222.2...
+[m[32m2026-02-22 16:32:55,408 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AiWw5ZFV  Connect to cqlsh:192.168.222.2...0
+[m[32m2026-02-22 16:32:55,904 [Thread-14] DEBUG AgentServerHandler.java:register:141: Agent/192.168.43.2:56968 cassandra-AGxbPKSF_original-0-org.apache.cassandra.service.CassandraDaemon registered
+[m[32m2026-02-22 16:33:02,247 [Thread-17] DEBUG AgentServerHandler.java:register:141: Agent/192.168.222.2:56020 cassandra-AiWw5ZFV_upgraded-0-org.apache.cassandra.service.CassandraDaemon registered
+[m[32m2026-02-22 16:33:04,821 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = BP5jjTRw  Connect to cqlsh:192.168.124.2...10
+[m[32m2026-02-22 16:33:04,946 [Thread-19] DEBUG AgentServerHandler.java:register:141: Agent/192.168.124.2:53580 cassandra-BP5jjTRw_upgraded-0-org.apache.cassandra.service.CassandraDaemon registered
+[m[32m2026-02-22 16:33:05,034 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AGxbPKSF  Connect to cqlsh:192.168.43.2...10
+[m[32m2026-02-22 16:33:07,038 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AiWw5ZFV  Connect to cqlsh:192.168.222.2...10
+[m[32m2026-02-22 16:33:08,587 [Thread-21] DEBUG AgentServerHandler.java:register:141: Agent/192.168.222.2:37502 cassandra-AiWw5ZFV_upgraded-0-org.apache.cassandra.service.CassandraDaemon registered
+[m[32m2026-02-22 16:33:17,240 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = BP5jjTRw  Connect to cqlsh:192.168.124.2...20
+[m[32m2026-02-22 16:33:17,357 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AGxbPKSF  Connect to cqlsh:192.168.43.2...20
+[m[32m2026-02-22 16:33:17,528 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = AiWw5ZFV  Connect to cqlsh:192.168.222.2...20
+[m

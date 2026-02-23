@@ -1,0 +1,70 @@
+using /home/shuai/xlab/rupfuzz/upfuzz-shuai/scripts/runner/results/cassandra_4_1_10_to_5_0_6_demo_node1_retry60_two_rounds/config.json
+CLIENT_NUM: 1
+[34m2026-02-22 16:33:57,843 [main] INFO  Main.java:main:86: start client
+[m[32m2026-02-22 16:33:57,960 [Thread-1] DEBUG TestPlanPacket.java:read:117: packet length: 1537
+[m[34m2026-02-22 16:33:57,968 [Thread-1] INFO  FuzzingClient.java:executeTestPlanPacketDifferential:1337: [Fuzzing Client] executeTestPlanPacketDifferential
+[m[34m2026-02-22 16:33:57,969 [Thread-1] INFO  FuzzingClient.java:executeTestPlanPacketDifferential:1345: [HKLOG] configPath = configtests/apache-cassandra-4.1.10_apache-cassandra-5.0.6/test4
+[m[32m2026-02-22 16:33:57,996 [pool-3-thread-3] DEBUG AgentServerSocket.java:<init>:25: Executor: q19KFcMm  Client socket Server start at: /0.0.0.0:43129
+[m[32m2026-02-22 16:33:57,996 [pool-3-thread-1] DEBUG AgentServerSocket.java:<init>:25: Executor: YsJQq5ch  Client socket Server start at: /0.0.0.0:35841
+[m[32m2026-02-22 16:33:57,996 [pool-3-thread-2] DEBUG AgentServerSocket.java:<init>:25: Executor: ehfrI348  Client socket Server start at: /0.0.0.0:32823
+[m[34m2026-02-22 16:33:58,009 [pool-3-thread-1] INFO  CassandraDockerCluster.java:build:60: apache-cassandra-4.1.10 -> apache-cassandra-5.0.6
+[m[34m2026-02-22 16:33:58,009 [pool-3-thread-3] INFO  CassandraDockerCluster.java:build:60: apache-cassandra-4.1.10 -> apache-cassandra-5.0.6
+[m[34m2026-02-22 16:33:58,009 [pool-3-thread-2] INFO  CassandraDockerCluster.java:build:60: apache-cassandra-4.1.10 -> apache-cassandra-5.0.6
+[m[34m2026-02-22 16:33:58,022 [pool-3-thread-1] INFO  CassandraExecutor.java:startup:90: Cassandra Start...
+[m[34m2026-02-22 16:33:58,022 [pool-3-thread-2] INFO  CassandraExecutor.java:startup:90: Cassandra Start...
+[m[34m2026-02-22 16:33:58,022 [pool-3-thread-3] INFO  CassandraExecutor.java:startup:90: Cassandra Start...
+[m[34m2026-02-22 16:33:58,831 [pool-3-thread-1] INFO  CassandraCqlshDaemon.java:<init>:56: [HKLOG] executor ID = YsJQq5ch  Connect to cqlsh:192.168.78.2...
+[m[34m2026-02-22 16:33:58,831 [pool-3-thread-3] INFO  CassandraCqlshDaemon.java:<init>:56: [HKLOG] executor ID = q19KFcMm  Connect to cqlsh:192.168.192.2...
+[m[34m2026-02-22 16:33:58,831 [pool-3-thread-2] INFO  CassandraCqlshDaemon.java:<init>:56: [HKLOG] executor ID = ehfrI348  Connect to cqlsh:192.168.29.2...
+[m[32m2026-02-22 16:33:58,834 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = ehfrI348  Connect to cqlsh:192.168.29.2...0
+[m[32m2026-02-22 16:33:58,834 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = YsJQq5ch  Connect to cqlsh:192.168.78.2...0
+[m[32m2026-02-22 16:33:58,834 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = q19KFcMm  Connect to cqlsh:192.168.192.2...0
+[m[32m2026-02-22 16:34:01,022 [Thread-8] DEBUG AgentServerHandler.java:register:141: Agent/192.168.29.2:50716 cassandra-ehfrI348_original-0-org.apache.cassandra.service.CassandraDaemon registered
+[m[32m2026-02-22 16:34:01,041 [Thread-9] DEBUG AgentServerHandler.java:register:141: Agent/192.168.78.2:36534 cassandra-YsJQq5ch_original-0-org.apache.cassandra.service.CassandraDaemon registered
+[m[32m2026-02-22 16:34:01,345 [Thread-10] DEBUG AgentServerHandler.java:register:141: Agent/192.168.192.2:59322 cassandra-q19KFcMm_upgraded-0-org.apache.cassandra.service.CassandraDaemon registered
+[m[32m2026-02-22 16:34:08,836 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = q19KFcMm  Connect to cqlsh:192.168.192.2...10
+[m[32m2026-02-22 16:34:08,836 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = YsJQq5ch  Connect to cqlsh:192.168.78.2...10
+[m[32m2026-02-22 16:34:08,836 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = ehfrI348  Connect to cqlsh:192.168.29.2...10
+[m[32m2026-02-22 16:34:19,307 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = q19KFcMm  Connect to cqlsh:192.168.192.2...20
+[m[32m2026-02-22 16:34:19,307 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = ehfrI348  Connect to cqlsh:192.168.29.2...20
+[m[32m2026-02-22 16:34:19,311 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = YsJQq5ch  Connect to cqlsh:192.168.78.2...20
+[m[32m2026-02-22 16:34:30,173 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = q19KFcMm  Connect to cqlsh:192.168.192.2...30
+[m[32m2026-02-22 16:34:30,173 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = ehfrI348  Connect to cqlsh:192.168.29.2...30
+[m[32m2026-02-22 16:34:30,175 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = YsJQq5ch  Connect to cqlsh:192.168.78.2...30
+[m[32m2026-02-22 16:34:41,039 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = q19KFcMm  Connect to cqlsh:192.168.192.2...40
+[m[32m2026-02-22 16:34:41,045 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = ehfrI348  Connect to cqlsh:192.168.29.2...40
+[m[32m2026-02-22 16:34:41,047 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = YsJQq5ch  Connect to cqlsh:192.168.78.2...40
+[m[32m2026-02-22 16:34:51,873 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = ehfrI348  Connect to cqlsh:192.168.29.2...50
+[m[32m2026-02-22 16:34:51,874 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = q19KFcMm  Connect to cqlsh:192.168.192.2...50
+[m[32m2026-02-22 16:34:51,874 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = YsJQq5ch  Connect to cqlsh:192.168.78.2...50
+[m[31m2026-02-22 16:35:02,723 [pool-3-thread-1] ERROR DockerCluster.java:start:247: docker[0] cannot start up with exception java.lang.RuntimeException: [HKLOG] executor ID = YsJQq5ch  cannot connect to cqlsh at 192.168.78.2
+[m[31m2026-02-22 16:35:02,723 [pool-3-thread-3] ERROR DockerCluster.java:start:247: docker[0] cannot start up with exception java.lang.RuntimeException: [HKLOG] executor ID = q19KFcMm  cannot connect to cqlsh at 192.168.192.2
+[m[31m2026-02-22 16:35:02,726 [pool-3-thread-3] ERROR CassandraExecutor.java:startup:96: cassandra q19KFcMm failed to started
+[m[31m2026-02-22 16:35:02,726 [pool-3-thread-1] ERROR CassandraExecutor.java:startup:96: cassandra YsJQq5ch failed to started
+[m[31m2026-02-22 16:35:02,726 [pool-3-thread-2] ERROR DockerCluster.java:start:247: docker[0] cannot start up with exception java.lang.RuntimeException: [HKLOG] executor ID = ehfrI348  cannot connect to cqlsh at 192.168.29.2
+[m[31m2026-02-22 16:35:02,726 [pool-3-thread-2] ERROR CassandraExecutor.java:startup:96: cassandra ehfrI348 failed to started
+[m[32m2026-02-22 16:35:10,127 [pool-3-thread-2] DEBUG AgentServerSocket.java:<init>:25: Executor: ehfrI348  Client socket Server start at: /0.0.0.0:39635
+[m[34m2026-02-22 16:35:10,128 [pool-3-thread-2] INFO  CassandraDockerCluster.java:build:60: apache-cassandra-4.1.10 -> apache-cassandra-5.0.6
+[m[34m2026-02-22 16:35:10,129 [pool-3-thread-2] INFO  CassandraExecutor.java:startup:90: Cassandra Start...
+[m[32m2026-02-22 16:35:10,259 [pool-3-thread-1] DEBUG AgentServerSocket.java:<init>:25: Executor: YsJQq5ch  Client socket Server start at: /0.0.0.0:41115
+[m[34m2026-02-22 16:35:10,261 [pool-3-thread-1] INFO  CassandraDockerCluster.java:build:60: apache-cassandra-4.1.10 -> apache-cassandra-5.0.6
+[m[34m2026-02-22 16:35:10,262 [pool-3-thread-1] INFO  CassandraExecutor.java:startup:90: Cassandra Start...
+[m[32m2026-02-22 16:35:10,717 [pool-3-thread-3] DEBUG AgentServerSocket.java:<init>:25: Executor: q19KFcMm  Client socket Server start at: /0.0.0.0:42393
+[m[34m2026-02-22 16:35:10,718 [pool-3-thread-3] INFO  CassandraDockerCluster.java:build:60: apache-cassandra-4.1.10 -> apache-cassandra-5.0.6
+[m[34m2026-02-22 16:35:10,719 [pool-3-thread-3] INFO  CassandraExecutor.java:startup:90: Cassandra Start...
+[m[34m2026-02-22 16:35:10,752 [pool-3-thread-2] INFO  CassandraCqlshDaemon.java:<init>:56: [HKLOG] executor ID = ehfrI348  Connect to cqlsh:192.168.110.2...
+[m[32m2026-02-22 16:35:10,752 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = ehfrI348  Connect to cqlsh:192.168.110.2...0
+[m[34m2026-02-22 16:35:10,952 [pool-3-thread-1] INFO  CassandraCqlshDaemon.java:<init>:56: [HKLOG] executor ID = YsJQq5ch  Connect to cqlsh:192.168.200.2...
+[m[32m2026-02-22 16:35:10,952 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = YsJQq5ch  Connect to cqlsh:192.168.200.2...0
+[m[34m2026-02-22 16:35:11,130 [pool-3-thread-3] INFO  CassandraCqlshDaemon.java:<init>:56: [HKLOG] executor ID = q19KFcMm  Connect to cqlsh:192.168.6.2...
+[m[32m2026-02-22 16:35:11,130 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = q19KFcMm  Connect to cqlsh:192.168.6.2...0
+[m[32m2026-02-22 16:35:12,383 [Thread-17] DEBUG AgentServerHandler.java:register:141: Agent/192.168.110.2:58234 cassandra-ehfrI348_original-0-org.apache.cassandra.service.CassandraDaemon registered
+[m[32m2026-02-22 16:35:12,659 [Thread-18] DEBUG AgentServerHandler.java:register:141: Agent/192.168.200.2:32988 cassandra-YsJQq5ch_original-0-org.apache.cassandra.service.CassandraDaemon registered
+[m[32m2026-02-22 16:35:13,504 [Thread-19] DEBUG AgentServerHandler.java:register:141: Agent/192.168.6.2:46386 cassandra-q19KFcMm_upgraded-0-org.apache.cassandra.service.CassandraDaemon registered
+[m[32m2026-02-22 16:35:20,754 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = ehfrI348  Connect to cqlsh:192.168.110.2...10
+[m[32m2026-02-22 16:35:20,961 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = YsJQq5ch  Connect to cqlsh:192.168.200.2...10
+[m[32m2026-02-22 16:35:21,132 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = q19KFcMm  Connect to cqlsh:192.168.6.2...10
+[m[32m2026-02-22 16:35:31,188 [pool-3-thread-3] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = q19KFcMm  Connect to cqlsh:192.168.6.2...20
+[m[32m2026-02-22 16:35:33,821 [pool-3-thread-2] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = ehfrI348  Connect to cqlsh:192.168.110.2...20
+[m[32m2026-02-22 16:35:34,018 [pool-3-thread-1] DEBUG CassandraCqlshDaemon.java:<init>:63: [HKLOG] executor ID = YsJQq5ch  Connect to cqlsh:192.168.200.2...20
+[m

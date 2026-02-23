@@ -20,7 +20,10 @@ RUN apt install apt-transport-https ca-certificates
 # multiple processes. 
 # Remember to open port 22 for sshd.
 #RUN apt-get update && apt-get install -y --allow-unauthenticated openssh-server supervisor
-RUN apt-get update && apt-get install -y openssh-server iproute2 net-tools iputils-ping supervisor vim ant maven python python3 python3-pip python-six psmisc
+RUN apt-get update && apt-get install -y \
+    openssh-server iproute2 net-tools iputils-ping supervisor vim ant maven \
+    python python3 python3-pip python-six psmisc \
+    openjdk-11-jdk openjdk-17-jdk
 
 RUN pip3 install six wcwidth
 RUN apt-get install iptables -y

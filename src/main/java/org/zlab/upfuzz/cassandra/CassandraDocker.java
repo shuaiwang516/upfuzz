@@ -24,6 +24,10 @@ public class CassandraDocker extends Docker {
     int cqlshDaemonPort = 18250;
     public int direction;
 
+    // Un-swapped versions for Docker image/container naming
+    String configOriginalVersion;
+    String configUpgradedVersion;
+
     public String seedIP;
 
     public CassandraDocker(CassandraDockerCluster dockerCluster, int index) {
@@ -48,14 +52,19 @@ public class CassandraDocker extends Docker {
         executorID = dockerCluster.executorID;
         serviceName = "DC3N" + index;
 
+        // Store un-swapped config versions for image/container naming
+        configOriginalVersion = Config.getConf().originalVersion;
+        configUpgradedVersion = Config.getConf().upgradedVersion;
+
         collectFormatCoverage = dockerCluster.collectFormatCoverage;
         configPath = dockerCluster.configpath;
         if (Config.getConf().testSingleVersion)
-            containerName = "cassandra-" + originalVersion + "_" + executorID
-                    + "_N" + index;
+            containerName = "cassandra-" + configOriginalVersion + "_"
+                    + executorID + "_N" + index;
         else
-            containerName = "cassandra-" + originalVersion + "_"
-                    + upgradedVersion + "_" + executorID + "_N" + index;
+            containerName = "cassandra-" + configOriginalVersion + "_"
+                    + configUpgradedVersion + "_" + executorID + "_N"
+                    + index;
     }
 
     @Override
@@ -71,6 +80,8 @@ public class CassandraDocker extends Docker {
         formatMap.put("system", system);
         formatMap.put("originalVersion", originalVersion);
         formatMap.put("upgradedVersion", upgradedVersion);
+        formatMap.put("configOriginalVersion", configOriginalVersion);
+        formatMap.put("configUpgradedVersion", configUpgradedVersion);
         formatMap.put("index", Integer.toString(index));
         formatMap.put("networkName", networkName);
         formatMap.put("JAVA_TOOL_OPTIONS", javaToolOpts);
@@ -128,8 +139,13 @@ public class CassandraDocker extends Docker {
             }
             if (main_version > 3 && !version.equals("4.0.0"))
                 pythonVersion = "python3";
-            if (main_version >= 5)
+            if (main_version >= 5) {
+                // Cassandra 5.x classes are compiled with Java 17.
+                jdkPath = "/usr/lib/jvm/java-17-openjdk-amd64";
+            } else if (main_version >= 4) {
+                // Cassandra 4.x classes are compiled with Java 11.
                 jdkPath = "/usr/lib/jvm/java-11-openjdk-amd64";
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -362,8 +378,8 @@ public class CassandraDocker extends Docker {
 
     static String singleVersionTemplate = ""
             + "    ${serviceName}:\n"
-            + "        container_name: cassandra-${originalVersion}_${executorID}_N${index}\n"
-            + "        image: upfuzz_${system}:${originalVersion}\n"
+            + "        container_name: cassandra-${configOriginalVersion}_${executorID}_N${index}\n"
+            + "        image: upfuzz_${system}:${configOriginalVersion}\n"
             + "        command: bash -c 'sleep 0 && /usr/bin/supervisord'\n"
             + "        networks:\n"
             + "            ${networkName}:\n"
@@ -396,8 +412,8 @@ public class CassandraDocker extends Docker {
 
     static String template = ""
             + "    ${serviceName}:\n"
-            + "        container_name: cassandra-${originalVersion}_${upgradedVersion}_${executorID}_N${index}\n"
-            + "        image: upfuzz_${system}:${originalVersion}_${upgradedVersion}\n"
+            + "        container_name: cassandra-${configOriginalVersion}_${configUpgradedVersion}_${executorID}_N${index}\n"
+            + "        image: upfuzz_${system}:${configOriginalVersion}_${configUpgradedVersion}\n"
             + "        command: bash -c 'sleep 0 && /usr/bin/supervisord'\n"
             + "        networks:\n"
             + "            ${networkName}:\n"

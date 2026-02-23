@@ -1,0 +1,24 @@
+run_name: cassandra_4_1_10_to_5_0_6_demo_node1_notrace_two_rounds
+system: cassandra
+original_version: apache-cassandra-4.1.10
+upgraded_version: apache-cassandra-5.0.6
+image_tag: upfuzz_cassandra:apache-cassandra-4.1.10_apache-cassandra-5.0.6
+config_path: /home/shuai/xlab/rupfuzz/upfuzz-shuai/scripts/runner/results/cassandra_4_1_10_to_5_0_6_demo_node1_notrace_two_rounds/config.json
+start_time: 2026-02-22 16:40:35
+end_time: 2026-02-22 16:53:55
+duration_sec: 800
+target_rounds: 2
+observed_rounds: 2
+diff_feedback_packets: 2
+stop_reason: target_rounds_reached
+clients: 1
+node_num: 1
+testing_mode: 3
+differential_execution: true
+server_port: 7399
+client_port: 7400
+new_failure_dirs: 2
+server_stdout: /home/shuai/xlab/rupfuzz/upfuzz-shuai/scripts/runner/results/cassandra_4_1_10_to_5_0_6_demo_node1_notrace_two_rounds/server_stdout.log
+client_launcher_stdout: /home/shuai/xlab/rupfuzz/upfuzz-shuai/scripts/runner/results/cassandra_4_1_10_to_5_0_6_demo_node1_notrace_two_rounds/client_launcher_stdout.log
+server_log_copy: /home/shuai/xlab/rupfuzz/upfuzz-shuai/scripts/runner/results/cassandra_4_1_10_to_5_0_6_demo_node1_notrace_two_rounds/upfuzz_server.log
+client_log_copy: /home/shuai/xlab/rupfuzz/upfuzz-shuai/scripts/runner/results/cassandra_4_1_10_to_5_0_6_demo_node1_notrace_two_rounds/upfuzz_client_1.log
