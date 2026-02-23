@@ -18,6 +18,7 @@ USE_TRACE=true
 USE_JACCARD=true
 USE_BRANCH_COVERAGE=true
 ENABLE_LOG_CHECK=true
+REQUIRE_TRACE_SIGNAL=false
 CASSANDRA_RETRY_TIMEOUT=300
 NODE_NUM=""
 SERVER_PORT=7399
@@ -43,6 +44,7 @@ Options:
   --use-jaccard <true|false>             Enable Jaccard similarity (default: ${USE_JACCARD})
   --use-branch-coverage <true|false>     Enable branch coverage signals (default: ${USE_BRANCH_COVERAGE})
   --enable-log-check <true|false>        Enable error-log oracle (default: ${ENABLE_LOG_CHECK})
+  --require-trace-signal                 Fail if trace signal is missing when --use-trace=true
   --server-port <port>                   Server port (default: ${SERVER_PORT}, auto-shift if busy)
   --client-port <port>                   Client port (default: ${CLIENT_PORT}, auto-shift if busy)
   --node-num <N>                         Override node number (default by system: cass=2,hdfs=3,hbase=2)
@@ -95,6 +97,34 @@ pick_free_port_from() {
 
 sanitize_name() {
     echo "$1" | sed 's/[^a-zA-Z0-9._-]/_/g'
+}
+
+safe_rg_count_file() {
+    local pattern="$1"
+    local logfile="$2"
+    if [[ ! -f "${logfile}" ]]; then
+        echo 0
+        return
+    fi
+    local cnt
+    cnt="$(rg -c --no-filename "${pattern}" "${logfile}" 2>/dev/null || true)"
+    if [[ -z "${cnt}" ]]; then
+        cnt=0
+    fi
+    echo "${cnt}"
+}
+
+count_pattern_in_clients() {
+    local pattern="$1"
+    local total=0
+    local i
+    for i in $(seq 1 "${CLIENTS}"); do
+        local logfile="${CLIENT_LOG_PREFIX}_${i}.log"
+        local cnt
+        cnt="$(safe_rg_count_file "${pattern}" "${logfile}")"
+        total=$((total + cnt))
+    done
+    echo "${total}"
 }
 
 extract_total_exec() {
@@ -341,6 +371,10 @@ while [[ $# -gt 0 ]]; do
             ENABLE_LOG_CHECK="$2"
             shift 2
             ;;
+        --require-trace-signal)
+            REQUIRE_TRACE_SIGNAL=true
+            shift 1
+            ;;
         --server-port)
             SERVER_PORT="$2"
             shift 2
@@ -420,6 +454,10 @@ if [[ "${SYSTEM}" == "hbase" ]]; then
     fi
 fi
 
+if [[ "${USE_TRACE}" == true && "${SYSTEM}" == "cassandra" && "${NODE_NUM}" -lt 2 ]]; then
+    log "WARNING: Cassandra use-trace with node-num=${NODE_NUM} can miss inter-node traffic. Prefer --node-num 2+ for trace verification."
+fi
+
 RUN_TS="$(date '+%Y%m%d_%H%M%S')"
 if [[ -z "${RUN_NAME}" ]]; then
     RUN_NAME="${SYSTEM}_${ORIGINAL_VERSION}_to_${UPGRADED_VERSION}_${RUN_TS}"
@@ -467,6 +505,7 @@ CLIENT_PORT=${CLIENT_PORT}
 NODE_NUM=${NODE_NUM}
 RUN_NAME=${RUN_NAME}
 RUN_DIR=${RUN_DIR}
+REQUIRE_TRACE_SIGNAL=${REQUIRE_TRACE_SIGNAL}
 META
 
 if [[ "${SKIP_PRE_CLEAN}" == false ]]; then
@@ -599,6 +638,24 @@ done < "${RUN_DIR}/failure_new_dirs.txt"
 
 new_failure_count="$(wc -l < "${RUN_DIR}/failure_new_dirs.txt" | tr -d ' ')"
 
+TRACE_CONNECT_REFUSED_COUNT=0
+TRACE_RECEIVED_COUNT=0
+TRACE_LEN_POSITIVE_COUNT=0
+TRACE_LEN_ZERO_COUNT=0
+TRACE_SIGNAL_OK="n/a"
+
+if [[ "${USE_TRACE}" == true ]]; then
+    TRACE_CONNECT_REFUSED_COUNT="$(count_pattern_in_clients 'Connection refused')"
+    TRACE_RECEIVED_COUNT="$(count_pattern_in_clients 'Received trace = ')"
+    TRACE_LEN_POSITIVE_COUNT="$(safe_rg_count_file 'trace\[[0-9]+\] len = [1-9][0-9]*' "${SERVER_LOG}")"
+    TRACE_LEN_ZERO_COUNT="$(safe_rg_count_file 'trace\[[0-9]+\] len = 0' "${SERVER_LOG}")"
+    if (( TRACE_RECEIVED_COUNT > 0 || TRACE_LEN_POSITIVE_COUNT > 0 )); then
+        TRACE_SIGNAL_OK=true
+    else
+        TRACE_SIGNAL_OK=false
+    fi
+fi
+
 cat > "${SUMMARY_PATH}" <<SUMMARY
 run_name: ${RUN_NAME}
 system: ${SYSTEM}
@@ -620,6 +677,13 @@ differential_execution: ${USE_DIFF}
 server_port: ${SERVER_PORT}
 client_port: ${CLIENT_PORT}
 new_failure_dirs: ${new_failure_count}
+trace_enabled: ${USE_TRACE}
+trace_signal_ok: ${TRACE_SIGNAL_OK}
+trace_connect_refused_count: ${TRACE_CONNECT_REFUSED_COUNT}
+trace_received_count: ${TRACE_RECEIVED_COUNT}
+trace_len_positive_count: ${TRACE_LEN_POSITIVE_COUNT}
+trace_len_zero_count: ${TRACE_LEN_ZERO_COUNT}
+require_trace_signal: ${REQUIRE_TRACE_SIGNAL}
 server_stdout: ${SERVER_STDOUT}
 client_launcher_stdout: ${CLIENT_LAUNCHER_STDOUT}
 server_log_copy: ${RUN_DIR}/upfuzz_server.log
@@ -631,6 +695,17 @@ log "Run completed. Summary: ${SUMMARY_PATH}"
 if (( final_rounds < TARGET_ROUNDS )); then
     echo "WARNING: Target rounds not reached (observed=${final_rounds}, target=${TARGET_ROUNDS})" >&2
     exit 2
+fi
+
+if [[ "${USE_TRACE}" == true && "${REQUIRE_TRACE_SIGNAL}" == true ]]; then
+    if [[ "${TRACE_SIGNAL_OK}" != true ]]; then
+        echo "ERROR: Trace signal missing. Check node count, instrumentation, and runtime logs." >&2
+        exit 3
+    fi
+    if (( TRACE_CONNECT_REFUSED_COUNT > 0 )); then
+        echo "ERROR: Trace collection observed Connection refused (${TRACE_CONNECT_REFUSED_COUNT} times)." >&2
+        exit 4
+    fi
 fi
 
 exit 0

@@ -21,6 +21,8 @@ IMAGE_PREFIX=""
 SKIP_BUILD=false
 SKIP_PREBUILD_CHECK=false
 SKIP_IMAGE_CHECK=false
+MODE="cassandra-demo"
+SKIP_DEMO_PREBUILD_MATERIALIZE=false
 
 usage() {
     cat <<EOF
@@ -28,6 +30,7 @@ Usage:
   $(basename "$0") [options]
 
 Options:
+  --mode <cassandra-demo|full> Select setup mode (default: ${MODE})
   --workspace-root <dir>       Workspace root (default: ${WORKSPACE_ROOT})
   --upfuzz-dir <dir>           UpFuzz directory (default: <workspace-root>/upfuzz)
   --ssg-runtime-dir <dir>      ssg-runtime directory (default: <workspace-root>/ssg-runtime)
@@ -35,6 +38,7 @@ Options:
   --pull-images                Pull expected images from registry prefix and tag locally
   --image-prefix <prefix>      Registry/org prefix for pull, e.g. shuaiwang516
   --skip-build                 Skip ./gradlew build steps for ssg-runtime and upfuzz
+  --skip-demo-prebuild-materialize  In cassandra-demo mode, do not extract/build Cassandra prebuild from instrumented archives
   --skip-prebuild-check        Skip required prebuild archive checks
   --skip-image-check           Skip docker image checks
   -h, --help                   Show this help
@@ -42,6 +46,7 @@ Options:
 Examples:
   $(basename "$0")
   $(basename "$0") --workspace-root /mydata/rupfuzz
+  $(basename "$0") --mode full --prebuild-source-dir /path/to/prebuild_bundle
   $(basename "$0") --pull-images --image-prefix shuaiwang516
 EOF
 }
@@ -69,6 +74,10 @@ run_as_root() {
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --mode)
+            MODE="$2"
+            shift 2
+            ;;
         --workspace-root)
             WORKSPACE_ROOT="$2"
             shift 2
@@ -97,6 +106,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_BUILD=true
             shift
             ;;
+        --skip-demo-prebuild-materialize|--skip-demo-prebuild-download)
+            SKIP_DEMO_PREBUILD_MATERIALIZE=true
+            shift
+            ;;
         --skip-prebuild-check)
             SKIP_PREBUILD_CHECK=true
             shift
@@ -117,6 +130,9 @@ done
 
 if [[ "${PULL_IMAGES}" == true && -z "${IMAGE_PREFIX}" ]]; then
     die "--pull-images requires --image-prefix"
+fi
+if [[ "${MODE}" != "cassandra-demo" && "${MODE}" != "full" ]]; then
+    die "--mode must be one of: cassandra-demo, full"
 fi
 
 if [[ -z "${UPFUZZ_DIR}" ]]; then
@@ -145,6 +161,20 @@ IMAGE_REQUIRED=(
     "upfuzz_hdfs:hadoop-2.10.2"
     "upfuzz_hdfs:hadoop-2.10.2_hadoop-3.3.6"
     "upfuzz_hdfs:hadoop-3.3.6_hadoop-3.4.2"
+)
+
+DEMO_CASSANDRA_VERSIONS=(
+    "apache-cassandra-4.1.10"
+    "apache-cassandra-5.0.6"
+)
+
+DEMO_CASSANDRA_ARCHIVE_REQUIRED=(
+    "prebuild/cassandra/apache-cassandra-4.1.10-src-instrumented.tar.gz"
+    "prebuild/cassandra/apache-cassandra-5.0.6-src-instrumented.tar.gz"
+)
+
+DEMO_IMAGE_REQUIRED=(
+    "upfuzz_cassandra:apache-cassandra-4.1.10_apache-cassandra-5.0.6"
 )
 
 ensure_ubuntu_22() {
@@ -258,6 +288,22 @@ clone_or_update_repo() {
     git -C "${dir}" pull --ff-only origin "${branch}"
 }
 
+java11_home() {
+    if [[ -d /usr/lib/jvm/java-11-openjdk-amd64 ]]; then
+        echo "/usr/lib/jvm/java-11-openjdk-amd64"
+        return
+    fi
+    if command -v javac >/dev/null 2>&1; then
+        local detected
+        detected="$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")"
+        if [[ -n "${detected}" && -d "${detected}" ]]; then
+            echo "${detected}"
+            return
+        fi
+    fi
+    die "Cannot determine Java 11 home for Gradle launcher"
+}
+
 build_ssg_runtime_and_copy_jar() {
     if [[ "${SKIP_BUILD}" == true ]]; then
         log "Skipping ssg-runtime build (--skip-build)"
@@ -266,9 +312,11 @@ build_ssg_runtime_and_copy_jar() {
 
     log "Building ssg-runtime fat jar"
     chmod +x "${SSG_RUNTIME_DIR}/gradlew"
+    local j11
+    j11="$(java11_home)"
     (
         cd "${SSG_RUNTIME_DIR}"
-        ./gradlew --no-daemon fatJar
+        JAVA_HOME="${j11}" PATH="${j11}/bin:${PATH}" ./gradlew --no-daemon fatJar
     )
 
     [[ -f "${SSG_RUNTIME_DIR}/build/libs/ssgFatJar.jar" ]] || die "Missing ssgFatJar.jar after build"
@@ -286,14 +334,19 @@ build_upfuzz() {
 
     log "Building upfuzz dependencies and main artifacts"
     chmod +x "${UPFUZZ_DIR}/gradlew"
+    local j11
+    j11="$(java11_home)"
     (
         cd "${UPFUZZ_DIR}"
-        ./gradlew --no-daemon copyDependencies
-        ./gradlew --no-daemon build -x test
+        JAVA_HOME="${j11}" PATH="${j11}/bin:${PATH}" ./gradlew --no-daemon copyDependencies
+        JAVA_HOME="${j11}" PATH="${j11}/bin:${PATH}" ./gradlew --no-daemon build -x test
     )
 }
 
 copy_prebuild_archives_if_requested() {
+    if [[ "${MODE}" != "full" ]]; then
+        return
+    fi
     [[ -n "${PREBUILD_SOURCE_DIR}" ]] || return
     log "Attempting to copy required prebuild archives from ${PREBUILD_SOURCE_DIR}"
 
@@ -314,26 +367,194 @@ copy_prebuild_archives_if_requested() {
     done
 }
 
+copy_demo_cassandra_archives_if_requested() {
+    if [[ "${MODE}" != "cassandra-demo" ]]; then
+        return
+    fi
+    [[ -n "${PREBUILD_SOURCE_DIR}" ]] || return
+    log "Attempting to copy Cassandra demo instrumented archives from ${PREBUILD_SOURCE_DIR}"
+
+    local rel src1 src2 dst
+    for rel in "${DEMO_CASSANDRA_ARCHIVE_REQUIRED[@]}"; do
+        dst="${UPFUZZ_DIR}/${rel}"
+        [[ -f "${dst}" ]] && continue
+
+        src1="${PREBUILD_SOURCE_DIR}/${rel}"
+        src2="${PREBUILD_SOURCE_DIR}/$(basename "${rel}")"
+        mkdir -p "$(dirname "${dst}")"
+
+        if [[ -f "${src1}" ]]; then
+            cp -f "${src1}" "${dst}"
+        elif [[ -f "${src2}" ]]; then
+            cp -f "${src2}" "${dst}"
+        fi
+    done
+}
+
+pick_java_for_cassandra_demo() {
+    local version="$1"
+    if [[ "${version}" == apache-cassandra-5.* ]]; then
+        echo "/usr/lib/jvm/java-17-openjdk-amd64"
+    elif [[ "${version}" == apache-cassandra-4.* ]]; then
+        echo "/usr/lib/jvm/java-11-openjdk-amd64"
+    else
+        echo "/usr/lib/jvm/java-8-openjdk-amd64"
+    fi
+}
+
+extract_instrumented_archive_if_needed() {
+    local archive="$1"
+    local destination="$2"
+    local parent
+    parent="$(dirname "${destination}")"
+
+    if [[ -d "${destination}" ]]; then
+        if [[ -f "${destination}/src/java/org/apache/cassandra/net/NetTraceRuntimeBridge.java" ]]; then
+            return
+        fi
+        log "Existing ${destination} is not instrumented. Replacing from $(basename "${archive}")"
+        rm -rf "${destination}"
+    fi
+
+    tar -xzf "${archive}" -C "${parent}"
+    if [[ -d "${parent}/$(basename "${destination}")-src" && ! -d "${destination}" ]]; then
+        mv "${parent}/$(basename "${destination}")-src" "${destination}"
+    fi
+    if [[ ! -d "${destination}" ]]; then
+        local toproot
+        toproot="$(tar -tzf "${archive}" | head -n1 | cut -d/ -f1)"
+        if [[ -n "${toproot}" && -d "${parent}/${toproot}" ]]; then
+            mv "${parent}/${toproot}" "${destination}"
+        fi
+    fi
+    [[ -d "${destination}" ]] || die "Failed to extract ${archive} into ${destination}"
+}
+
+materialize_demo_cassandra_prebuild() {
+    if [[ "${MODE}" != "cassandra-demo" ]]; then
+        return
+    fi
+    if [[ "${SKIP_DEMO_PREBUILD_MATERIALIZE}" == true ]]; then
+        log "Skipping demo Cassandra prebuild materialization (--skip-demo-prebuild-materialize)"
+        return
+    fi
+
+    local prebuild_dir="${UPFUZZ_DIR}/prebuild/cassandra"
+    mkdir -p "${prebuild_dir}"
+
+    local version archive_path extracted_dir marker java_home ant_extra major daemon_src
+    for version in "${DEMO_CASSANDRA_VERSIONS[@]}"; do
+        archive_path="${prebuild_dir}/${version}-src-instrumented.tar.gz"
+        extracted_dir="${prebuild_dir}/${version}"
+        marker="${extracted_dir}/.upfuzz_materialized"
+
+        [[ -f "${archive_path}" ]] || die "Missing demo instrumented archive: ${archive_path}. Provide it under prebuild/cassandra or --prebuild-source-dir."
+        extract_instrumented_archive_if_needed "${archive_path}" "${extracted_dir}"
+
+        major="$(echo "${version}" | sed -E 's/^apache-cassandra-([0-9]+).*/\1/')"
+        java_home="$(pick_java_for_cassandra_demo "${version}")"
+        ant_extra=""
+        if (( major == 4 )); then
+            ant_extra="-Duse.jdk11=true"
+        fi
+
+        if [[ ! -f "${marker}" ]]; then
+            log "Materializing ${version} with ant"
+            (
+                cd "${extracted_dir}"
+                JAVA_HOME="${java_home}" PATH="${java_home}/bin:${PATH}" ANT_OPTS='-Xmx4g' ant ${ant_extra} -Drat.skip=true -Dskip.rat=true jar
+            )
+            touch "${marker}"
+        fi
+
+        mkdir -p "${extracted_dir}/lib"
+        if ! compgen -G "${extracted_dir}/lib/*.jar" >/dev/null; then
+            if compgen -G "${extracted_dir}/build/lib/jars/*.jar" >/dev/null; then
+                cp -f "${extracted_dir}"/build/lib/jars/*.jar "${extracted_dir}/lib/"
+            fi
+        fi
+
+        if [[ -f "${UPFUZZ_DIR}/lib/ssgFatJar.jar" ]]; then
+            cp -f "${UPFUZZ_DIR}/lib/ssgFatJar.jar" "${extracted_dir}/lib/ssgFatJar.jar"
+        fi
+
+        if (( major >= 5 )); then
+            daemon_src="${UPFUZZ_DIR}/src/main/resources/cqlsh_daemon5.py"
+        elif (( major >= 4 )); then
+            daemon_src="${UPFUZZ_DIR}/src/main/resources/cqlsh_daemon4.py"
+        else
+            daemon_src="${UPFUZZ_DIR}/src/main/resources/cqlsh_daemon2.py"
+        fi
+        cp -f "${daemon_src}" "${extracted_dir}/bin/cqlsh_daemon.py"
+
+        [[ -x "${extracted_dir}/bin/cassandra" ]] || die "Cassandra binary missing after materialization: ${extracted_dir}/bin/cassandra"
+        [[ -f "${extracted_dir}/conf/cassandra.yaml" ]] || die "Cassandra config missing: ${extracted_dir}/conf/cassandra.yaml"
+        [[ -f "${extracted_dir}/src/java/org/apache/cassandra/net/NetTraceRuntimeBridge.java" ]] || die "Instrumented hook not found: ${extracted_dir}/src/java/org/apache/cassandra/net/NetTraceRuntimeBridge.java"
+    done
+}
+
 check_prebuild_archives() {
     if [[ "${SKIP_PREBUILD_CHECK}" == true ]]; then
         log "Skipping prebuild archive check (--skip-prebuild-check)"
         return
     fi
 
-    log "Checking required prebuild archives"
-    local missing=()
-    local rel
-    for rel in "${PREBUILD_REQUIRED[@]}"; do
-        if [[ ! -f "${UPFUZZ_DIR}/${rel}" ]]; then
-            missing+=("${rel}")
+    if [[ "${MODE}" == "cassandra-demo" ]]; then
+        log "Checking Cassandra demo prebuild assets"
+        local missing_dirs=()
+        local missing_hooks=()
+        local version version_dir
+        for version in "${DEMO_CASSANDRA_VERSIONS[@]}"; do
+            version_dir="${UPFUZZ_DIR}/prebuild/cassandra/${version}"
+            if [[ ! -x "${version_dir}/bin/cassandra" || ! -f "${version_dir}/conf/cassandra.yaml" ]]; then
+                missing_dirs+=("${version_dir}")
+                continue
+            fi
+            if [[ ! -f "${version_dir}/src/java/org/apache/cassandra/net/NetTraceRuntimeBridge.java" ]]; then
+                missing_hooks+=("${version_dir}")
+            fi
+        done
+        if (( ${#missing_dirs[@]} > 0 )); then
+            local missing_archives=()
+            local rel
+            for rel in "${DEMO_CASSANDRA_ARCHIVE_REQUIRED[@]}"; do
+                if [[ ! -f "${UPFUZZ_DIR}/${rel}" ]]; then
+                    missing_archives+=("${rel}")
+                fi
+            done
+            if (( ${#missing_archives[@]} > 0 )); then
+                echo "Missing required Cassandra demo archives under ${UPFUZZ_DIR}:" >&2
+                printf '  - %s\n' "${missing_archives[@]}" >&2
+                echo "Provide instrumented archives and re-run (or use --prebuild-source-dir)." >&2
+                exit 2
+            fi
+            echo "Missing required Cassandra demo prebuild directories:" >&2
+            printf '  - %s\n' "${missing_dirs[@]}" >&2
+            echo "Re-run without --skip-demo-prebuild-materialize to materialize from instrumented archives." >&2
+            exit 2
         fi
-    done
+        if (( ${#missing_hooks[@]} > 0 )); then
+            echo "Cassandra demo directories exist but instrumentation hook is missing:" >&2
+            printf '  - %s\n' "${missing_hooks[@]}" >&2
+            echo "Replace them with instrumented prebuild archives and rerun setup." >&2
+            exit 2
+        fi
+    else
+        log "Checking required prebuild archives (full mode)"
+        local missing=()
+        local rel
+        for rel in "${PREBUILD_REQUIRED[@]}"; do
+            if [[ ! -f "${UPFUZZ_DIR}/${rel}" ]]; then
+                missing+=("${rel}")
+            fi
+        done
 
-    if (( ${#missing[@]} > 0 )); then
-        echo "Missing required prebuild archives under ${UPFUZZ_DIR}:" >&2
-        printf '  - %s\n' "${missing[@]}" >&2
-        echo "Provide these files and re-run, or use --prebuild-source-dir." >&2
-        exit 2
+        if (( ${#missing[@]} > 0 )); then
+            echo "Missing required prebuild archives under ${UPFUZZ_DIR}:" >&2
+            printf '  - %s\n' "${missing[@]}" >&2
+            echo "Provide these files and re-run, or use --prebuild-source-dir." >&2
+            exit 2
+        fi
     fi
 }
 
@@ -351,9 +572,16 @@ pull_or_check_images() {
         return
     fi
 
-    log "Checking required docker images"
+    local image_targets=()
+    if [[ "${MODE}" == "cassandra-demo" ]]; then
+        image_targets=("${DEMO_IMAGE_REQUIRED[@]}")
+    else
+        image_targets=("${IMAGE_REQUIRED[@]}")
+    fi
+
+    log "Checking required docker images (${MODE})"
     local image remote missing=()
-    for image in "${IMAGE_REQUIRED[@]}"; do
+    for image in "${image_targets[@]}"; do
         if docker_cmd image inspect "${image}" >/dev/null 2>&1; then
             continue
         fi
@@ -411,6 +639,8 @@ main() {
     build_upfuzz
 
     copy_prebuild_archives_if_requested
+    copy_demo_cassandra_archives_if_requested
+    materialize_demo_cassandra_prebuild
     check_prebuild_archives
     pull_or_check_images
 
