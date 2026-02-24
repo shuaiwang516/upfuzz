@@ -555,6 +555,8 @@ echo "${CLIENT_LAUNCHER_PID}" > "${RUN_DIR}/client_launcher_pid.txt"
 
 stop_reason=""
 last_rounds=0
+target_rounds_first_seen_epoch=""
+TARGET_ROUND_GRACE_SEC=120
 
 {
     echo "timestamp,elapsed_sec,rounds,diff_feedback_packets,server_alive"
@@ -581,6 +583,21 @@ while true; do
     fi
 
     if (( rounds >= TARGET_ROUNDS )); then
+        if [[ "${USE_TRACE}" == true ]]; then
+            tri_diff_count="$(safe_rg_count_file 'Message identity tri-diff:' "${SERVER_LOG}")"
+            if (( tri_diff_count < TARGET_ROUNDS )); then
+                if [[ -z "${target_rounds_first_seen_epoch}" ]]; then
+                    target_rounds_first_seen_epoch="${now_epoch}"
+                    log "Target rounds reached; waiting for tri-diff logs (${tri_diff_count}/${TARGET_ROUNDS})"
+                fi
+                grace_elapsed=$((now_epoch - target_rounds_first_seen_epoch))
+                if (( grace_elapsed < TARGET_ROUND_GRACE_SEC )); then
+                    sleep 10
+                    continue
+                fi
+                log "Tri-diff logs still incomplete after ${TARGET_ROUND_GRACE_SEC}s grace (${tri_diff_count}/${TARGET_ROUNDS}); stopping anyway"
+            fi
+        fi
         stop_reason="target_rounds_reached"
         break
     fi

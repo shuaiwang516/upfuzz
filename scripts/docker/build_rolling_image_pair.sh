@@ -149,11 +149,31 @@ materialize_cassandra_version() {
     local major
     major="$(major_version "${version}")"
     local marker="${dir}/.upfuzz_materialized"
+    local bridge_src="${dir}/src/java/org/apache/cassandra/net/NetTraceRuntimeBridge.java"
+    local runtime_jar="${ROOT_DIR}/lib/ssgFatJar.jar"
+    local built_jar="${dir}/build/${version}-SNAPSHOT.jar"
     local logfile="${LOG_DIR}/cassandra-${version}.log"
+    local need_build=0
+    local build_reason=""
 
     [[ -d "${dir}" ]] || die "Missing Cassandra dir: ${dir}"
 
     if [[ ! -f "${marker}" ]]; then
+        need_build=1
+        build_reason="marker missing"
+    elif [[ ! -f "${built_jar}" ]]; then
+        need_build=1
+        build_reason="built jar missing"
+    elif [[ -f "${bridge_src}" && "${bridge_src}" -nt "${marker}" ]]; then
+        need_build=1
+        build_reason="NetTraceRuntimeBridge.java newer than marker"
+    elif [[ -f "${runtime_jar}" && "${runtime_jar}" -nt "${marker}" ]]; then
+        need_build=1
+        build_reason="ssgFatJar.jar newer than marker"
+    fi
+
+    if (( need_build == 1 )); then
+        log "Building Cassandra ${version} (${build_reason})"
         local ant_extra=""
         if (( major == 4 )); then
             ant_extra="-Duse.jdk11=true"

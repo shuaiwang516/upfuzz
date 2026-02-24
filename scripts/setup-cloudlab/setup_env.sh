@@ -23,6 +23,7 @@ SKIP_PREBUILD_CHECK=false
 SKIP_IMAGE_CHECK=false
 MODE="cassandra-demo"
 SKIP_DEMO_PREBUILD_MATERIALIZE=false
+USE_EXISTING_REPOS=false
 
 usage() {
     cat <<EOF
@@ -38,6 +39,7 @@ Options:
   --pull-images                Pull expected images from registry prefix and tag locally
   --image-prefix <prefix>      Registry/org prefix for pull, e.g. shuaiwang516
   --skip-build                 Skip ./gradlew build steps for ssg-runtime and upfuzz
+  --use-existing-repos         Use existing local repo directories as-is (no git clone/fetch/pull)
   --skip-demo-prebuild-materialize  In cassandra-demo mode, do not extract/build Cassandra prebuild from instrumented archives
   --skip-prebuild-check        Skip required prebuild archive checks
   --skip-image-check           Skip docker image checks
@@ -104,6 +106,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-build)
             SKIP_BUILD=true
+            shift
+            ;;
+        --use-existing-repos)
+            USE_EXISTING_REPOS=true
             shift
             ;;
         --skip-demo-prebuild-materialize|--skip-demo-prebuild-download)
@@ -275,10 +281,18 @@ clone_or_update_repo() {
     local branch="$2"
     local dir="$3"
 
+    if [[ "${USE_EXISTING_REPOS}" == true ]]; then
+        [[ -d "${dir}" ]] || die "--use-existing-repos set but directory not found: ${dir}"
+        log "Using existing repo without git sync: ${dir}"
+        return
+    fi
+
     mkdir -p "$(dirname "${dir}")"
     if [[ -d "${dir}/.git" ]]; then
         log "Updating repo: ${dir}"
         git -C "${dir}" fetch --all --tags
+    elif [[ -d "${dir}" ]]; then
+        die "Directory exists but is not a git repo: ${dir}. Use --use-existing-repos to skip git clone/pull."
     else
         log "Cloning repo: ${url} -> ${dir}"
         git clone "${url}" "${dir}"
@@ -339,7 +353,12 @@ build_upfuzz() {
     (
         cd "${UPFUZZ_DIR}"
         JAVA_HOME="${j11}" PATH="${j11}/bin:${PATH}" ./gradlew --no-daemon copyDependencies
-        JAVA_HOME="${j11}" PATH="${j11}/bin:${PATH}" ./gradlew --no-daemon build -x test
+        if [[ "${USE_EXISTING_REPOS}" == true && ! -d "${UPFUZZ_DIR}/.git" ]]; then
+            log "No .git metadata in upfuzz dir; using assemble target to avoid spotless git checks"
+            JAVA_HOME="${j11}" PATH="${j11}/bin:${PATH}" ./gradlew --no-daemon assemble -x test
+        else
+            JAVA_HOME="${j11}" PATH="${j11}/bin:${PATH}" ./gradlew --no-daemon build -x test
+        fi
     )
 }
 
@@ -347,7 +366,7 @@ copy_prebuild_archives_if_requested() {
     if [[ "${MODE}" != "full" ]]; then
         return
     fi
-    [[ -n "${PREBUILD_SOURCE_DIR}" ]] || return
+    [[ -n "${PREBUILD_SOURCE_DIR}" ]] || return 0
     log "Attempting to copy required prebuild archives from ${PREBUILD_SOURCE_DIR}"
 
     local rel src1 src2 dst
@@ -371,7 +390,7 @@ copy_demo_cassandra_archives_if_requested() {
     if [[ "${MODE}" != "cassandra-demo" ]]; then
         return
     fi
-    [[ -n "${PREBUILD_SOURCE_DIR}" ]] || return
+    [[ -n "${PREBUILD_SOURCE_DIR}" ]] || return 0
     log "Attempting to copy Cassandra demo instrumented archives from ${PREBUILD_SOURCE_DIR}"
 
     local rel src1 src2 dst
