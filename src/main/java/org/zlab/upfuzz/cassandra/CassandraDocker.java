@@ -159,7 +159,9 @@ public class CassandraDocker extends Docker {
                 "PATH=$JAVA_HOME/bin:$PATH",
                 "ENABLE_FORMAT_COVERAGE=" + (Config.getConf().useFormatCoverage
                         && collectFormatCoverage),
-                "ENABLE_NET_COVERAGE=" + Config.getConf().useTrace
+                "ENABLE_NET_COVERAGE=" + Config.getConf().useTrace,
+                "ENABLE_NETWORK_TRACE=" + Config.getConf().useTrace,
+                "NET_TRACE_NODE_ID=" + executorID + "-N" + index
         };
 
         setEnvironment();

@@ -137,7 +137,9 @@ public class HdfsDocker extends Docker {
                 "PYTHON=python3",
                 "ENABLE_FORMAT_COVERAGE=" + (Config.getConf().useFormatCoverage
                         && collectFormatCoverage),
-                "ENABLE_NET_COVERAGE=" + Config.getConf().useTrace
+                "ENABLE_NET_COVERAGE=" + Config.getConf().useTrace,
+                "ENABLE_NETWORK_TRACE=" + Config.getConf().useTrace,
+                "NET_TRACE_NODE_ID=" + executorID + "-N" + index
         };
         setEnvironment();
 
@@ -197,7 +199,9 @@ public class HdfsDocker extends Docker {
                 "HDFS_SHELL_DAEMON_PORT=\"" + hdfsDaemonPort + "\"",
                 "PYTHON=python3",
                 "ENABLE_FORMAT_COVERAGE=false",
-                "ENABLE_NET_COVERAGE=" + Config.getConf().useTrace
+                "ENABLE_NET_COVERAGE=" + Config.getConf().useTrace,
+                "ENABLE_NETWORK_TRACE=" + Config.getConf().useTrace,
+                "NET_TRACE_NODE_ID=" + executorID + "-N" + index
         };
         setEnvironment();
     }
@@ -260,7 +264,9 @@ public class HdfsDocker extends Docker {
                 "HDFS_SHELL_DAEMON_PORT=\"" + hdfsDaemonPort + "\"",
                 "PYTHON=python3",
                 "ENABLE_FORMAT_COVERAGE=false",
-                "ENABLE_NET_COVERAGE=" + Config.getConf().useTrace };
+                "ENABLE_NET_COVERAGE=" + Config.getConf().useTrace,
+                "ENABLE_NETWORK_TRACE=" + Config.getConf().useTrace,
+                "NET_TRACE_NODE_ID=" + executorID + "-N" + index };
         setEnvironment();
         String restartCommand = "/usr/bin/supervisorctl restart upfuzz_hdfs:";
         // Seems the env doesn't really matter...

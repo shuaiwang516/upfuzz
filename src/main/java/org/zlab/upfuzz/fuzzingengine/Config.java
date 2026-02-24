@@ -326,6 +326,14 @@ public class Config {
         public boolean useEditDistance = false;
         public boolean useJaccardSimilarity = true;
 
+        // Message identity based tri-diff for old-old / old-new / new-new
+        public boolean useMessageIdentityDiff = true;
+        // Mark as interesting if exclusive message count >= this threshold
+        public int messageIdentityMinExclusiveCount = 1;
+        // Mark as interesting if ordered-common ratio drops below this
+        // threshold
+        public double messageIdentityMinOrderedCommonRatio = 0.90;
+
         // Jaccard similarity threshold: test is "interesting" if
         // similarity drops below this value
         public double jaccardSimilarityThreshold = 0.3;

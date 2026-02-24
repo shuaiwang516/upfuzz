@@ -21,6 +21,7 @@ import org.zlab.net.tracker.Trace;
 import org.zlab.net.tracker.TraceEntry;
 import org.zlab.net.tracker.diff.DiffComputeEditDistance;
 import org.zlab.net.tracker.diff.DiffComputeJaccardSimilarity;
+import org.zlab.net.tracker.diff.DiffComputeMessageTriDiff;
 import org.zlab.ocov.Utils;
 import org.zlab.ocov.tracker.FormatCoverageStatus;
 import org.zlab.ocov.tracker.ObjectGraphCoverage;
@@ -1577,6 +1578,26 @@ public class FuzzingServer {
             }
         }
 
+        boolean messageIdentityInteresting = false;
+        if (Config.getConf().useMessageIdentityDiff
+                && Config.getConf().useTrace) {
+            DiffComputeMessageTriDiff.MessageTriDiffResult triDiff = DiffComputeMessageTriDiff
+                    .compute(serializedTraces[0], serializedTraces[1],
+                            serializedTraces[2]);
+            logger.info(
+                    "Message identity tri-diff: " + triDiff.toSummaryString());
+            if (Config.getConf().printTrace) {
+                logger.info(triDiff.toDetailedString(20));
+            }
+            if (triDiff.isInteresting(
+                    Config.getConf().messageIdentityMinExclusiveCount,
+                    Config.getConf().messageIdentityMinOrderedCommonRatio)) {
+                messageIdentityInteresting = true;
+                logger.info(
+                        "Message identity tri-diff detected interesting divergence");
+            }
+        }
+
         if (Config.getConf().useEditDistance && Config.getConf().useTrace) {
             int[] diff = DiffComputeEditDistance.compute(serializedTraces[0],
                     serializedTraces[1], serializedTraces[2]);
@@ -1584,7 +1605,8 @@ public class FuzzingServer {
         }
 
         // --- Corpus update ---
-        boolean addToCorpus = newOriBC || newUpgradeBC || lowSimilarity;
+        boolean addToCorpus = newOriBC || newUpgradeBC || lowSimilarity
+                || messageIdentityInteresting;
         if (addToCorpus) {
             TestPlan testPlan = testID2TestPlan
                     .get(testPlanDiffFeedbackPacket.testPacketID);
@@ -1593,7 +1615,9 @@ public class FuzzingServer {
                 logger.info(
                         "Added test plan to corpus (newOriBC=" + newOriBC
                                 + ", newUpgradeBC=" + newUpgradeBC
-                                + ", lowSimilarity=" + lowSimilarity + ")");
+                                + ", lowSimilarity=" + lowSimilarity
+                                + ", messageIdentityInteresting="
+                                + messageIdentityInteresting + ")");
             }
         }
 

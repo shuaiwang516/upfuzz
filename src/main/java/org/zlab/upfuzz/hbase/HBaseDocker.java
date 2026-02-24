@@ -166,7 +166,9 @@ public class HBaseDocker extends Docker {
                 "PYTHON=" + pythonVersion,
                 "ENABLE_FORMAT_COVERAGE=" + (Config.getConf().useFormatCoverage
                         && collectFormatCoverage),
-                "ENABLE_NET_COVERAGE=" + Config.getConf().useTrace
+                "ENABLE_NET_COVERAGE=" + Config.getConf().useTrace,
+                "ENABLE_NETWORK_TRACE=" + Config.getConf().useTrace,
+                "NET_TRACE_NODE_ID=" + executorID + "-N" + index
         };
 
         setEnvironment();
@@ -259,7 +261,9 @@ public class HBaseDocker extends Docker {
                 "CUR_STATUS=UP",
                 "PYTHON=" + pythonVersion,
                 "ENABLE_FORMAT_COVERAGE=false",
-                "ENABLE_NET_COVERAGE=" + Config.getConf().useTrace };
+                "ENABLE_NET_COVERAGE=" + Config.getConf().useTrace,
+                "ENABLE_NETWORK_TRACE=" + Config.getConf().useTrace,
+                "NET_TRACE_NODE_ID=" + executorID + "-N" + index };
         setEnvironment();
     }
 

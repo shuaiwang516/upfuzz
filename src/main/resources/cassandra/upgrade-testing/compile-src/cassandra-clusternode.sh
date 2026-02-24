@@ -72,8 +72,18 @@ if [[ ! -f "/tmp/.setup_conf" ]]; then
                 fi
         fi
 
-        sed -i 's/#MAX_HEAP_SIZE="4G"/MAX_HEAP_SIZE="512M"/' ${CONFIG}/cassandra-env.sh
-        sed -i 's/#HEAP_NEWSIZE="800M"/HEAP_NEWSIZE="200M"/' ${CONFIG}/cassandra-env.sh
+        # Force conservative heap sizing across Cassandra versions to avoid OOM
+        # on multi-cluster differential runs.
+        if grep -Eq '^[#[:space:]]*MAX_HEAP_SIZE=' "${CONFIG}/cassandra-env.sh"; then
+            sed -Ei 's|^[#[:space:]]*MAX_HEAP_SIZE=.*$|MAX_HEAP_SIZE="512M"|' "${CONFIG}/cassandra-env.sh"
+        else
+            echo 'MAX_HEAP_SIZE="512M"' >> "${CONFIG}/cassandra-env.sh"
+        fi
+        if grep -Eq '^[#[:space:]]*HEAP_NEWSIZE=' "${CONFIG}/cassandra-env.sh"; then
+            sed -Ei 's|^[#[:space:]]*HEAP_NEWSIZE=.*$|HEAP_NEWSIZE="200M"|' "${CONFIG}/cassandra-env.sh"
+        else
+            echo 'HEAP_NEWSIZE="200M"' >> "${CONFIG}/cassandra-env.sh"
+        fi
 
         # Change these to append will work
         # config on-disk data locations
