@@ -31,15 +31,6 @@ public class HBaseExecutor extends Executor {
         agentHandler = new HashMap<>();
         sessionGroup = new ConcurrentHashMap<>();
 
-        try {
-            agentSocket = new AgentServerSocket(this);
-            agentSocket.setDaemon(true);
-            agentSocket.start();
-            agentPort = agentSocket.getPort();
-        } catch (Exception e) {
-            logger.error(e);
-        }
-
         dockerCluster = new HBaseDockerCluster(this,
                 Config.getConf().originalVersion,
                 nodeNum, collectFormatCoverage, configPath, direction);
@@ -59,15 +50,6 @@ public class HBaseExecutor extends Executor {
         agentHandler = new HashMap<>();
         sessionGroup = new ConcurrentHashMap<>();
 
-        try {
-            agentSocket = new AgentServerSocket(this);
-            agentSocket.setDaemon(true);
-            agentSocket.start();
-            agentPort = agentSocket.getPort();
-        } catch (Exception e) {
-            logger.error(e);
-        }
-
         if (direction == 0) {
             dockerCluster = new HBaseDockerCluster(this,
                     Config.getConf().originalVersion,
@@ -83,6 +65,32 @@ public class HBaseExecutor extends Executor {
 
     @Override
     public boolean startup() {
+        try {
+            if (agentSocket != null) {
+                agentSocket.stopServer();
+                agentSocket = null;
+            }
+            agentSocket = new AgentServerSocket(this);
+            agentSocket.setDaemon(true);
+            agentSocket.start();
+            agentPort = agentSocket.getPort();
+        } catch (Exception e) {
+            logger.error(e);
+            return false;
+        }
+
+        if (direction == 0) {
+            dockerCluster = new HBaseDockerCluster(this,
+                    Config.getConf().originalVersion,
+                    nodeNum, collectFormatCoverage, configPath,
+                    direction);
+        } else {
+            dockerCluster = new HBaseDockerCluster(this,
+                    Config.getConf().upgradedVersion,
+                    nodeNum, collectFormatCoverage, configPath,
+                    direction);
+        }
+
         try {
             dockerCluster.build();
         } catch (Exception e) {
@@ -100,6 +108,7 @@ public class HBaseExecutor extends Executor {
             }
         } catch (Exception e) {
             logger.error("docker cluster start up failed", e);
+            return false;
         }
 
         logger.info("HBase " + executorID + " started");

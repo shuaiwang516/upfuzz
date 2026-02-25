@@ -9,6 +9,24 @@ mkdir -p "${LOG_DIR}"
 JAVA8_HOME="${JAVA8_HOME:-/usr/lib/jvm/java-8-openjdk-amd64}"
 JAVA11_HOME="${JAVA11_HOME:-/usr/lib/jvm/java-11-openjdk-amd64}"
 JAVA17_HOME="${JAVA17_HOME:-/usr/lib/jvm/java-17-openjdk-amd64}"
+IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-shuaiwang516}"
+FORCE_DOCKER_REBUILD="${FORCE_DOCKER_REBUILD:-0}"
+
+lower() {
+    echo "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+is_truthy() {
+    case "$(lower "$1")" in
+        1|true|yes|y|on) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+DOCKER_BUILD_ARGS=()
+if is_truthy "${FORCE_DOCKER_REBUILD}"; then
+    DOCKER_BUILD_ARGS+=(--no-cache --pull)
+fi
 
 usage() {
     cat <<'EOF'
@@ -19,6 +37,10 @@ Examples:
   build_rolling_image_pair.sh cassandra apache-cassandra-3.11.19 apache-cassandra-4.1.10
   build_rolling_image_pair.sh hdfs hadoop-2.10.2 hadoop-3.3.6
   build_rolling_image_pair.sh hbase hbase-2.5.13 hbase-2.6.4
+
+Env:
+  IMAGE_NAMESPACE  Docker namespace for push-ready tags (default: shuaiwang516)
+  FORCE_DOCKER_REBUILD  Force docker rebuild (1/true => --no-cache --pull)
 EOF
 }
 
@@ -33,6 +55,28 @@ die() {
 
 require_cmd() {
     command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
+}
+
+with_namespace() {
+    local local_tag="$1"
+    if [[ -n "${IMAGE_NAMESPACE}" ]]; then
+        echo "${IMAGE_NAMESPACE}/${local_tag}"
+    else
+        echo "${local_tag}"
+    fi
+}
+
+build_with_dual_tags() {
+    local context="$1"
+    local local_tag="$2"
+    local namespaced_tag
+    namespaced_tag="$(with_namespace "${local_tag}")"
+    log "Building Docker image: ${local_tag}"
+    log "Also tagging as: ${namespaced_tag}"
+    if ((${#DOCKER_BUILD_ARGS[@]} > 0)); then
+        log "Docker build args: ${DOCKER_BUILD_ARGS[*]}"
+    fi
+    docker build "${DOCKER_BUILD_ARGS[@]}" "${context}" -t "${local_tag}" -t "${namespaced_tag}"
 }
 
 run_with_log() {
@@ -225,8 +269,7 @@ build_cassandra_image_pair() {
 
     sed -i "s/^ORI_VERSION=apache-cassandra-.*/ORI_VERSION=${original}/" "${script}"
     sed -i "s/^UP_VERSION=apache-cassandra-.*/UP_VERSION=${upgraded}/" "${script}"
-    log "Building Docker image: ${tag}"
-    docker build "${context}" -t "${tag}"
+    build_with_dual_tags "${context}" "${tag}"
 }
 
 build_hadoop_dist_if_needed() {
@@ -318,8 +361,7 @@ build_hdfs_image_pair() {
 
     sed -i "s/^ORI_VERSION=hadoop-.*/ORI_VERSION=${original}/" "${script}"
     sed -i "s/^UPG_VERSION=hadoop-.*/UPG_VERSION=${upgraded}/" "${script}"
-    log "Building Docker image: ${tag}"
-    docker build "${context}" -t "${tag}"
+    build_with_dual_tags "${context}" "${tag}"
 }
 
 pick_java_for_hbase() {
@@ -384,6 +426,8 @@ patch_hbase_runtime_files() {
 ensure_hbase_dep_hadoop_2102() {
     local dep_dir="${ROOT_DIR}/prebuild/hadoop/hadoop-2.10.2"
     local dep_img="upfuzz_hdfs:hadoop-2.10.2"
+    local dep_img_ns
+    dep_img_ns="$(with_namespace "${dep_img}")"
     mkdir -p "${ROOT_DIR}/prebuild/hadoop"
 
     if [[ ! -d "${dep_dir}" || ! -x "${dep_dir}/bin/hdfs" ]]; then
@@ -397,11 +441,22 @@ ensure_hbase_dep_hadoop_2102() {
     cp -f "${ROOT_DIR}/src/main/resources/hdfs/hbase-pure/hdfs-site.xml" "${dep_dir}/etc/hadoop/hdfs-site.xml"
     cp -f "${ROOT_DIR}/src/main/resources/hdfs/hbase-pure/hadoop-env.sh" "${dep_dir}/etc/hadoop/hadoop-env.sh"
 
-    if ! docker image inspect "${dep_img}" >/dev/null 2>&1; then
+    if is_truthy "${FORCE_DOCKER_REBUILD}"; then
+        log "Force rebuilding dependency Docker image: ${dep_img}"
+        if ((${#DOCKER_BUILD_ARGS[@]} > 0)); then
+            log "Docker build args: ${DOCKER_BUILD_ARGS[*]}"
+        fi
+        docker build "${DOCKER_BUILD_ARGS[@]}" "${ROOT_DIR}/src/main/resources/hdfs/hbase-pure" -t "${dep_img}" -t "${dep_img_ns}"
+    elif ! docker image inspect "${dep_img}" >/dev/null 2>&1; then
         log "Building dependency Docker image: ${dep_img}"
-        docker build "${ROOT_DIR}/src/main/resources/hdfs/hbase-pure" -t "${dep_img}"
+        log "Also tagging dependency image as: ${dep_img_ns}"
+        docker build "${DOCKER_BUILD_ARGS[@]}" "${ROOT_DIR}/src/main/resources/hdfs/hbase-pure" -t "${dep_img}" -t "${dep_img_ns}"
     else
         log "Dependency Docker image already exists: ${dep_img}"
+        if ! docker image inspect "${dep_img_ns}" >/dev/null 2>&1; then
+            docker tag "${dep_img}" "${dep_img_ns}"
+            log "Added namespace tag for dependency image: ${dep_img_ns}"
+        fi
     fi
 }
 
@@ -422,8 +477,7 @@ build_hbase_image_pair() {
     local upgraded="$2"
     local context="${ROOT_DIR}/src/main/resources/hbase/compile-src"
     local tag="upfuzz_hbase:${original}_${upgraded}"
-    log "Building Docker image: ${tag}"
-    docker build "${context}" -t "${tag}"
+    build_with_dual_tags "${context}" "${tag}"
 }
 
 verify_args() {

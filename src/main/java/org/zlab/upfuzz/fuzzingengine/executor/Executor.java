@@ -91,7 +91,10 @@ public abstract class Executor implements IExecutor {
     public void teardown() {
         if (dockerCluster != null)
             dockerCluster.teardown();
-        agentSocket.stopServer();
+        if (agentSocket != null) {
+            agentSocket.stopServer();
+            agentSocket = null;
+        }
     }
 
     public void setConfigPath(Path ConfigPath) {

@@ -15,6 +15,7 @@ CLIENTS=1
 TESTING_MODE=3
 USE_DIFF=true
 USE_TRACE=true
+PRINT_TRACE=false
 USE_JACCARD=true
 USE_BRANCH_COVERAGE=true
 ENABLE_LOG_CHECK=true
@@ -23,6 +24,7 @@ CASSANDRA_RETRY_TIMEOUT=300
 NODE_NUM=""
 SERVER_PORT=7399
 CLIENT_PORT=7400
+SERVER_START_TIMEOUT_SEC=120
 RUN_NAME=""
 SKIP_PRE_CLEAN=false
 
@@ -41,12 +43,14 @@ Options:
   --testing-mode <3|5>                   3=example testplan, 5=rolling-only (default: ${TESTING_MODE})
   --cassandra-retry-timeout <sec>        Cassandra cqlsh retry timeout (default: ${CASSANDRA_RETRY_TIMEOUT})
   --use-trace <true|false>               Enable network trace collection (default: ${USE_TRACE})
+  --print-trace <true|false>             Print detailed trace entries in server log (default: ${PRINT_TRACE})
   --use-jaccard <true|false>             Enable Jaccard similarity (default: ${USE_JACCARD})
   --use-branch-coverage <true|false>     Enable branch coverage signals (default: ${USE_BRANCH_COVERAGE})
   --enable-log-check <true|false>        Enable error-log oracle (default: ${ENABLE_LOG_CHECK})
   --require-trace-signal                 Fail if trace signal is missing when --use-trace=true
   --server-port <port>                   Server port (default: ${SERVER_PORT}, auto-shift if busy)
   --client-port <port>                   Client port (default: ${CLIENT_PORT}, auto-shift if busy)
+  --server-start-timeout-sec <N>         Max wait for server port listen before client launch (default: ${SERVER_START_TIMEOUT_SEC})
   --node-num <N>                         Override node number (default by system: cass=2,hdfs=3,hbase=2)
   --run-name <name>                      Result folder name (default: auto generated)
   --skip-pre-clean                       Skip pre-run clean.sh
@@ -85,6 +89,32 @@ bool_json() {
 is_port_in_use() {
     local port="$1"
     ss -ltn 2>/dev/null | awk '{print $4}' | rg -q "(^|[:.])${port}$"
+}
+
+cleanup_upfuzz_networks() {
+    local nets
+    nets="$(docker network ls --format '{{.Name}}' | rg '_network_(cassandra|hdfs|hbase|ozone)_' || true)"
+    if [[ -n "${nets}" ]]; then
+        echo "${nets}" | xargs -r docker network rm >/dev/null 2>&1 || true
+    fi
+}
+
+wait_for_server_listen() {
+    local server_pid="$1"
+    local server_port="$2"
+    local timeout_sec="$3"
+    local waited=0
+    while (( waited < timeout_sec )); do
+        if ! kill -0 "${server_pid}" 2>/dev/null; then
+            return 1
+        fi
+        if is_port_in_use "${server_port}"; then
+            return 0
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+    return 2
 }
 
 pick_free_port_from() {
@@ -127,6 +157,31 @@ count_pattern_in_clients() {
     echo "${total}"
 }
 
+sanitize_hbase_cached_classpath_for_version() {
+    local version="$1"
+    local target_dir="${ROOT_DIR}/prebuild/hbase/${version}/hbase-build-configuration/target"
+    local ruby_dir="${ROOT_DIR}/prebuild/hbase/${version}/lib/ruby"
+
+    if [[ ! -d "${target_dir}" || ! -d "${ruby_dir}" ]]; then
+        return
+    fi
+
+    local jruby_jar
+    jruby_jar="$(ls "${ruby_dir}"/jruby-complete-*.jar 2>/dev/null | head -n1 || true)"
+    if [[ -z "${jruby_jar}" ]]; then
+        return
+    fi
+
+    local jruby_name
+    jruby_name="$(basename "${jruby_jar}")"
+
+    # Avoid host-specific absolute paths copied from another machine.
+    # Keep only in-container paths so HBase shell daemon can always start.
+    : > "${target_dir}/cached_classpath.txt"
+    : > "${target_dir}/cached_classpath_jline.txt"
+    printf '/hbase/%s/lib/ruby/%s\n' "${version}" "${jruby_name}" > "${target_dir}/cached_classpath_jruby.txt"
+}
+
 extract_total_exec() {
     local logfile="$1"
     if [[ ! -f "${logfile}" ]]; then
@@ -166,11 +221,13 @@ write_config_json() {
 
     local diff_json
     local trace_json
+    local print_trace_json
     local jaccard_json
     local branch_json
     local logcheck_json
     diff_json="$(bool_json "${USE_DIFF}")"
     trace_json="$(bool_json "${USE_TRACE}")"
+    print_trace_json="$(bool_json "${PRINT_TRACE}")"
     jaccard_json="$(bool_json "${USE_JACCARD}")"
     branch_json="$(bool_json "${USE_BRANCH_COVERAGE}")"
     logcheck_json="$(bool_json "${ENABLE_LOG_CHECK}")"
@@ -197,7 +254,7 @@ write_config_json() {
   "testingMode" : ${TESTING_MODE},
   "differentialExecution" : ${diff_json},
   "useTrace" : ${trace_json},
-  "printTrace" : false,
+  "printTrace" : ${print_trace_json},
   "useJaccardSimilarity" : ${jaccard_json},
   "jaccardSimilarityThreshold" : 0.3,
   "useBranchCoverage" : ${branch_json},
@@ -243,7 +300,7 @@ JSON
   "testingMode" : ${TESTING_MODE},
   "differentialExecution" : ${diff_json},
   "useTrace" : ${trace_json},
-  "printTrace" : false,
+  "printTrace" : ${print_trace_json},
   "useJaccardSimilarity" : ${jaccard_json},
   "jaccardSimilarityThreshold" : 0.3,
   "useBranchCoverage" : ${branch_json},
@@ -284,7 +341,7 @@ JSON
   "testingMode" : ${TESTING_MODE},
   "differentialExecution" : ${diff_json},
   "useTrace" : ${trace_json},
-  "printTrace" : false,
+  "printTrace" : ${print_trace_json},
   "useJaccardSimilarity" : ${jaccard_json},
   "jaccardSimilarityThreshold" : 0.3,
   "useBranchCoverage" : ${branch_json},
@@ -359,6 +416,10 @@ while [[ $# -gt 0 ]]; do
             USE_TRACE="$2"
             shift 2
             ;;
+        --print-trace)
+            PRINT_TRACE="$2"
+            shift 2
+            ;;
         --use-jaccard)
             USE_JACCARD="$2"
             shift 2
@@ -381,6 +442,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --client-port)
             CLIENT_PORT="$2"
+            shift 2
+            ;;
+        --server-start-timeout-sec)
+            SERVER_START_TIMEOUT_SEC="$2"
             shift 2
             ;;
         --node-num)
@@ -452,6 +517,8 @@ if [[ "${SYSTEM}" == "hbase" ]]; then
     if ! docker image inspect "upfuzz_hdfs:hadoop-2.10.2" >/dev/null 2>&1; then
         die "Required dependency image for HBase is missing: upfuzz_hdfs:hadoop-2.10.2"
     fi
+    sanitize_hbase_cached_classpath_for_version "${ORIGINAL_VERSION}"
+    sanitize_hbase_cached_classpath_for_version "${UPGRADED_VERSION}"
 fi
 
 if [[ "${USE_TRACE}" == true && "${SYSTEM}" == "cassandra" && "${NODE_NUM}" -lt 2 ]]; then
@@ -497,12 +564,14 @@ TESTING_MODE=${TESTING_MODE}
 DIFFERENTIAL_EXECUTION=${USE_DIFF}
 CASSANDRA_RETRY_TIMEOUT=${CASSANDRA_RETRY_TIMEOUT}
 USE_TRACE=${USE_TRACE}
+PRINT_TRACE=${PRINT_TRACE}
 USE_JACCARD=${USE_JACCARD}
 USE_BRANCH_COVERAGE=${USE_BRANCH_COVERAGE}
 ENABLE_LOG_CHECK=${ENABLE_LOG_CHECK}
 SERVER_PORT=${SERVER_PORT}
 CLIENT_PORT=${CLIENT_PORT}
 NODE_NUM=${NODE_NUM}
+SERVER_START_TIMEOUT_SEC=${SERVER_START_TIMEOUT_SEC}
 RUN_NAME=${RUN_NAME}
 RUN_DIR=${RUN_DIR}
 REQUIRE_TRACE_SIGNAL=${REQUIRE_TRACE_SIGNAL}
@@ -514,6 +583,10 @@ if [[ "${SKIP_PRE_CLEAN}" == false ]]; then
         cd "${ROOT_DIR}"
         bin/clean.sh --force
     ) > "${PRE_CLEAN_LOG}" 2>&1 || true
+    (
+        cd "${ROOT_DIR}"
+        cleanup_upfuzz_networks
+    ) >> "${PRE_CLEAN_LOG}" 2>&1 || true
 fi
 
 mkdir -p "${ROOT_DIR}/logs"
@@ -537,10 +610,15 @@ SERVER_PID=$!
 
 echo "${SERVER_PID}" > "${RUN_DIR}/server_pid.txt"
 
-sleep 3
-
-if ! kill -0 "${SERVER_PID}" 2>/dev/null; then
-    log "Server exited early; capturing artifacts"
+log "Waiting for server port ${SERVER_PORT} to listen (timeout=${SERVER_START_TIMEOUT_SEC}s)"
+if wait_for_server_listen "${SERVER_PID}" "${SERVER_PORT}" "${SERVER_START_TIMEOUT_SEC}"; then
+    log "Server is listening on ${SERVER_PORT}"
+else
+    rc=$?
+    if [[ "${rc}" -eq 1 ]]; then
+        die "Server exited before becoming ready. See ${SERVER_STDOUT} and ${SERVER_LOG}"
+    fi
+    die "Server did not listen on port ${SERVER_PORT} within ${SERVER_START_TIMEOUT_SEC}s"
 fi
 
 log "Launching ${CLIENTS} client(s)"
@@ -557,6 +635,8 @@ stop_reason=""
 last_rounds=0
 target_rounds_first_seen_epoch=""
 TARGET_ROUND_GRACE_SEC=120
+HEALTHCHECK_MIN_EXEC=20
+HEALTHCHECK_FAIL_ONLY_THRESHOLD=20
 
 {
     echo "timestamp,elapsed_sec,rounds,diff_feedback_packets,server_alive"
@@ -578,8 +658,20 @@ while true; do
     echo "$(date '+%F %T'),${elapsed},${rounds},${diff_feedback_packets},${server_alive}" >> "${MONITOR_LOG}"
 
     if (( rounds > last_rounds )); then
-        log "Observed progress: total_exec=${rounds}, diff_feedback_packets=${diff_feedback_packets}"
+        all3_failed_count_now="$(safe_rg_count_file 'All 3 clusters failed' "${SERVER_LOG}")"
+        log "Observed progress: total_exec=${rounds}, diff_feedback_packets=${diff_feedback_packets}, all3_failed=${all3_failed_count_now}"
         last_rounds="${rounds}"
+    fi
+
+    if [[ "${USE_TRACE}" == true && "${rounds}" -ge "${HEALTHCHECK_MIN_EXEC}" ]]; then
+        all3_failed_count="$(safe_rg_count_file 'All 3 clusters failed' "${SERVER_LOG}")"
+        trace_received_runtime="$(count_pattern_in_clients 'Received trace = ')"
+        trace_len_positive_runtime="$(safe_rg_count_file 'trace\[[0-9]+\] len = [1-9][0-9]*' "${SERVER_LOG}")"
+        if (( all3_failed_count >= HEALTHCHECK_FAIL_ONLY_THRESHOLD )) && (( trace_received_runtime == 0 )) && (( trace_len_positive_runtime == 0 )); then
+            log "Health check failed: all clusters failed ${all3_failed_count} times with zero trace signal. Likely environment issue (for example missing docker compose)."
+            stop_reason="healthcheck_all_clusters_failed"
+            break
+        fi
     fi
 
     if (( rounds >= TARGET_ROUNDS )); then
@@ -626,6 +718,10 @@ log "Stopping run (reason=${stop_reason})"
     cd "${ROOT_DIR}"
     bin/clean.sh --force
 ) > "${POST_CLEAN_LOG}" 2>&1 || true
+(
+    cd "${ROOT_DIR}"
+    cleanup_upfuzz_networks
+) >> "${POST_CLEAN_LOG}" 2>&1 || true
 
 END_TS="$(date '+%F %T')"
 END_EPOCH="$(date +%s)"
@@ -659,6 +755,11 @@ TRACE_CONNECT_REFUSED_COUNT=0
 TRACE_RECEIVED_COUNT=0
 TRACE_LEN_POSITIVE_COUNT=0
 TRACE_LEN_ZERO_COUNT=0
+TRACE_MERGED_OLD_NONZERO_COUNT=0
+TRACE_MERGED_ROLLING_NONZERO_COUNT=0
+TRACE_MERGED_NEW_NONZERO_COUNT=0
+TRACE_MERGED_ZERO_COUNT=0
+MESSAGE_TRI_DIFF_COUNT=0
 TRACE_SIGNAL_OK="n/a"
 
 if [[ "${USE_TRACE}" == true ]]; then
@@ -666,6 +767,11 @@ if [[ "${USE_TRACE}" == true ]]; then
     TRACE_RECEIVED_COUNT="$(count_pattern_in_clients 'Received trace = ')"
     TRACE_LEN_POSITIVE_COUNT="$(safe_rg_count_file 'trace\[[0-9]+\] len = [1-9][0-9]*' "${SERVER_LOG}")"
     TRACE_LEN_ZERO_COUNT="$(safe_rg_count_file 'trace\[[0-9]+\] len = 0' "${SERVER_LOG}")"
+    TRACE_MERGED_OLD_NONZERO_COUNT="$(safe_rg_count_file '=== Merged Trace 0 \(Only Old\), size=[1-9][0-9]* ===' "${SERVER_LOG}")"
+    TRACE_MERGED_ROLLING_NONZERO_COUNT="$(safe_rg_count_file '=== Merged Trace 1 \(Rolling\), size=[1-9][0-9]* ===' "${SERVER_LOG}")"
+    TRACE_MERGED_NEW_NONZERO_COUNT="$(safe_rg_count_file '=== Merged Trace 2 \(Only New\), size=[1-9][0-9]* ===' "${SERVER_LOG}")"
+    TRACE_MERGED_ZERO_COUNT="$(safe_rg_count_file '=== Merged Trace [0-9]+ \([^)]*\), size=0 ===' "${SERVER_LOG}")"
+    MESSAGE_TRI_DIFF_COUNT="$(safe_rg_count_file 'Message identity tri-diff:' "${SERVER_LOG}")"
     if (( TRACE_RECEIVED_COUNT > 0 || TRACE_LEN_POSITIVE_COUNT > 0 )); then
         TRACE_SIGNAL_OK=true
     else
@@ -695,11 +801,19 @@ server_port: ${SERVER_PORT}
 client_port: ${CLIENT_PORT}
 new_failure_dirs: ${new_failure_count}
 trace_enabled: ${USE_TRACE}
+print_trace: ${PRINT_TRACE}
 trace_signal_ok: ${TRACE_SIGNAL_OK}
 trace_connect_refused_count: ${TRACE_CONNECT_REFUSED_COUNT}
 trace_received_count: ${TRACE_RECEIVED_COUNT}
+# Node-level trace lengths (per TestPlanFeedbackPacket.trace[nodeIdx]):
 trace_len_positive_count: ${TRACE_LEN_POSITIVE_COUNT}
 trace_len_zero_count: ${TRACE_LEN_ZERO_COUNT}
+# Execution-level merged trace sizes (Only Old / Rolling / Only New):
+trace_merged_old_nonzero_count: ${TRACE_MERGED_OLD_NONZERO_COUNT}
+trace_merged_rolling_nonzero_count: ${TRACE_MERGED_ROLLING_NONZERO_COUNT}
+trace_merged_new_nonzero_count: ${TRACE_MERGED_NEW_NONZERO_COUNT}
+trace_merged_zero_count: ${TRACE_MERGED_ZERO_COUNT}
+message_tri_diff_count: ${MESSAGE_TRI_DIFF_COUNT}
 require_trace_signal: ${REQUIRE_TRACE_SIGNAL}
 server_stdout: ${SERVER_STDOUT}
 client_launcher_stdout: ${CLIENT_LAUNCHER_STDOUT}
@@ -720,8 +834,11 @@ if [[ "${USE_TRACE}" == true && "${REQUIRE_TRACE_SIGNAL}" == true ]]; then
         exit 3
     fi
     if (( TRACE_CONNECT_REFUSED_COUNT > 0 )); then
-        echo "ERROR: Trace collection observed Connection refused (${TRACE_CONNECT_REFUSED_COUNT} times)." >&2
-        exit 4
+        if (( TRACE_RECEIVED_COUNT == 0 )); then
+            echo "ERROR: Trace collection observed Connection refused (${TRACE_CONNECT_REFUSED_COUNT} times) with no successful trace reads." >&2
+            exit 4
+        fi
+        echo "WARNING: Trace collection observed Connection refused (${TRACE_CONNECT_REFUSED_COUNT} times) but successful trace reads were also observed (${TRACE_RECEIVED_COUNT})." >&2
     fi
 fi
 

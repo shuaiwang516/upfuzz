@@ -14,6 +14,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jacoco.core.data.ExecutionDataStore;
 import org.zlab.ocov.tracker.ObjectGraphCoverage;
+import org.zlab.net.tracker.Trace;
 import org.zlab.upfuzz.cassandra.CassandraExecutor;
 import org.zlab.upfuzz.fuzzingengine.packet.*;
 import org.zlab.upfuzz.fuzzingengine.packet.Packet.PacketType;
@@ -1375,46 +1376,124 @@ public class FuzzingClient {
                 .submit(new RegularTestPlanThread(executors[2],
                         testPlanPacketWithoutUpgrade));
 
+        long diffPacketTimeoutSec = Math.max(180L,
+                (long) Config.getConf().CASSANDRA_RETRY_TIMEOUT * 2L);
+        long deadlineMillis = System.currentTimeMillis()
+                + TimeUnit.SECONDS.toMillis(diffPacketTimeoutSec);
+
         try {
-            TestPlanFeedbackPacket testPlanFeedbackPacket1 = futureOnlyOld
-                    .get();
-            TestPlanFeedbackPacket testPlanFeedbackPacket2 = futureRolling
-                    .get();
-            TestPlanFeedbackPacket testPlanFeedbackPacket3 = futureNew
-                    .get();
-            // TODO: fix this check, make it more reasonable...
-            if (testPlanFeedbackPacket1 == null ||
-                    testPlanFeedbackPacket2 == null ||
-                    testPlanFeedbackPacket3 == null) {
-                logger.error("[HKLOG] trace diff: one of the packets is null");
-                throw new RuntimeException(
-                        "One of the packets is null, cannot proceed");
-            }
-            // TODO: return 3 packets...
-            logger.debug("[HKLOG] trace diff: all three packets are collected");
             TestPlanFeedbackPacket[] testPlanFeedbackPackets = new TestPlanFeedbackPacket[3];
-            testPlanFeedbackPackets[0] = testPlanFeedbackPacket1;
-            testPlanFeedbackPackets[1] = testPlanFeedbackPacket2;
-            testPlanFeedbackPackets[2] = testPlanFeedbackPacket3;
+            testPlanFeedbackPackets[0] = waitDifferentialFeedback(
+                    futureOnlyOld,
+                    "OnlyOld",
+                    testPlanPacket,
+                    deadlineMillis);
+            testPlanFeedbackPackets[1] = waitDifferentialFeedback(
+                    futureRolling,
+                    "Rolling",
+                    testPlanPacket,
+                    deadlineMillis);
+            testPlanFeedbackPackets[2] = waitDifferentialFeedback(
+                    futureNew,
+                    "OnlyNew",
+                    testPlanPacket,
+                    deadlineMillis);
+
+            logger.debug("[HKLOG] trace diff: all three packets are collected");
             return new TestPlanDiffFeedbackPacket(
                     testPlanPacket.systemID,
                     testPlanPacket.testPacketID,
                     testPlanFeedbackPackets);
-        } catch (ExecutionException e) {
-            Throwable realException = e.getCause(); // get the original cause
-            logger.error("[HKLOG] ExecutionException when collecting 3 diff "
-                    + realException);
-            for (StackTraceElement ste : realException.getStackTrace())
-                logger.error(ste.toString());
-            executorService.shutdown();
-            return null;
-        } catch (Exception e) {
-            logger.error("[HKLOG] Exception when collecting 3 diff " + e);
-            for (StackTraceElement ste : e.getStackTrace())
-                logger.error(ste.toString());
-            executorService.shutdown();
-            return null;
+        } finally {
+            executorService.shutdownNow();
         }
+    }
+
+    private TestPlanFeedbackPacket waitDifferentialFeedback(
+            Future<TestPlanFeedbackPacket> future,
+            String lane,
+            TestPlanPacket testPlanPacket,
+            long deadlineMillis) {
+        long remainingMillis = deadlineMillis - System.currentTimeMillis();
+        if (remainingMillis <= 0L) {
+            logger.error("[HKLOG] differential lane " + lane
+                    + " exceeded packet timeout");
+            future.cancel(true);
+            return buildFallbackDiffFeedback(testPlanPacket, lane,
+                    "packet timeout reached before feedback arrived");
+        }
+
+        try {
+            TestPlanFeedbackPacket packet = future.get(remainingMillis,
+                    TimeUnit.MILLISECONDS);
+            if (packet == null) {
+                logger.error("[HKLOG] differential lane " + lane
+                        + " returned null feedback packet");
+                return buildFallbackDiffFeedback(testPlanPacket, lane,
+                        "feedback packet is null");
+            }
+            return packet;
+        } catch (TimeoutException e) {
+            logger.error("[HKLOG] differential lane " + lane
+                    + " timed out while waiting for feedback");
+            future.cancel(true);
+            return buildFallbackDiffFeedback(testPlanPacket, lane,
+                    "timeout while waiting for feedback");
+        } catch (ExecutionException e) {
+            Throwable realException = e.getCause();
+            logger.error("[HKLOG] differential lane " + lane
+                    + " failed with ExecutionException: " + realException);
+            if (realException != null) {
+                for (StackTraceElement ste : realException.getStackTrace()) {
+                    logger.error(ste.toString());
+                }
+            }
+            return buildFallbackDiffFeedback(testPlanPacket, lane,
+                    "execution exception: " + realException);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.error("[HKLOG] differential lane " + lane
+                    + " interrupted while waiting for feedback");
+            future.cancel(true);
+            return buildFallbackDiffFeedback(testPlanPacket, lane,
+                    "interrupted while waiting for feedback");
+        } catch (Exception e) {
+            logger.error("[HKLOG] differential lane " + lane
+                    + " failed with exception: " + e);
+            for (StackTraceElement ste : e.getStackTrace()) {
+                logger.error(ste.toString());
+            }
+            return buildFallbackDiffFeedback(testPlanPacket, lane,
+                    "exception while waiting for feedback: " + e);
+        }
+    }
+
+    private TestPlanFeedbackPacket buildFallbackDiffFeedback(
+            TestPlanPacket testPlanPacket,
+            String lane,
+            String reason) {
+        int nodeNum = Math.max(1, Config.getConf().nodeNum);
+        FeedBack[] feedBacks = new FeedBack[nodeNum];
+        for (int i = 0; i < nodeNum; i++) {
+            feedBacks[i] = new FeedBack();
+        }
+
+        TestPlanFeedbackPacket packet = new TestPlanFeedbackPacket(
+                testPlanPacket.systemID,
+                testPlanPacket.configFileName,
+                testPlanPacket.testPacketID,
+                feedBacks);
+        packet.isEventFailed = true;
+        packet.eventFailedReport = "[DIFF-FALLBACK][" + lane + "] " + reason;
+        packet.fullSequence = recordTestPlanPacket(testPlanPacket);
+
+        if (Config.getConf().useTrace) {
+            packet.trace = new Trace[nodeNum];
+            for (int i = 0; i < nodeNum; i++) {
+                packet.trace[i] = new Trace();
+            }
+        }
+        return packet;
     }
 
     public TestPlanFeedbackPacket executeTestPlanPacketRegular(

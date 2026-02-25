@@ -134,15 +134,18 @@ public class HBaseDocker extends Docker {
         type = (direction == 0) ? "original" : "upgraded";
         String HBaseHome = "/hbase/" + originalVersion;
         String HBaseConf = "/etc/" + originalVersion;
-        javaToolOpts = "JAVA_TOOL_OPTIONS=\"-javaagent:"
-                + "/org.jacoco.agent.rt.jar"
-                + "=append=false"
-                + ",includes=" + includes + ",excludes=" + excludes +
-                ",output=dfe,address=" + hostIP + ",port=" + agentPort +
-                /*",weights=" + HBaseHome + "/diff_func.txt" +*/
-                ",sessionid=" + system + "-" + executorID + "_"
-                + type + "-" + index +
-                "\"";
+        if (Config.getConf().useBranchCoverage) {
+            javaToolOpts = "JAVA_TOOL_OPTIONS=\"-javaagent:"
+                    + "/org.jacoco.agent.rt.jar"
+                    + "=append=false"
+                    + ",includes=" + includes + ",excludes=" + excludes +
+                    ",output=dfe,address=" + hostIP + ",port=" + agentPort +
+                    ",sessionid=" + system + "-" + executorID + "_"
+                    + type + "-" + index +
+                    "\"";
+        } else {
+            javaToolOpts = "JAVA_TOOL_OPTIONS=\"\"";
+        }
 
         String pythonVersion = "python2";
 
@@ -233,15 +236,18 @@ public class HBaseDocker extends Docker {
         type = "upgraded";
         String HBaseHome = "/hbase/" + upgradedVersion;
         String HBaseConf = "/etc/" + upgradedVersion;
-        javaToolOpts = "JAVA_TOOL_OPTIONS=\"-javaagent:"
-                + "/org.jacoco.agent.rt.jar"
-                + "=append=false"
-                + ",includes=" + includes + ",excludes=" + excludes +
-                ",output=dfe,address=" + hostIP + ",port=" + agentPort +
-                /*",weights=" + HBaseHome + "/diff_func.txt" +*/
-                ",sessionid=" + system + "-" + executorID + "_" + type +
-                "-" + index +
-                "\"";
+        if (Config.getConf().useBranchCoverage) {
+            javaToolOpts = "JAVA_TOOL_OPTIONS=\"-javaagent:"
+                    + "/org.jacoco.agent.rt.jar"
+                    + "=append=false"
+                    + ",includes=" + includes + ",excludes=" + excludes +
+                    ",output=dfe,address=" + hostIP + ",port=" + agentPort +
+                    ",sessionid=" + system + "-" + executorID + "_" + type +
+                    "-" + index +
+                    "\"";
+        } else {
+            javaToolOpts = "JAVA_TOOL_OPTIONS=\"\"";
+        }
         HBaseDaemonPort ^= 1;
 
         String pythonVersion = "python2";
@@ -429,6 +435,7 @@ public class HBaseDocker extends Docker {
             // + " -
             // ./persistent/node_${index}/zookeeper:/usr/local/zookeeper\n"
             + "            - ./persistent/node_${index}/consolelog:/var/log/supervisor\n"
+            + "            - ${projectRoot}/src/main/resources/hbase/compile-src/hbase-init.sh:/usr/local/bin/hbase-init.sh\n"
             + "            - ./persistent/config:/test_config\n"
             + "            - ${projectRoot}/prebuild/${system}/${originalVersion}:/${system}/${originalVersion}\n"
             + "            - ${projectRoot}/prebuild/${system}/${upgradedVersion}:/${system}/${upgradedVersion}\n"

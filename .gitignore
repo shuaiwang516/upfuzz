@@ -130,3 +130,6 @@ artifact/state-exploration/all.pdf
 ._cassandra
 ._hbase
 ._hdfs
+
+
+**/results/

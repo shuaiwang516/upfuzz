@@ -271,6 +271,19 @@ install_docker() {
         run_as_root systemctl enable --now docker
     fi
 
+    if ! docker compose version >/dev/null 2>&1; then
+        log "docker compose is missing; installing compose plugin"
+        run_as_root apt-get update
+        if apt-cache show docker-compose-v2 >/dev/null 2>&1; then
+            run_as_root apt-get install -y docker-compose-v2
+        elif apt-cache show docker-compose-plugin >/dev/null 2>&1; then
+            run_as_root apt-get install -y docker-compose-plugin
+        else
+            die "No docker compose package found (docker-compose-v2/docker-compose-plugin)."
+        fi
+    fi
+    docker compose version >/dev/null 2>&1 || die "docker compose still unavailable after install"
+
     if getent group docker >/dev/null 2>&1; then
         run_as_root usermod -aG docker "${TARGET_USER}"
     fi

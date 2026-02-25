@@ -44,6 +44,12 @@ public class HdfsDockerCluster extends DockerCluster {
     public void initBlackListErrorLog() {
         blackListErrorLog.add("Error response from daemon: Container");
         blackListErrorLog.add("RECEIVED SIGNAL");
+        // During rolling upgrade, SNN may transiently fail checkpoint while NN
+        // is restarting/upgrading. Treat these as expected transient logs.
+        blackListErrorLog.add(
+                "SecondaryNameNode: Exception in doCheckpoint");
+        blackListErrorLog.add(
+                "java.net.ConnectException: Connection refused (Connection refused)");
     }
 
     public boolean build() throws Exception {

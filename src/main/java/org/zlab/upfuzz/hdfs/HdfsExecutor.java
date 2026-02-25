@@ -80,6 +80,10 @@ public class HdfsExecutor extends Executor {
     @Override
     public boolean startup() {
         try {
+            if (agentSocket != null) {
+                agentSocket.stopServer();
+                agentSocket = null;
+            }
             agentSocket = new AgentServerSocket(this);
             agentSocket.setDaemon(true);
             agentSocket.start();
@@ -118,6 +122,7 @@ public class HdfsExecutor extends Executor {
             }
         } catch (Exception e) {
             logger.error("docker cluster start up failed", e);
+            return false;
         }
 
         logger.info("hdfs " + executorID + " started");

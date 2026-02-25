@@ -7,6 +7,18 @@ then
         echo "master written to host"
 fi
 
+# Ensure Hadoop daemon startup scripts can resolve Java on localhost ssh hops.
+if [[ -z "${JAVA_HOME:-}" ]];
+then
+        if [[ -d /usr/lib/jvm/java-8-openjdk-amd64 ]];
+        then
+                export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+        elif [[ -d /usr/lib/jvm/java-11-openjdk-amd64 ]];
+        then
+                export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+        fi
+fi
+
 # mkdir -p ${HADOOP_CONF}
 
 # bin=${HADOOP_HOME}

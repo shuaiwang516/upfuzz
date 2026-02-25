@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.zlab.net.tracker.Trace;
 import org.zlab.upfuzz.docker.Docker;
 import org.zlab.upfuzz.fuzzingengine.Config;
 import org.zlab.upfuzz.fuzzingengine.ShellDaemon;
@@ -12,9 +13,12 @@ import org.zlab.upfuzz.utils.Utilities;
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.Base64;
 
 public class HDFSShellDaemon extends ShellDaemon {
     static Logger logger = LogManager.getLogger(HDFSShellDaemon.class);
+    private static final int SOCKET_CONNECT_TIMEOUT_MS = 3 * 1000;
+    private static final int SOCKET_READ_TIMEOUT_MS = 30 * 1000;
 
     private Socket socket;
 
@@ -29,7 +33,8 @@ public class HDFSShellDaemon extends ShellDaemon {
                         + "Connect to hdfs shell:" + ipAddress + "..." + i);
                 socket = new Socket();
                 socket.connect(new InetSocketAddress(ipAddress, port),
-                        3 * 1000);
+                        SOCKET_CONNECT_TIMEOUT_MS);
+                socket.setSoTimeout(SOCKET_READ_TIMEOUT_MS);
                 logger.info("[HKLOG] executor ID = " + executorID + "  "
                         + "hdfs shell connected: " + ipAddress);
                 return;
@@ -64,22 +69,21 @@ public class HDFSShellDaemon extends ShellDaemon {
 
     public HdfsPacket execute(String cmd)
             throws IOException {
+        if (socket == null || socket.isClosed()) {
+            throw new IOException("hdfs shell socket is not connected");
+        }
         DataInputStream in = new DataInputStream(socket.getInputStream());
         DataOutputStream out = new DataOutputStream(socket.getOutputStream());
         out.writeInt(cmd.getBytes().length);
         out.write(cmd.getBytes());
+        out.flush();
 
         int packetLength = in.readInt();
         if (Config.getConf().debug) {
             logger.info("hdfs daemon ret len = " + packetLength);
         }
         byte[] bytes = new byte[packetLength];
-        int len = 0;
-        len = in.read(bytes, len, packetLength - len);
-        while (len < packetLength) {
-            int size = in.read(bytes, len, packetLength - len);
-            len += size;
-        }
+        in.readFully(bytes);
         String hdfsMessage = new String(bytes);
 
         Gson gson = new GsonBuilder()
@@ -91,8 +95,13 @@ public class HDFSShellDaemon extends ShellDaemon {
         try {
             hdfsPacket = gson.fromJson(hdfsMessage,
                     HdfsPacket.class);
-            hdfsPacket.message = Utilities.decodeString(hdfsPacket.message)
-                    .replace("\0", "");
+            String normalizedCmd = cmd == null ? "" : cmd.trim().toLowerCase();
+            boolean keepRawMessage = normalizedCmd.equals("collecttrace")
+                    || normalizedCmd.equals("cleartrace");
+            if (!keepRawMessage && hdfsPacket.message != null) {
+                hdfsPacket.message = Utilities.decodeString(hdfsPacket.message)
+                        .replace("\0", "");
+            }
         } catch (Exception e) {
             e.printStackTrace();
             logger.error("ERROR: Cannot read from json\n WRONG_HDFS MESSAGE: "
@@ -121,6 +130,31 @@ public class HDFSShellDaemon extends ShellDaemon {
                     cp.exitValue));
         return ret;
 
+    }
+
+    public Trace collectTrace() throws Exception {
+        HdfsPacket cp = execute("collecttrace");
+        if (cp == null) {
+            throw new RuntimeException("collecttrace returned null packet");
+        }
+        if (cp.exitValue != 0) {
+            throw new RuntimeException(
+                    "collecttrace failed: " + cp.error);
+        }
+        if (cp.message == null || cp.message.isEmpty()) {
+            return new Trace();
+        }
+
+        byte[] traceBytes = Base64.getDecoder().decode(cp.message);
+        try (ObjectInputStream objectInputStream = new ObjectInputStream(
+                new ByteArrayInputStream(traceBytes))) {
+            Trace trace = (Trace) objectInputStream.readObject();
+            try {
+                execute("cleartrace");
+            } catch (Exception ignored) {
+            }
+            return trace;
+        }
     }
 
     public static class HdfsPacket {

@@ -101,7 +101,9 @@ class VersionDeltaStackedTestThread implements Callable<StackedFeedbackPacket> {
                         : executor
                                 .collectCoverageSeparate("upgraded");
                 if (oriCoverages != null) {
-                    for (int nodeIdx = 0; nodeIdx < stackedTestPacket.nodeNum; nodeIdx++) {
+                    int coverageBound = Math.min(stackedTestPacket.nodeNum,
+                            oriCoverages.length);
+                    for (int nodeIdx = 0; nodeIdx < coverageBound; nodeIdx++) {
                         feedBacks[nodeIdx].originalCodeCoverage = oriCoverages[nodeIdx];
                     }
                 }
@@ -241,7 +243,10 @@ class VersionDeltaStackedTestThread implements Callable<StackedFeedbackPacket> {
                         ExecutionDataStore[] upCoverages = executor
                                 .collectCoverageSeparate("upgraded");
                         if (upCoverages != null) {
-                            for (int nodeIdx = 0; nodeIdx < stackedTestPacket.nodeNum; nodeIdx++) {
+                            int coverageBound = Math.min(
+                                    stackedTestPacket.nodeNum,
+                                    upCoverages.length);
+                            for (int nodeIdx = 0; nodeIdx < coverageBound; nodeIdx++) {
                                 testID2FeedbackPacket.get(
                                         tp.testPacketID).feedBacks[nodeIdx].upgradedCodeCoverage = upCoverages[nodeIdx];
                             }
@@ -295,7 +300,10 @@ class VersionDeltaStackedTestThread implements Callable<StackedFeedbackPacket> {
                             ExecutionDataStore[] downCoverages = executor
                                     .collectCoverageSeparate("original");
                             if (downCoverages != null) {
-                                for (int nodeIdx = 0; nodeIdx < stackedTestPacket.nodeNum; nodeIdx++) {
+                                int coverageBound = Math.min(
+                                        stackedTestPacket.nodeNum,
+                                        downCoverages.length);
+                                for (int nodeIdx = 0; nodeIdx < coverageBound; nodeIdx++) {
                                     System.out.println(
                                             testID2FeedbackPacket
                                                     .get(tp.testPacketID));

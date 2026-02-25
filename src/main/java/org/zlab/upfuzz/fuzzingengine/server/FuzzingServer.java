@@ -991,8 +991,6 @@ public class FuzzingServer {
 
     public TestPlan generateExampleTestPlan() {
         int nodeNum = Config.getConf().nodeNum;
-        if (Config.getConf().system.equals("hdfs"))
-            nodeNum = 4;
 
         List<Event> events = EventParser.construct();
 
@@ -1001,8 +999,12 @@ public class FuzzingServer {
         Map<Integer, Map<String, String>> oracle = new HashMap<>();
         Path commandPath = Paths.get(System.getProperty("user.dir"),
                 "examplecase");
+        String validCommandsFile = "validcommands.txt";
+        if ("hdfs".equals(Config.getConf().system)) {
+            validCommandsFile = "validcommands_hdfs_example.txt";
+        }
         List<String> validcommands = readCommands(
-                commandPath.resolve("validcommands.txt"));
+                commandPath.resolve(validCommandsFile));
         List<String> validationReadResultsOracle = new LinkedList<>();
 
         return new TestPlan(nodeNum, events, validcommands,

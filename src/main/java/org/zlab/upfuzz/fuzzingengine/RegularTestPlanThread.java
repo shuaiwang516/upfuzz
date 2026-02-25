@@ -92,7 +92,9 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
                         : executor
                                 .collectCoverageSeparate("upgraded");
                 if (oriCoverages != null) {
-                    for (int nodeIdx = 0; nodeIdx < stackedTestPacket.nodeNum; nodeIdx++) {
+                    int coverageBound = Math.min(stackedTestPacket.nodeNum,
+                            oriCoverages.length);
+                    for (int nodeIdx = 0; nodeIdx < coverageBound; nodeIdx++) {
                         feedBacks[nodeIdx].originalCodeCoverage = oriCoverages[nodeIdx];
                     }
                 }
@@ -214,7 +216,7 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
                     .collectCoverageSeparate("original");
             for (int i = 0; i < nodeNum; i++) {
                 testPlanFeedBacks[i] = new FeedBack();
-                if (oriCoverages != null)
+                if (oriCoverages != null && i < oriCoverages.length)
                     testPlanFeedBacks[i].originalCodeCoverage = oriCoverages[i];
             }
             // upgrade
@@ -227,7 +229,9 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
             // collect test plan coverage
             for (int i = 0; i < nodeNum; i++) {
                 testPlanFeedBacks[i] = new FeedBack();
-                if (executor.oriCoverage[i] != null)
+                if (executor.oriCoverage != null
+                        && i < executor.oriCoverage.length
+                        && executor.oriCoverage[i] != null)
                     testPlanFeedBacks[i].originalCodeCoverage = executor.oriCoverage[i];
             }
         }
@@ -264,7 +268,9 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
                     ExecutionDataStore[] oriCoverages = executor
                             .collectCoverageSeparate("original");
                     if (oriCoverages != null) {
-                        for (int nodeIdx = 0; nodeIdx < nodeNum; nodeIdx++) {
+                        int coverageBound = Math.min(nodeNum,
+                                oriCoverages.length);
+                        for (int nodeIdx = 0; nodeIdx < coverageBound; nodeIdx++) {
                             testPlanFeedbackPacket.feedBacks[nodeIdx].originalCodeCoverage = oriCoverages[nodeIdx];
                         }
                     }
@@ -310,7 +316,9 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
                     ExecutionDataStore[] upCoverages = executor
                             .collectCoverageSeparate("upgraded");
                     if (upCoverages != null) {
-                        for (int nodeIdx = 0; nodeIdx < nodeNum; nodeIdx++) {
+                        int coverageBound = Math.min(nodeNum,
+                                upCoverages.length);
+                        for (int nodeIdx = 0; nodeIdx < coverageBound; nodeIdx++) {
                             testPlanFeedbackPacket.feedBacks[nodeIdx].upgradedCodeCoverage = upCoverages[nodeIdx];
                         }
                     }

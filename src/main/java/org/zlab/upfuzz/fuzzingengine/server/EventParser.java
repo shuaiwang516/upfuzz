@@ -2,6 +2,7 @@ package org.zlab.upfuzz.fuzzingengine.server;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.zlab.upfuzz.fuzzingengine.Config;
 import org.zlab.upfuzz.fuzzingengine.testplan.event.Event;
 import org.zlab.upfuzz.fuzzingengine.testplan.event.command.ShellCommand;
 import org.zlab.upfuzz.fuzzingengine.testplan.event.downgradeop.DowngradeOp;
@@ -25,8 +26,12 @@ public class EventParser {
     public static List<Event> construct() {
         Path commandPath = Paths.get(System.getProperty("user.dir"),
                 "examplecase");
+        String testPlanFileName = "testplan.txt";
+        if ("hdfs".equals(Config.getConf().system)) {
+            testPlanFileName = "testplan_hdfs_example.txt";
+        }
         List<String> commands = FuzzingServer.readCommands(
-                commandPath.resolve("testplan.txt"));
+                commandPath.resolve(testPlanFileName));
 
         List<Event> events = new LinkedList<>();
         for (String eventStr : commands) {

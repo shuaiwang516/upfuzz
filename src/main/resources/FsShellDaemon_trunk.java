@@ -28,6 +28,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.io.StringWriter;
 import java.io.PrintWriter;
+import java.io.ObjectOutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -55,6 +56,8 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.ToolRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.zlab.net.tracker.Runtime;
+import org.zlab.net.tracker.Trace;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
@@ -380,7 +383,45 @@ public class FsShellDaemon extends Configured implements Tool {
                 // }
                 HdfsPacket hdfsPacket = new HdfsPacket();
 
-                if(cmdType.equals("dfsadmin") || cmdType.equals("ec")){
+                if(cmdType.equals("collecttrace")){
+                    hdfsPacket.cmd = commandString;
+                    try{
+                        Trace trace = Runtime.getTrace();
+                        ByteArrayOutputStream traceBytes = new ByteArrayOutputStream();
+                        ObjectOutputStream objectOutputStream = new ObjectOutputStream(traceBytes);
+                        objectOutputStream.writeObject(trace);
+                        objectOutputStream.flush();
+                        hdfsPacket.exitValue = 0;
+                        hdfsPacket.message = Base64.getEncoder().encodeToString(traceBytes.toByteArray());
+                        hdfsPacket.error = "";
+                        hdfsPacket.timeUsage = (System.currentTimeMillis() - st) / 1000.;
+                    }
+                    catch(Exception e){
+                        hdfsPacket.exitValue = -1;
+                        hdfsPacket.message = "";
+                        StringWriter sw = new StringWriter();
+                        e.printStackTrace(new PrintWriter(sw));
+                        hdfsPacket.error = sw.toString();
+                        hdfsPacket.timeUsage = (System.currentTimeMillis() - st) / 1000.;
+                    }
+                } else if(cmdType.equals("cleartrace")){
+                    hdfsPacket.cmd = commandString;
+                    try{
+                        Runtime.clear();
+                        hdfsPacket.exitValue = 0;
+                        hdfsPacket.message = "";
+                        hdfsPacket.error = "";
+                        hdfsPacket.timeUsage = (System.currentTimeMillis() - st) / 1000.;
+                    }
+                    catch(Exception e){
+                        hdfsPacket.exitValue = -1;
+                        hdfsPacket.message = "";
+                        StringWriter sw = new StringWriter();
+                        e.printStackTrace(new PrintWriter(sw));
+                        hdfsPacket.error = sw.toString();
+                        hdfsPacket.timeUsage = (System.currentTimeMillis() - st) / 1000.;
+                    }
+                } else if(cmdType.equals("dfsadmin") || cmdType.equals("ec")){
                     hdfsPacket.cmd = commandString;
                     try{
                         int res;

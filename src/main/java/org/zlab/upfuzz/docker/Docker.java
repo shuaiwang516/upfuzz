@@ -70,23 +70,42 @@ public abstract class Docker extends DockerMeta implements IDocker {
 
     @Override
     public Trace collectTrace() throws Exception {
-        // execute check inv command
-        Socket socket = new Socket(networkIP,
-                Config.instance.formatCoveragePort);
+        final int maxAttempts = 15;
+        final long retrySleepMillis = 1000L;
+        Exception lastException = null;
 
-        ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
-        PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-        out.println("collect trace"); // send a command to the server
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try (Socket socket = new Socket(networkIP,
+                    Config.instance.formatCoveragePort);
+                    ObjectInputStream in = new ObjectInputStream(
+                            socket.getInputStream());
+                    PrintWriter out = new PrintWriter(
+                            socket.getOutputStream(), true)) {
+                out.println("collect trace"); // send a command to the server
+                Trace response = (Trace) in.readObject();
+                logger.debug("Received trace = " + response);
+                return response;
+            } catch (IOException e) {
+                lastException = e;
+                if (attempt == maxAttempts) {
+                    throw e;
+                }
+                logger.debug(String.format(
+                        "Trace daemon not ready on node[%d], attempt %d/%d",
+                        index, attempt, maxAttempts));
+                try {
+                    Thread.sleep(retrySleepMillis);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException(
+                            "Interrupted while retrying trace collection", ie);
+                }
+            }
+        }
 
-        Trace response = (Trace) in.readObject();
-        logger.debug(
-                "Received trace = " + response);
-
-        // clean up resources
-        out.close();
-        in.close();
-        socket.close();
-        return response;
+        throw lastException == null
+                ? new IOException("Unknown error while collecting trace")
+                : lastException;
     }
 
     @Override

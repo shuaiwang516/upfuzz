@@ -12,6 +12,7 @@ import java.util.Set;
 import org.apache.commons.text.StringSubstitutor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.zlab.net.tracker.Trace;
 import org.zlab.upfuzz.docker.Docker;
 import org.zlab.upfuzz.docker.DockerCluster;
 import org.zlab.upfuzz.fuzzingengine.Config;
@@ -115,6 +116,23 @@ public class HdfsDocker extends Docker {
     }
 
     @Override
+    public Trace collectTrace() throws Exception {
+        if (shell instanceof HDFSShellDaemon) {
+            try {
+                return ((HDFSShellDaemon) shell).collectTrace();
+            } catch (Exception e) {
+                logger.warn(
+                        "HDFS shell trace collection failed on node {}: {}. "
+                                + "Fallback to generic trace daemon channel.",
+                        index, e.toString());
+            }
+        }
+        logger.warn("HDFS shell daemon not ready for collectTrace on node {}. "
+                + "Fallback to generic trace daemon channel.", index);
+        return super.collectTrace();
+    }
+
+    @Override
     public boolean build() throws IOException {
         type = (direction == 0) ? "original" : "upgraded";
         String hdfsHome = "/hdfs/" + originalVersion;
@@ -132,6 +150,10 @@ public class HdfsDocker extends Docker {
 
         env = new String[] {
                 "HADOOP_HOME=" + hdfsHome,
+                "HADOOP_COMMON_HOME=" + hdfsHome,
+                "HADOOP_HDFS_HOME=" + hdfsHome,
+                "HADOOP_YARN_HOME=" + hdfsHome,
+                "HADOOP_MAPRED_HOME=" + hdfsHome,
                 "HADOOP_CONF_DIR=" + hdfsConf, javaToolOpts,
                 "HDFS_SHELL_DAEMON_PORT=\"" + hdfsDaemonPort + "\"",
                 "PYTHON=python3",
@@ -165,16 +187,30 @@ public class HdfsDocker extends Docker {
                 : originalVersion;
         String orihadoopDaemonPath = "/" + system + "/" + curVersion + "/"
                 + "sbin/hadoop-daemon.sh";
+        String[] stopNode = new String[] { orihadoopDaemonPath, "stop",
+                nodeType };
 
-        if (!nodeType.equals("secondarynamenode")) {
-            // Secondary is stopped in a specific op (HDFSStopSNN)
-            String[] stopNode = new String[] { orihadoopDaemonPath, "stop",
-                    nodeType };
+        int ret = runProcessInContainer(stopNode, env);
+        logger.info("daemon stopped ret = " + ret + ", nodeType = "
+                + nodeType + ", version = " + curVersion);
 
-            int ret = runProcessInContainer(stopNode, env);
-            logger.info("daemon stopped ret = " + ret);
-            logger.debug("shutdown " + nodeType);
+        // During rolling upgrade, node type/version transitions can drift from
+        // the local state. Try the opposite version daemon script as fallback.
+        if (ret != 0) {
+            String altVersion = curVersion.equals(originalVersion)
+                    ? upgradedVersion
+                    : originalVersion;
+            String althadoopDaemonPath = "/" + system + "/" + altVersion + "/"
+                    + "sbin/hadoop-daemon.sh";
+            String[] stopNodeAlt = new String[] {
+                    althadoopDaemonPath, "stop", nodeType
+            };
+            int altRet = runProcessInContainer(stopNodeAlt, env);
+            logger.info("daemon stop fallback ret = " + altRet + ", nodeType = "
+                    + nodeType + ", version = " + altVersion);
         }
+
+        logger.debug("shutdown " + nodeType);
     }
 
     public void prepareUpgradeEnv() throws IOException {
@@ -195,6 +231,10 @@ public class HdfsDocker extends Docker {
         // hdfsDaemonPort ^= 1;
         env = new String[] {
                 "HADOOP_HOME=" + hdfsHome,
+                "HADOOP_COMMON_HOME=" + hdfsHome,
+                "HADOOP_HDFS_HOME=" + hdfsHome,
+                "HADOOP_YARN_HOME=" + hdfsHome,
+                "HADOOP_MAPRED_HOME=" + hdfsHome,
                 "HADOOP_CONF_DIR=" + hdfsConf, javaToolOpts,
                 "HDFS_SHELL_DAEMON_PORT=\"" + hdfsDaemonPort + "\"",
                 "PYTHON=python3",
@@ -260,6 +300,10 @@ public class HdfsDocker extends Docker {
         // hdfsDaemonPort ^= 1;
         env = new String[] {
                 "HADOOP_HOME=" + hdfsHome,
+                "HADOOP_COMMON_HOME=" + hdfsHome,
+                "HADOOP_HDFS_HOME=" + hdfsHome,
+                "HADOOP_YARN_HOME=" + hdfsHome,
+                "HADOOP_MAPRED_HOME=" + hdfsHome,
                 "HADOOP_CONF_DIR=" + hdfsConf, javaToolOpts,
                 "HDFS_SHELL_DAEMON_PORT=\"" + hdfsDaemonPort + "\"",
                 "PYTHON=python3",

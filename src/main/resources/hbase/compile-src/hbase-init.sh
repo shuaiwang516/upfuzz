@@ -16,7 +16,7 @@ fi
 if [ "$ENABLE_NET_COVERAGE" = "true" ]; then
     # Copy the file to /tmp
     echo "Enable net coverage"
-    cp "$CASSANDRA_HOME/modifiedFields.json" /tmp/ || true
+    cp "$HBASE_HOME/modifiedFields.json" /tmp/ || true
 fi
 
 if [[ -z $(grep -F "master" "/etc/hosts") ]];

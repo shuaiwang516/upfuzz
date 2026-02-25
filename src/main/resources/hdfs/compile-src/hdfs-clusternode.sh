@@ -30,7 +30,7 @@ if [[ ! -f "/var/log/.setup_conf" ]]; then
     if [ "$ENABLE_NET_COVERAGE" = "true" ]; then
         # Copy the file to /tmp
         echo "Enable net coverage"
-        cp "$CASSANDRA_HOME/modifiedFields.json" /tmp/ || true
+        cp "${HADOOP_HOME:-}/modifiedFields.json" /tmp/ || true
     fi
 
     echo "copy hadoop dir and format configurations"
@@ -87,6 +87,13 @@ fi
 
 #HADOOP_HOME=/etc/$ORI_VERSION
 #PATH=${PATH}:${HADOOP_HOME}/bin:${HADOOP_HOME}/sbin
+
+# Some Hadoop distributions require these homes to be explicitly set.
+export HADOOP_COMMON_HOME="${HADOOP_HOME}"
+export HADOOP_HDFS_HOME="${HADOOP_HOME}"
+export HADOOP_MAPRED_HOME="${HADOOP_HOME}"
+export HADOOP_YARN_HOME="${HADOOP_HOME}"
+export PATH="${PATH}:${HADOOP_HOME}/bin:${HADOOP_HOME}/sbin"
 
 echo "Starting HDFS on $IP..."
 
