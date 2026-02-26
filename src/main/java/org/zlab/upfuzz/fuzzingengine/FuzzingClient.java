@@ -1378,26 +1378,20 @@ public class FuzzingClient {
 
         long diffPacketTimeoutSec = Math.max(180L,
                 (long) Config.getConf().CASSANDRA_RETRY_TIMEOUT * 2L);
-        long deadlineMillis = System.currentTimeMillis()
-                + TimeUnit.SECONDS.toMillis(diffPacketTimeoutSec);
+        long laneTimeoutMs = TimeUnit.SECONDS.toMillis(diffPacketTimeoutSec);
+        long packetStartMs = System.currentTimeMillis();
 
         try {
-            TestPlanFeedbackPacket[] testPlanFeedbackPackets = new TestPlanFeedbackPacket[3];
-            testPlanFeedbackPackets[0] = waitDifferentialFeedback(
-                    futureOnlyOld,
-                    "OnlyOld",
+            Map<String, Future<TestPlanFeedbackPacket>> laneFutures = new LinkedHashMap<>();
+            laneFutures.put("OnlyOld", futureOnlyOld);
+            laneFutures.put("Rolling", futureRolling);
+            laneFutures.put("OnlyNew", futureNew);
+
+            TestPlanFeedbackPacket[] testPlanFeedbackPackets = collectDifferentialFeedbackPackets(
                     testPlanPacket,
-                    deadlineMillis);
-            testPlanFeedbackPackets[1] = waitDifferentialFeedback(
-                    futureRolling,
-                    "Rolling",
-                    testPlanPacket,
-                    deadlineMillis);
-            testPlanFeedbackPackets[2] = waitDifferentialFeedback(
-                    futureNew,
-                    "OnlyNew",
-                    testPlanPacket,
-                    deadlineMillis);
+                    laneFutures,
+                    packetStartMs,
+                    laneTimeoutMs);
 
             logger.debug("[HKLOG] trace diff: all three packets are collected");
             return new TestPlanDiffFeedbackPacket(
@@ -1409,36 +1403,142 @@ public class FuzzingClient {
         }
     }
 
-    private TestPlanFeedbackPacket waitDifferentialFeedback(
-            Future<TestPlanFeedbackPacket> future,
-            String lane,
+    static TestPlanFeedbackPacket[] collectDifferentialFeedbackPackets(
             TestPlanPacket testPlanPacket,
-            long deadlineMillis) {
-        long remainingMillis = deadlineMillis - System.currentTimeMillis();
-        if (remainingMillis <= 0L) {
-            logger.error("[HKLOG] differential lane " + lane
-                    + " exceeded packet timeout");
-            future.cancel(true);
-            return buildFallbackDiffFeedback(testPlanPacket, lane,
-                    "packet timeout reached before feedback arrived");
+            Map<String, Future<TestPlanFeedbackPacket>> laneFutures,
+            long packetStartMs,
+            long laneTimeoutMs) {
+        String[] laneOrder = { "OnlyOld", "Rolling", "OnlyNew" };
+        Map<String, Integer> laneIndex = new HashMap<>();
+        laneIndex.put("OnlyOld", 0);
+        laneIndex.put("Rolling", 1);
+        laneIndex.put("OnlyNew", 2);
+
+        Map<String, Long> laneDeadline = new HashMap<>();
+        long timeout = Math.max(1L, laneTimeoutMs);
+        for (String lane : laneOrder) {
+            laneDeadline.put(lane, packetStartMs + timeout);
         }
 
+        Map<String, TestPlanFeedbackPacket> lanePackets = new HashMap<>();
+        Set<String> pendingLanes = new LinkedHashSet<>(Arrays.asList(laneOrder));
+
+        while (!pendingLanes.isEmpty()) {
+            boolean progressed = false;
+            long now = System.currentTimeMillis();
+
+            List<String> finishedLanes = new LinkedList<>();
+            for (String lane : pendingLanes) {
+                Future<TestPlanFeedbackPacket> future = laneFutures.get(lane);
+                if (future == null) {
+                    lanePackets.put(lane, buildFallbackDiffFeedback(
+                            testPlanPacket,
+                            lane,
+                            TestPlanFeedbackPacket.LaneStatus.EXCEPTION,
+                            "missing lane future"));
+                    finishedLanes.add(lane);
+                    progressed = true;
+                    continue;
+                }
+
+                if (future.isDone()) {
+                    lanePackets.put(lane,
+                            collectFinishedLaneFeedback(testPlanPacket, lane,
+                                    future));
+                    finishedLanes.add(lane);
+                    progressed = true;
+                    continue;
+                }
+
+                if (now >= laneDeadline.get(lane)) {
+                    logger.error("[HKLOG] differential lane " + lane
+                            + " timed out while waiting for feedback");
+                    future.cancel(true);
+                    lanePackets.put(lane, buildFallbackDiffFeedback(
+                            testPlanPacket,
+                            lane,
+                            TestPlanFeedbackPacket.LaneStatus.TIMEOUT,
+                            "timeout while waiting for feedback"));
+                    finishedLanes.add(lane);
+                    progressed = true;
+                }
+            }
+
+            pendingLanes.removeAll(finishedLanes);
+            if (!progressed && !pendingLanes.isEmpty()) {
+                long minDeadline = Long.MAX_VALUE;
+                for (String lane : pendingLanes) {
+                    minDeadline = Math.min(minDeadline,
+                            laneDeadline.get(lane));
+                }
+                long sleepMs = Math.max(1L,
+                        Math.min(50L,
+                                minDeadline - System.currentTimeMillis()));
+                try {
+                    Thread.sleep(sleepMs);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    logger.error(
+                            "[HKLOG] differential collector interrupted while waiting for lane feedback");
+                    for (String lane : pendingLanes) {
+                        Future<TestPlanFeedbackPacket> future = laneFutures
+                                .get(lane);
+                        if (future != null) {
+                            future.cancel(true);
+                        }
+                        lanePackets.put(lane, buildFallbackDiffFeedback(
+                                testPlanPacket,
+                                lane,
+                                TestPlanFeedbackPacket.LaneStatus.INTERRUPTED,
+                                "collector interrupted while waiting for feedback"));
+                    }
+                    pendingLanes.clear();
+                }
+            }
+        }
+
+        TestPlanFeedbackPacket[] orderedPackets = new TestPlanFeedbackPacket[3];
+        for (String lane : laneOrder) {
+            TestPlanFeedbackPacket lanePacket = lanePackets.get(lane);
+            if (lanePacket == null) {
+                lanePacket = buildFallbackDiffFeedback(
+                        testPlanPacket,
+                        lane,
+                        TestPlanFeedbackPacket.LaneStatus.NULL_PACKET,
+                        "feedback packet is missing after collection");
+            }
+            orderedPackets[laneIndex.get(lane)] = lanePacket;
+        }
+        return orderedPackets;
+    }
+
+    private static TestPlanFeedbackPacket collectFinishedLaneFeedback(
+            TestPlanPacket testPlanPacket,
+            String lane,
+            Future<TestPlanFeedbackPacket> future) {
         try {
-            TestPlanFeedbackPacket packet = future.get(remainingMillis,
-                    TimeUnit.MILLISECONDS);
+            TestPlanFeedbackPacket packet = future.get();
             if (packet == null) {
                 logger.error("[HKLOG] differential lane " + lane
                         + " returned null feedback packet");
-                return buildFallbackDiffFeedback(testPlanPacket, lane,
+                return buildFallbackDiffFeedback(
+                        testPlanPacket,
+                        lane,
+                        TestPlanFeedbackPacket.LaneStatus.NULL_PACKET,
                         "feedback packet is null");
             }
+            packet.laneName = lane;
+            packet.laneStatus = TestPlanFeedbackPacket.LaneStatus.OK;
+            packet.laneFailureReason = "";
             return packet;
-        } catch (TimeoutException e) {
+        } catch (CancellationException e) {
             logger.error("[HKLOG] differential lane " + lane
-                    + " timed out while waiting for feedback");
-            future.cancel(true);
-            return buildFallbackDiffFeedback(testPlanPacket, lane,
-                    "timeout while waiting for feedback");
+                    + " future canceled while waiting for feedback");
+            return buildFallbackDiffFeedback(
+                    testPlanPacket,
+                    lane,
+                    TestPlanFeedbackPacket.LaneStatus.INTERRUPTED,
+                    "future canceled while waiting for feedback");
         } catch (ExecutionException e) {
             Throwable realException = e.getCause();
             logger.error("[HKLOG] differential lane " + lane
@@ -1448,31 +1548,45 @@ public class FuzzingClient {
                     logger.error(ste.toString());
                 }
             }
-            return buildFallbackDiffFeedback(testPlanPacket, lane,
+            return buildFallbackDiffFeedback(
+                    testPlanPacket,
+                    lane,
+                    TestPlanFeedbackPacket.LaneStatus.EXCEPTION,
                     "execution exception: " + realException);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             logger.error("[HKLOG] differential lane " + lane
-                    + " interrupted while waiting for feedback");
-            future.cancel(true);
-            return buildFallbackDiffFeedback(testPlanPacket, lane,
-                    "interrupted while waiting for feedback");
+                    + " interrupted while collecting finished feedback");
+            return buildFallbackDiffFeedback(
+                    testPlanPacket,
+                    lane,
+                    TestPlanFeedbackPacket.LaneStatus.INTERRUPTED,
+                    "interrupted while collecting finished feedback");
         } catch (Exception e) {
             logger.error("[HKLOG] differential lane " + lane
                     + " failed with exception: " + e);
             for (StackTraceElement ste : e.getStackTrace()) {
                 logger.error(ste.toString());
             }
-            return buildFallbackDiffFeedback(testPlanPacket, lane,
-                    "exception while waiting for feedback: " + e);
+            return buildFallbackDiffFeedback(
+                    testPlanPacket,
+                    lane,
+                    TestPlanFeedbackPacket.LaneStatus.EXCEPTION,
+                    "exception while collecting finished feedback: " + e);
         }
     }
 
-    private TestPlanFeedbackPacket buildFallbackDiffFeedback(
+    private static TestPlanFeedbackPacket buildFallbackDiffFeedback(
             TestPlanPacket testPlanPacket,
             String lane,
+            TestPlanFeedbackPacket.LaneStatus laneStatus,
             String reason) {
-        int nodeNum = Math.max(1, Config.getConf().nodeNum);
+        int nodeNum = 1;
+        if (testPlanPacket != null) {
+            nodeNum = Math.max(1, testPlanPacket.getNodeNum());
+        } else if (Config.getConf() != null) {
+            nodeNum = Math.max(1, Config.getConf().nodeNum);
+        }
         FeedBack[] feedBacks = new FeedBack[nodeNum];
         for (int i = 0; i < nodeNum; i++) {
             feedBacks[i] = new FeedBack();
@@ -1483,11 +1597,19 @@ public class FuzzingClient {
                 testPlanPacket.configFileName,
                 testPlanPacket.testPacketID,
                 feedBacks);
-        packet.isEventFailed = true;
-        packet.eventFailedReport = "[DIFF-FALLBACK][" + lane + "] " + reason;
-        packet.fullSequence = recordTestPlanPacket(testPlanPacket);
+        packet.laneName = lane;
+        packet.laneStatus = laneStatus;
+        packet.laneFailureReason = "[" + lane + "][" + laneStatus + "] "
+                + reason;
+        // Keep execution failure semantics unchanged: fallback collection/wait
+        // issues do not imply lane execution failure.
+        packet.isEventFailed = false;
+        packet.eventFailedReport = packet.laneFailureReason;
+        if (testPlanPacket != null) {
+            packet.fullSequence = recordTestPlanPacket(testPlanPacket);
+        }
 
-        if (Config.getConf().useTrace) {
+        if (Config.getConf() != null && Config.getConf().useTrace) {
             packet.trace = new Trace[nodeNum];
             for (int i = 0; i < nodeNum; i++) {
                 packet.trace[i] = new Trace();

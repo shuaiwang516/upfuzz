@@ -13,6 +13,14 @@ import java.util.List;
 public class TestPlanFeedbackPacket extends Packet implements Serializable {
     static Logger logger = LogManager.getLogger(TestPlanFeedbackPacket.class);
 
+    public enum LaneStatus {
+        OK,
+        TIMEOUT,
+        EXCEPTION,
+        NULL_PACKET,
+        INTERRUPTED
+    }
+
     public String systemID;
     public int testPacketID;
 
@@ -25,6 +33,14 @@ public class TestPlanFeedbackPacket extends Packet implements Serializable {
     public boolean isEventFailed = false; // One event failed (including
                                           // downgrade op)
     public String eventFailedReport;
+
+    // Differential lane collection/wait outcome.
+    // NOTE: this is orthogonal to isEventFailed:
+    // laneStatus=OK means packet collection succeeded, while execution may
+    // still fail (isEventFailed=true) inside that lane.
+    public String laneName = "";
+    public LaneStatus laneStatus = LaneStatus.OK;
+    public String laneFailureReason = "";
 
     public boolean hasERRORLog = false;
     public String errorLogReport = "";

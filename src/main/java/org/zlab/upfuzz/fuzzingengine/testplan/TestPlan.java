@@ -127,7 +127,7 @@ public class TestPlan implements Serializable {
             events.remove((int) faultRecoverIdxes.get(pos));
             return true;
         } else if (mutateType == 4) {
-            if (seed == null)
+            if (seed == null || seed.originalCommandSequence == null)
                 throw new RuntimeException(
                         "Seed is null, cannot mutate command sequence");
 

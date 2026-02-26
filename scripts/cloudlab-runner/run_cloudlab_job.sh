@@ -16,7 +16,7 @@ RUN_NAME=""
 ROUNDS=1
 TIMEOUT_SEC=3600
 CLIENTS=1
-TESTING_MODE=3
+TESTING_MODE=5
 NODE_NUM=""
 SKIP_BUILD=false
 SKIP_PULL=false
@@ -35,7 +35,7 @@ Options:
   --rounds <N>                       Number of rounds (default: 1)
   --timeout-sec <N>                  Runner timeout in seconds (default: 3600)
   --clients <N>                      Number of clients (default: 1)
-  --testing-mode <N>                 Upfuzz testing mode (default: 3)
+  --testing-mode <N>                 Upfuzz testing mode (default: 5)
   --node-num <N>                     Override node number
   --namespace <docker-namespace>     Docker namespace to pull from (default: shuaiwang516)
   --skip-build                       Skip './gradlew classes -x test'

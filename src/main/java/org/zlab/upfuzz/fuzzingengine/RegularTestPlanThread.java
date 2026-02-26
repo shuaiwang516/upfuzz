@@ -2,6 +2,7 @@ package org.zlab.upfuzz.fuzzingengine;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.Map;
@@ -287,15 +288,20 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
 
             } else {
                 Pair<Boolean, String> compareRes;
-                // read comparison between full-stop and rolling
+                List<String> testPlanReadResults = new LinkedList<>();
+                if (!testPlanPacket.getTestPlan().validationCommands.isEmpty()) {
+                    testPlanReadResults = executor.executeCommands(
+                            testPlanPacket.getTestPlan().validationCommands);
+                    testPlanFeedbackPacket.validationReadResults = testPlanReadResults;
+                    logger.info("[HKLOG] validationReadResults size = "
+                            + testPlanReadResults.size());
+                } else {
+                    logger.debug("validationCommands is empty!");
+                }
+
+                // read comparison between oracle and rolling
                 if (!testPlanPacket.getTestPlan().validationReadResultsOracle
                         .isEmpty()) {
-
-                    List<String> testPlanReadResults = executor
-                            .executeCommands(
-                                    testPlanPacket
-                                            .getTestPlan().validationCommands);
-                    testPlanFeedbackPacket.validationReadResults = testPlanReadResults;
                     compareRes = executor
                             .checkResultConsistency(
                                     testPlanPacket
@@ -308,7 +314,9 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
                                 testPlanPacket.configFileName,
                                 compareRes.right, testPlanPacketStr);
                     }
-                } else {
+                }
+                if (testPlanPacket.getTestPlan().validationReadResultsOracle
+                        .isEmpty()) {
                     logger.debug("validationReadResultsOracle is empty!");
                 }
 

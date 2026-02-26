@@ -79,6 +79,7 @@ public class FuzzingServer {
 
     public TestPlanCorpus testPlanCorpus = new TestPlanCorpus();
     public FullStopCorpus fullStopCorpus = new FullStopCorpus();
+    public RollingSeedCorpus rollingSeedCorpus = new RollingSeedCorpus();
 
     /**
      * FIXME
@@ -111,6 +112,14 @@ public class FuzzingServer {
 
     public static int testExecutionTimeoutNum = 0;
     public static int testExecutionFailedWithOtherExceptionNum = 0;
+
+    // Differential lane collection/wait outcomes
+    public static int oldOldLaneTimeoutNum = 0;
+    public static int rollingLaneTimeoutNum = 0;
+    public static int newNewLaneTimeoutNum = 0;
+    public static int oldOldLaneCollectionFailureNum = 0;
+    public static int rollingLaneCollectionFailureNum = 0;
+    public static int newNewLaneCollectionFailureNum = 0;
 
     private boolean isFullStopUpgrade = true;
     private int finishedTestIdAgentGroup1 = 0;
@@ -597,9 +606,16 @@ public class FuzzingServer {
         } else if (Config.getConf().testingMode == 5) {
             // Only test rolling upgrade using test plans
             if (testPlanPackets.isEmpty()) {
-                if (!fuzzTestPlan()) {
-                    // No seeds in fullStopCorpus yet, generate example
-                    return generateExampleTestplanPacket();
+                if (!fuzzRollingTestPlan()) {
+                    if (!bootstrapRollingSeedCorpusForMode5()) {
+                        throw new RuntimeException(
+                                "Mode 5 bootstrap failed: unable to generate rolling seed");
+                    }
+
+                    if (!fuzzRollingTestPlan() || testPlanPackets.isEmpty()) {
+                        throw new RuntimeException(
+                                "Mode 5 bootstrap succeeded but failed to generate any rolling test plan");
+                    }
                 }
             }
             assert !testPlanPackets.isEmpty();
@@ -608,6 +624,42 @@ public class FuzzingServer {
         throw new RuntimeException(
                 String.format("testing Mode [%d] is not in correct scope",
                         Config.getConf().testingMode));
+    }
+
+    private boolean bootstrapRollingSeedCorpusForMode5() {
+        logger.info(
+                "Mode 5 bootstrap: generating rolling seed for differential rolling-upgrade execution");
+
+        Seed seed = corpus.getSeed();
+        if (seed == null) {
+            int configIdx = configGen.generateConfig();
+            int maxGenLimit = 100;
+            int genCount = 0;
+            while (seed == null && genCount < maxGenLimit) {
+                seed = Seed.generateSeed(commandPool, stateClass,
+                        configIdx, testID);
+                genCount++;
+            }
+
+            if (seed == null) {
+                logger.warn(
+                        "Mode 5 bootstrap failed: seed generation exhausted {} attempts",
+                        maxGenLimit);
+                return false;
+            }
+        }
+
+        if (seed.originalCommandSequence == null
+                || seed.validationCommandSequence == null) {
+            logger.warn(
+                    "Mode 5 bootstrap failed: generated seed has null command sequence");
+            return false;
+        }
+
+        rollingSeedCorpus.addSeed(new RollingSeed(seed, new LinkedList<>()));
+        logger.info(
+                "Mode 5 bootstrap imported 1 generated seed into rollingSeedCorpus");
+        return true;
     }
 
     public MixedTestPacket generateMixedTestPacket() {
@@ -905,38 +957,32 @@ public class FuzzingServer {
         TestPlan testPlan = testPlanCorpus.getTestPlan();
 
         if (testPlan == null) {
-            // Randomly generate a new test plan
             FullStopSeed fullStopSeed = fullStopCorpus.getSeed();
-            if (fullStopSeed == null) {
-                // return false, cannot fuzz test plan
-                // TODO: Completely generate a new test plan?
+            if (fullStopSeed == null)
                 return false;
-            } else {
-                // Generate a test plan from the full-stop seed
-                for (int i = 0; i < Config
-                        .getConf().testPlanGenerationNum; i++) {
-                    for (int j = 0; j < MAX_MUTATION_RETRY; j++) {
-                        testPlan = generateTestPlan(fullStopSeed);
-                        if (testPlan != null) {
-                            break;
-                        }
-                    }
-                    if (testPlan == null)
-                        return false;
-
-                    testID2TestPlan.put(testID, testPlan);
-                    int configIdx = configGen.generateConfig();
-                    String configFileName = "test" + configIdx;
-
-                    testPlanPackets.add(new TestPlanPacket(
-                            Config.getConf().system,
-                            testID++, configFileName, testPlan));
-                }
-                return true;
-            }
+            return generateAndEnqueueTestPlansFromFullStopSeed(fullStopSeed,
+                    MAX_MUTATION_RETRY);
         }
 
-        // Mutate an existing test plan
+        return mutateAndEnqueueExistingTestPlan(testPlan);
+    }
+
+    private boolean fuzzRollingTestPlan() {
+        int MAX_MUTATION_RETRY = 50;
+        TestPlan testPlan = testPlanCorpus.getTestPlan();
+
+        if (testPlan == null) {
+            RollingSeed rollingSeed = rollingSeedCorpus.getSeed();
+            if (rollingSeed == null)
+                return false;
+            return generateAndEnqueueTestPlansFromRollingSeed(rollingSeed,
+                    MAX_MUTATION_RETRY);
+        }
+
+        return mutateAndEnqueueExistingTestPlan(testPlan);
+    }
+
+    private boolean mutateAndEnqueueExistingTestPlan(TestPlan testPlan) {
         for (int i = 0; i < Config.getConf().testPlanMutationEpoch; i++) {
             TestPlan mutateTestPlan = null;
             int j = 0;
@@ -959,6 +1005,56 @@ public class FuzzingServer {
             testPlanPackets.add(new TestPlanPacket(
                     Config.getConf().system,
                     testID++, configFileName, mutateTestPlan));
+        }
+        return true;
+    }
+
+    private boolean generateAndEnqueueTestPlansFromFullStopSeed(
+            FullStopSeed fullStopSeed,
+            int maxMutationRetry) {
+        TestPlan testPlan = null;
+        for (int i = 0; i < Config.getConf().testPlanGenerationNum; i++) {
+            for (int j = 0; j < maxMutationRetry; j++) {
+                testPlan = generateTestPlan(fullStopSeed);
+                if (testPlan != null) {
+                    break;
+                }
+            }
+            if (testPlan == null)
+                return false;
+
+            testID2TestPlan.put(testID, testPlan);
+            int configIdx = configGen.generateConfig();
+            String configFileName = "test" + configIdx;
+
+            testPlanPackets.add(new TestPlanPacket(
+                    Config.getConf().system,
+                    testID++, configFileName, testPlan));
+        }
+        return true;
+    }
+
+    private boolean generateAndEnqueueTestPlansFromRollingSeed(
+            RollingSeed rollingSeed,
+            int maxMutationRetry) {
+        TestPlan testPlan = null;
+        for (int i = 0; i < Config.getConf().testPlanGenerationNum; i++) {
+            for (int j = 0; j < maxMutationRetry; j++) {
+                testPlan = generateTestPlan(rollingSeed);
+                if (testPlan != null) {
+                    break;
+                }
+            }
+            if (testPlan == null)
+                return false;
+
+            testID2TestPlan.put(testID, testPlan);
+            int configIdx = configGen.generateConfig();
+            String configFileName = "test" + configIdx;
+
+            testPlanPackets.add(new TestPlanPacket(
+                    Config.getConf().system,
+                    testID++, configFileName, testPlan));
         }
         return true;
     }
@@ -1012,12 +1108,38 @@ public class FuzzingServer {
     }
 
     public static TestPlan generateTestPlan(FullStopSeed fullStopSeed) {
+        if (fullStopSeed == null) {
+            return null;
+        }
+        return generateTestPlanFromSeed(fullStopSeed.seed,
+                fullStopSeed.validationReadResults);
+    }
+
+    public static TestPlan generateTestPlan(RollingSeed rollingSeed) {
+        if (rollingSeed == null) {
+            return null;
+        }
+        return generateTestPlanFromSeed(rollingSeed.seed,
+                rollingSeed.validationReadResultsOracle);
+    }
+
+    private static TestPlan generateTestPlanFromSeed(
+            Seed sourceSeed,
+            List<String> validationReadResultsOracle) {
         // Some systems might have special requirements for
         // upgrade, like HDFS needs to upgrade NN.
         int nodeNum = Config.getConf().nodeNum;
 
+        if (sourceSeed == null || sourceSeed.validationCommandSequence == null
+                || sourceSeed.originalCommandSequence == null) {
+            logger.error("empty or invalid source seed for generateTestPlan");
+            return null;
+        }
+
         if (Config.getConf().useExampleTestPlan)
-            return constructExampleTestPlan(fullStopSeed, nodeNum);
+            return constructExampleTestPlan(new FullStopSeed(sourceSeed,
+                    validationReadResultsOracle == null ? new LinkedList<>()
+                            : validationReadResultsOracle), nodeNum);
 
         // -----------fault----------
         int faultNum = rand.nextInt(Config.getConf().faultMaxNum + 1);
@@ -1056,11 +1178,7 @@ public class FuzzingServer {
 
         // Randomly interleave the commands with the upgradeOp&faults
         List<Event> shellCommands = new LinkedList<>();
-        if (fullStopSeed.seed != null)
-            shellCommands = ShellCommand.seedWriteCmd2Events(fullStopSeed.seed,
-                    nodeNum);
-        else
-            logger.error("empty full stop seed");
+        shellCommands = ShellCommand.seedWriteCmd2Events(sourceSeed, nodeNum);
 
         List<Event> events = interleaveWithOrder(upgradeOpAndFaults,
                 shellCommands);
@@ -1069,10 +1187,13 @@ public class FuzzingServer {
                 && !Config.getConf().fullStopUpgradeWithFaults)
             events.add(events.size(), new FinalizeUpgrade());
 
-        return new TestPlan(nodeNum, events, fullStopSeed.seed,
-                fullStopSeed.seed.validationCommandSequence
+        List<String> oracle = validationReadResultsOracle == null
+                ? new LinkedList<>()
+                : new LinkedList<>(validationReadResultsOracle);
+        return new TestPlan(nodeNum, events, sourceSeed,
+                sourceSeed.validationCommandSequence
                         .getCommandStringList(),
-                fullStopSeed.validationReadResults);
+                oracle);
     }
 
     public static TestPlan constructExampleTestPlan(FullStopSeed fullStopSeed,
@@ -1450,6 +1571,55 @@ public class FuzzingServer {
         testPlanID2Setup.put(2, "Only New");
     }
 
+    private static TestPlanFeedbackPacket.LaneStatus normalizeLaneStatus(
+            TestPlanFeedbackPacket packet) {
+        if (packet == null || packet.laneStatus == null) {
+            return TestPlanFeedbackPacket.LaneStatus.OK;
+        }
+        return packet.laneStatus;
+    }
+
+    private void updateDifferentialLaneOutcomeCounters(
+            TestPlanFeedbackPacket[] testPlanFeedbackPackets) {
+        for (int i = 0; i < testPlanFeedbackPackets.length; i++) {
+            TestPlanFeedbackPacket packet = testPlanFeedbackPackets[i];
+            TestPlanFeedbackPacket.LaneStatus laneStatus = normalizeLaneStatus(
+                    packet);
+            String laneName = testPlanID2Setup.getOrDefault(i, "UNKNOWN");
+            String laneReason = packet == null ? ""
+                    : (packet.laneFailureReason == null ? ""
+                            : packet.laneFailureReason);
+            logger.info(
+                    "Differential lane outcome [{}]: status={}, reason={}",
+                    laneName, laneStatus, laneReason);
+
+            if (laneStatus != TestPlanFeedbackPacket.LaneStatus.OK) {
+                if (i == 0)
+                    oldOldLaneCollectionFailureNum++;
+                else if (i == 1)
+                    rollingLaneCollectionFailureNum++;
+                else if (i == 2)
+                    newNewLaneCollectionFailureNum++;
+            }
+            if (laneStatus == TestPlanFeedbackPacket.LaneStatus.TIMEOUT) {
+                if (i == 0)
+                    oldOldLaneTimeoutNum++;
+                else if (i == 1)
+                    rollingLaneTimeoutNum++;
+                else if (i == 2)
+                    newNewLaneTimeoutNum++;
+            }
+        }
+
+        logger.info(
+                "Differential lane counters: timeout(old-old={}, old-new={}, new-new={}), collectionFailure(old-old={}, old-new={}, new-new={})",
+                oldOldLaneTimeoutNum, rollingLaneTimeoutNum,
+                newNewLaneTimeoutNum,
+                oldOldLaneCollectionFailureNum,
+                rollingLaneCollectionFailureNum,
+                newNewLaneCollectionFailureNum);
+    }
+
     public synchronized void updateStatus(
             TestPlanDiffFeedbackPacket testPlanDiffFeedbackPacket) {
         logger.info("TestPlanDiffFeedbackPacket received");
@@ -1460,6 +1630,21 @@ public class FuzzingServer {
             throw new RuntimeException(
                     "TestPlanDiffFeedbackPacket length is not 3: there should be (1) Old (2) RU and (3) New");
         }
+
+        updateDifferentialLaneOutcomeCounters(testPlanFeedbackPackets);
+
+        int oldOldValidationSize = testPlanFeedbackPackets[0].validationReadResults == null
+                ? 0
+                : testPlanFeedbackPackets[0].validationReadResults.size();
+        int rollingValidationSize = testPlanFeedbackPackets[1].validationReadResults == null
+                ? 0
+                : testPlanFeedbackPackets[1].validationReadResults.size();
+        int newNewValidationSize = testPlanFeedbackPackets[2].validationReadResults == null
+                ? 0
+                : testPlanFeedbackPackets[2].validationReadResults.size();
+        logger.info(
+                "Validation results collected (old-old={}, rolling={}, new-new={})",
+                oldOldValidationSize, rollingValidationSize, newNewValidationSize);
 
         // --- Trace processing ---
         Trace[] serializedTraces = new Trace[testPlanFeedbackPackets.length];
@@ -1609,11 +1794,30 @@ public class FuzzingServer {
         // --- Corpus update ---
         boolean addToCorpus = newOriBC || newUpgradeBC || lowSimilarity
                 || messageIdentityInteresting;
+        List<String> oldOldValidationResults = testPlanFeedbackPackets[0] == null
+                ? new LinkedList<>()
+                : testPlanFeedbackPackets[0].validationReadResults;
         if (addToCorpus) {
             TestPlan testPlan = testID2TestPlan
                     .get(testPlanDiffFeedbackPacket.testPacketID);
             if (testPlan != null) {
+                if (oldOldValidationResults != null
+                        && !oldOldValidationResults.isEmpty()) {
+                    testPlan.validationReadResultsOracle = new LinkedList<>(
+                            oldOldValidationResults);
+                }
                 testPlanCorpus.addTestPlan(testPlan);
+                if (Config.getConf().testingMode == 5 && testPlan.seed != null) {
+                    rollingSeedCorpus.addSeed(new RollingSeed(
+                            SerializationUtils.clone(testPlan.seed),
+                            testPlan.validationReadResultsOracle == null
+                                    ? new LinkedList<>()
+                                    : new LinkedList<>(
+                                            testPlan.validationReadResultsOracle)));
+                    logger.info(
+                            "Mode 5 rollingSeedCorpus updated from interesting test plan, size={}",
+                            rollingSeedCorpus.size());
+                }
                 logger.info(
                         "Added test plan to corpus (newOriBC=" + newOriBC
                                 + ", newUpgradeBC=" + newUpgradeBC
@@ -1626,6 +1830,31 @@ public class FuzzingServer {
         // --- Bug detection ---
         Path failureDir = null;
         TestPlanFeedbackPacket rollingFb = testPlanFeedbackPackets[1];
+
+        // 0. Differential lane collection/wait failures
+        for (int i = 0; i < testPlanFeedbackPackets.length; i++) {
+            TestPlanFeedbackPacket lanePacket = testPlanFeedbackPackets[i];
+            TestPlanFeedbackPacket.LaneStatus laneStatus = normalizeLaneStatus(
+                    lanePacket);
+            if (laneStatus == TestPlanFeedbackPacket.LaneStatus.OK) {
+                continue;
+            }
+            failureDir = ensureFailureDir(failureDir,
+                    rollingFb.configFileName, rollingFb.fullSequence);
+            String laneTag = testPlanID2Setup.getOrDefault(i, "Unknown")
+                    .replace(" ", "");
+            String reason = lanePacket == null ? ""
+                    : (lanePacket.laneFailureReason == null ? ""
+                            : lanePacket.laneFailureReason);
+            if (reason.isEmpty()) {
+                reason = "[" + laneTag + "][" + laneStatus
+                        + "] lane feedback collection failed";
+            }
+            saveLaneCollectionFailureReport(failureDir,
+                    testPlanDiffFeedbackPacket.testPacketID,
+                    laneTag,
+                    reason);
+        }
 
         // 1. Check if all 3 clusters failed with the same event failure
         boolean allFailed = testPlanFeedbackPackets[0].isEventFailed
@@ -2658,6 +2887,18 @@ public class FuzzingServer {
         eventCrashNum++;
     }
 
+    private void saveLaneCollectionFailureReport(Path failureDir, int testID,
+            String laneTag, String report) {
+        Path subDir = createFailureSubDir(failureDir, "lane_collection_failure");
+        String normalizedLaneTag = laneTag == null ? "unknown"
+                : laneTag.toLowerCase();
+        Path reportPath = Paths.get(
+                subDir.toString(),
+                String.format("lane_collection_failure_%s_%d.report",
+                        normalizedLaneTag, testID));
+        Utilities.write2TXT(reportPath.toFile(), report, false);
+    }
+
     private void saveTestExecutionTimeoutReport(Path failureDir,
             String report, int startTestID, int endTestID) {
         Path testExecutionTimeoutSubDir = createFailureSubDir(failureDir,
@@ -2802,10 +3043,20 @@ public class FuzzingServer {
 
         // Differential Execution Info
         if (Config.getConf().differentialExecution) {
-            System.out.format("|%30s|%30s|\n",
+            System.out.format("|%30s|%30s|%30s|\n",
                     "Jaccard threshold : "
                             + Config.getConf().jaccardSimilarityThreshold,
-                    "testPlanCorpus : " + testPlanCorpus.queue.size());
+                    "testPlanCorpus : " + testPlanCorpus.queue.size(),
+                    "rollingSeedCorpus : " + rollingSeedCorpus.size());
+            System.out.format("|%30s|%30s|%30s|\n",
+                    "lane timeout old/roll/new : " + oldOldLaneTimeoutNum + "/"
+                            + rollingLaneTimeoutNum + "/"
+                            + newNewLaneTimeoutNum,
+                    "lane collect fail old/roll/new : "
+                            + oldOldLaneCollectionFailureNum + "/"
+                            + rollingLaneCollectionFailureNum + "/"
+                            + newNewLaneCollectionFailureNum,
+                    "");
         }
 
         System.out.println(
