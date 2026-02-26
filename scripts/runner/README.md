@@ -236,6 +236,7 @@ Common options:
 | `--timeout-sec` | hard timeout |
 | `--clients` | number of fuzzing clients |
 | `--testing-mode` | `3` (smoke/example), `5` (rolling-focused) |
+| `--diff-lane-timeout-sec` | differential lane timeout for all systems |
 | `--cassandra-retry-timeout` | cqlsh retry timeout for Cassandra |
 | `--node-num` | override node count (default cass=2,hdfs=3,hbase=2) |
 | `--run-name` | output directory name |

@@ -320,6 +320,9 @@ public class Config {
         public boolean useTrace = false;
 
         public boolean differentialExecution = false;
+        // Timeout budget (seconds) for collecting each differential lane
+        // feedback (old-old / rolling / new-new). Applied to all systems.
+        public int differentialLaneTimeoutSec = 1200;
 
         public boolean printTrace = false;
 

@@ -1376,10 +1376,17 @@ public class FuzzingClient {
                 .submit(new RegularTestPlanThread(executors[2],
                         testPlanPacketWithoutUpgrade));
 
-        long diffPacketTimeoutSec = Math.max(180L,
-                (long) Config.getConf().CASSANDRA_RETRY_TIMEOUT * 2L);
+        long diffPacketTimeoutSec = Config.getConf().differentialLaneTimeoutSec;
+        // Backward compatibility: if not configured, preserve historical
+        // behavior derived from CASSANDRA_RETRY_TIMEOUT.
+        if (diffPacketTimeoutSec <= 0L) {
+            diffPacketTimeoutSec = Math.max(180L,
+                    (long) Config.getConf().CASSANDRA_RETRY_TIMEOUT * 2L);
+        }
         long laneTimeoutMs = TimeUnit.SECONDS.toMillis(diffPacketTimeoutSec);
         long packetStartMs = System.currentTimeMillis();
+        logger.info("[HKLOG] differentialLaneTimeoutSec = "
+                + diffPacketTimeoutSec);
 
         try {
             Map<String, Future<TestPlanFeedbackPacket>> laneFutures = new LinkedHashMap<>();

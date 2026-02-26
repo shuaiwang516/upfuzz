@@ -21,6 +21,7 @@ USE_BRANCH_COVERAGE=true
 ENABLE_LOG_CHECK=true
 REQUIRE_TRACE_SIGNAL=false
 CASSANDRA_RETRY_TIMEOUT=300
+DIFF_LANE_TIMEOUT_SEC=1200
 NODE_NUM=""
 SERVER_PORT=7399
 CLIENT_PORT=7400
@@ -41,6 +42,7 @@ Options:
   --timeout-sec <N>                      Max runtime in seconds (default: ${TIMEOUT_SEC})
   --clients <N>                          Number of clients to launch (default: ${CLIENTS})
   --testing-mode <3|5>                   3=example testplan, 5=rolling-only (default: ${TESTING_MODE})
+  --diff-lane-timeout-sec <sec>          Differential lane timeout for all systems (default: ${DIFF_LANE_TIMEOUT_SEC})
   --cassandra-retry-timeout <sec>        Cassandra cqlsh retry timeout (default: ${CASSANDRA_RETRY_TIMEOUT})
   --use-trace <true|false>               Enable network trace collection (default: ${USE_TRACE})
   --print-trace <true|false>             Print detailed trace entries in server log (default: ${PRINT_TRACE})
@@ -275,6 +277,7 @@ write_config_json() {
   "useFixedCommand" : false,
   "enable_ORDERBY_IN_SELECT" : true,
   "cassandraEnableTimeoutCheck" : false,
+  "differentialLaneTimeoutSec" : ${DIFF_LANE_TIMEOUT_SEC},
   "CASSANDRA_RETRY_TIMEOUT" : ${CASSANDRA_RETRY_TIMEOUT}
 }
 JSON
@@ -314,7 +317,8 @@ JSON
   "startUpClusterForDebugging" : false,
   "useFixedCommand" : false,
   "prepareImageFirst" : true,
-  "enable_fsimage" : true
+  "enable_fsimage" : true,
+  "differentialLaneTimeoutSec" : ${DIFF_LANE_TIMEOUT_SEC}
 }
 JSON
             ;;
@@ -353,7 +357,8 @@ JSON
   "debug" : false,
   "useFixedCommand" : false,
   "enableHBaseReadResultComparison" : true,
-  "enable_IS_DISABLED" : true
+  "enable_IS_DISABLED" : true,
+  "differentialLaneTimeoutSec" : ${DIFF_LANE_TIMEOUT_SEC}
 }
 JSON
             ;;
@@ -410,6 +415,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --cassandra-retry-timeout)
             CASSANDRA_RETRY_TIMEOUT="$2"
+            shift 2
+            ;;
+        --diff-lane-timeout-sec)
+            DIFF_LANE_TIMEOUT_SEC="$2"
             shift 2
             ;;
         --use-trace)
@@ -563,6 +572,7 @@ CLIENTS=${CLIENTS}
 TESTING_MODE=${TESTING_MODE}
 DIFFERENTIAL_EXECUTION=${USE_DIFF}
 CASSANDRA_RETRY_TIMEOUT=${CASSANDRA_RETRY_TIMEOUT}
+DIFF_LANE_TIMEOUT_SEC=${DIFF_LANE_TIMEOUT_SEC}
 USE_TRACE=${USE_TRACE}
 PRINT_TRACE=${PRINT_TRACE}
 USE_JACCARD=${USE_JACCARD}

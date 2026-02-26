@@ -18,6 +18,7 @@ TIMEOUT_SEC=3600
 CLIENTS=1
 TESTING_MODE=5
 NODE_NUM=""
+DIFF_LANE_TIMEOUT_SEC=1200
 SKIP_BUILD=false
 SKIP_PULL=false
 
@@ -36,6 +37,7 @@ Options:
   --timeout-sec <N>                  Runner timeout in seconds (default: 3600)
   --clients <N>                      Number of clients (default: 1)
   --testing-mode <N>                 Upfuzz testing mode (default: 5)
+  --diff-lane-timeout-sec <sec>      Differential lane timeout for all systems (default: 1200)
   --node-num <N>                     Override node number
   --namespace <docker-namespace>     Docker namespace to pull from (default: shuaiwang516)
   --skip-build                       Skip './gradlew classes -x test'
@@ -353,6 +355,15 @@ while [[ $# -gt 0 ]]; do
             TESTING_MODE="$2"
             shift 2
             ;;
+        --diff-lane-timeout-sec)
+            DIFF_LANE_TIMEOUT_SEC="$2"
+            shift 2
+            ;;
+        --cassandra-retry-timeout)
+            # Backward-compatible alias for old launcher calls.
+            DIFF_LANE_TIMEOUT_SEC="$2"
+            shift 2
+            ;;
         --node-num)
             NODE_NUM="$2"
             shift 2
@@ -474,6 +485,7 @@ RUNNER_CMD=(
     --timeout-sec "${TIMEOUT_SEC}"
     --clients "${CLIENTS}"
     --testing-mode "${TESTING_MODE}"
+    --diff-lane-timeout-sec "${DIFF_LANE_TIMEOUT_SEC}"
     --use-trace true
     --print-trace true
     --require-trace-signal
