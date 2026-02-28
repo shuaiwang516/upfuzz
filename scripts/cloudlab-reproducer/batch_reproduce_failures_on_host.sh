@@ -13,10 +13,13 @@ Options:
   --repo-root <path>                    upfuzz repo root (default: /users/swang516/xlab/rupfuzz/upfuzz)
   --raw-data-root <path>                raw_data root (default: /users/swang516/xlab/rupfuzz/cloudlab-results/feb26/raw_data)
   --out-root <path>                     output root (default: /users/swang516/xlab/rupfuzz/cloudlab-results/feb26/analyze_data/repro_all)
-  --per-failure-timeout-sec <sec>       hard timeout per failure replay (default: 360)
-  --runner-timeout-sec <sec>            --timeout-sec passed to reproducer (default: 360)
+  --per-failure-timeout-sec <sec>       hard timeout per failure replay (default: 2400)
+  --runner-timeout-sec <sec>            --timeout-sec passed to reproducer (default: 1800)
   --max-attempts <N>                    replay attempts per failure (default: 3)
   --rounds-per-attempt <N>              rounds passed to reproducer for each attempt (default: 1)
+  --command-node-strategies <csv>       legacy command-node replay strategies
+                                        (default: preserve,round_robin,random)
+  --command-node-random-base <N>        base seed for random strategy (default: 1337)
   --only-failure-ids <csv>              optional subset, e.g. failure_1,failure_7
   --resume                              skip failures already present in summary.tsv
   -h, --help                            Show help
@@ -29,10 +32,12 @@ HOST=""
 REPO_ROOT="/users/swang516/xlab/rupfuzz/upfuzz"
 RAW_DATA_ROOT="/users/swang516/xlab/rupfuzz/cloudlab-results/feb26/raw_data"
 OUT_ROOT="/users/swang516/xlab/rupfuzz/cloudlab-results/feb26/analyze_data/repro_all"
-PER_FAILURE_TIMEOUT_SEC=360
-RUNNER_TIMEOUT_SEC=360
+PER_FAILURE_TIMEOUT_SEC=2400
+RUNNER_TIMEOUT_SEC=1800
 MAX_ATTEMPTS=3
 ROUNDS_PER_ATTEMPT=1
+COMMAND_NODE_STRATEGIES="preserve,round_robin,random"
+COMMAND_NODE_RANDOM_BASE=1337
 ONLY_FAILURE_IDS=""
 RESUME=false
 
@@ -70,6 +75,14 @@ while [[ $# -gt 0 ]]; do
             ROUNDS_PER_ATTEMPT="$2"
             shift 2
             ;;
+        --command-node-strategies)
+            COMMAND_NODE_STRATEGIES="$2"
+            shift 2
+            ;;
+        --command-node-random-base)
+            COMMAND_NODE_RANDOM_BASE="$2"
+            shift 2
+            ;;
         --only-failure-ids)
             ONLY_FAILURE_IDS="$2"
             shift 2
@@ -105,11 +118,39 @@ SYSTEM="$(awk -F= '/^SYSTEM=/{print $2}' "${meta_path}" | tail -n1)"
 ORIGINAL_VERSION="$(awk -F= '/^ORIGINAL_VERSION=/{print $2}' "${meta_path}" | tail -n1)"
 UPGRADED_VERSION="$(awk -F= '/^UPGRADED_VERSION=/{print $2}' "${meta_path}" | tail -n1)"
 TESTING_MODE="$(awk -F= '/^TESTING_MODE=/{print $2}' "${meta_path}" | tail -n1)"
+META_DIFF_LANE_TIMEOUT_SEC="$(awk -F= '/^DIFF_LANE_TIMEOUT_SEC=/{print $2}' "${meta_path}" | tail -n1)"
 
 [[ "${MAX_ATTEMPTS}" =~ ^[0-9]+$ ]] || { echo "Invalid --max-attempts: ${MAX_ATTEMPTS}" >&2; exit 1; }
 [[ "${ROUNDS_PER_ATTEMPT}" =~ ^[0-9]+$ ]] || { echo "Invalid --rounds-per-attempt: ${ROUNDS_PER_ATTEMPT}" >&2; exit 1; }
 [[ "${MAX_ATTEMPTS}" -ge 1 ]] || { echo "--max-attempts must be >= 1" >&2; exit 1; }
 [[ "${ROUNDS_PER_ATTEMPT}" -ge 1 ]] || { echo "--rounds-per-attempt must be >= 1" >&2; exit 1; }
+[[ "${RUNNER_TIMEOUT_SEC}" =~ ^[0-9]+$ ]] || { echo "Invalid --runner-timeout-sec: ${RUNNER_TIMEOUT_SEC}" >&2; exit 1; }
+[[ "${PER_FAILURE_TIMEOUT_SEC}" =~ ^[0-9]+$ ]] || { echo "Invalid --per-failure-timeout-sec: ${PER_FAILURE_TIMEOUT_SEC}" >&2; exit 1; }
+[[ "${COMMAND_NODE_RANDOM_BASE}" =~ ^[0-9]+$ ]] || { echo "Invalid --command-node-random-base: ${COMMAND_NODE_RANDOM_BASE}" >&2; exit 1; }
+
+if [[ "${META_DIFF_LANE_TIMEOUT_SEC}" =~ ^[0-9]+$ ]] && [[ "${META_DIFF_LANE_TIMEOUT_SEC}" -gt 0 ]]; then
+    min_runner_timeout=$((META_DIFF_LANE_TIMEOUT_SEC + 300))
+    if [[ "${RUNNER_TIMEOUT_SEC}" -lt "${min_runner_timeout}" ]]; then
+        RUNNER_TIMEOUT_SEC="${min_runner_timeout}"
+    fi
+fi
+min_per_failure_timeout=$((RUNNER_TIMEOUT_SEC + 180))
+if [[ "${PER_FAILURE_TIMEOUT_SEC}" -lt "${min_per_failure_timeout}" ]]; then
+    PER_FAILURE_TIMEOUT_SEC="${min_per_failure_timeout}"
+fi
+
+IFS=',' read -r -a NODE_STRATEGY_ARRAY <<< "${COMMAND_NODE_STRATEGIES}"
+VALID_NODE_STRATEGIES=(preserve zero round_robin random)
+for s in "${NODE_STRATEGY_ARRAY[@]}"; do
+    case "${s}" in
+        preserve|zero|round_robin|random) ;;
+        *)
+            echo "Invalid strategy in --command-node-strategies: ${s}" >&2
+            exit 1
+            ;;
+    esac
+done
+[[ "${#NODE_STRATEGY_ARRAY[@]}" -gt 0 ]] || { echo "No strategy provided in --command-node-strategies" >&2; exit 1; }
 
 HOST_OUT="${OUT_ROOT}/${HOST}"
 mkdir -p "${HOST_OUT}"
@@ -125,6 +166,8 @@ classify_category() {
     local fdir="$1"
     if rg -q "RollingUpgradeException: Failed to start rolling upgrade since a rolling upgrade is already in progress" "$fdir"; then
         echo "hdfs_rolling_upgrade_already_in_progress"
+    elif rg -q "\\[ERROR LOG\\]" "$fdir"; then
+        echo "${SYSTEM}_error_log"
     elif rg -q "RecoverableZooKeeper: ZooKeeper getData failed" "$fdir"; then
         echo "hbase_zookeeper_getdata_failed"
     elif rg -q "ActiveMasterManager: Failed get of master address" "$fdir"; then
@@ -140,6 +183,38 @@ classify_category() {
     elif rg -q "container .* is not running" "$fdir"; then
         echo "container_not_running"
     elif rg -q "Results inconsistency between full-stop and rolling upgrade" "$fdir"; then
+        case "${SYSTEM}" in
+            cassandra) echo "cassandra_result_inconsistency" ;;
+            hdfs) echo "hdfs_result_inconsistency" ;;
+            hbase) echo "hbase_result_inconsistency" ;;
+            *) echo "result_inconsistency" ;;
+        esac
+    else
+        echo "unknown"
+    fi
+}
+
+classify_category_from_signature() {
+    local sig="$1"
+    if [[ "${sig}" =~ RollingUpgradeException:\ Failed\ to\ start\ rolling\ upgrade\ since\ a\ rolling\ upgrade\ is\ already\ in\ progress ]]; then
+        echo "hdfs_rolling_upgrade_already_in_progress"
+    elif [[ "${sig}" =~ \[ERROR\ LOG\] ]]; then
+        echo "${SYSTEM}_error_log"
+    elif [[ "${sig}" =~ RecoverableZooKeeper:\ ZooKeeper\ getData\ failed ]]; then
+        echo "hbase_zookeeper_getdata_failed"
+    elif [[ "${sig}" =~ Failed\ get\ of\ master\ address ]]; then
+        echo "hbase_master_address_znode_null"
+    elif [[ "${sig}" =~ TableNotEnabledException ]]; then
+        echo "hbase_table_not_enabled"
+    elif [[ "${sig}" =~ NullPointerException ]]; then
+        echo "hbase_null_pointer_exception"
+    elif [[ "${sig}" =~ Undefined\ column\ name ]]; then
+        echo "cassandra_undefined_column"
+    elif [[ "${sig}" =~ ReadTimeout ]]; then
+        echo "cassandra_read_timeout"
+    elif [[ "${sig}" =~ container\ .*is\ not\ running ]]; then
+        echo "container_not_running"
+    elif [[ "${sig}" =~ Results\ inconsistency\ between\ full-stop\ and\ rolling\ upgrade ]]; then
         case "${SYSTEM}" in
             cassandra) echo "cassandra_result_inconsistency" ;;
             hdfs) echo "hdfs_result_inconsistency" ;;
@@ -188,6 +263,9 @@ is_reproduced() {
         cassandra_read_timeout)
             pattern="ReadTimeout"
             ;;
+        cassandra_error_log|hdfs_error_log|hbase_error_log)
+            pattern="\\[ERROR LOG\\]|ERROR LOG"
+            ;;
         container_not_running)
             pattern="container .* is not running"
             ;;
@@ -201,6 +279,14 @@ is_reproduced() {
 
     if rg -q "${pattern}" "${logfile}"; then
         echo "true|${pattern}"
+    elif [[ "${category}" == *"result_inconsistency"* ]] \
+        && rg -q 'new_failure_dirs: [1-9][0-9]*' "${logfile}"; then
+        # Replay console logs may not print full inconsistency text, but a new
+        # failure directory means the lane-oracle inconsistency was triggered.
+        echo "true|new_failure_dirs"
+    elif [[ "${category}" == *"_error_log" || "${category}" == "unknown" ]] \
+        && rg -q 'new_failure_dirs: [1-9][0-9]*' "${logfile}"; then
+        echo "true|new_failure_dirs"
     else
         echo "false|${pattern}"
     fi
@@ -233,6 +319,8 @@ fi
 
 log "Host=${HOST} system=${SYSTEM} ${ORIGINAL_VERSION}->${UPGRADED_VERSION}"
 log "Testing mode from metadata=${TESTING_MODE:-unknown}, max_attempts=${MAX_ATTEMPTS}, rounds_per_attempt=${ROUNDS_PER_ATTEMPT}"
+log "Timeouts: per_failure=${PER_FAILURE_TIMEOUT_SEC}s runner=${RUNNER_TIMEOUT_SEC}s (meta lane timeout=${META_DIFF_LANE_TIMEOUT_SEC:-n/a}s)"
+log "Command-node strategies: ${COMMAND_NODE_STRATEGIES} (random_base=${COMMAND_NODE_RANDOM_BASE})"
 log "Output=${HOST_OUT}"
 
 find "${fail_dir_root}" -maxdepth 1 -type d -name 'failure_*' | sort -V | while read -r fdir; do
@@ -245,13 +333,16 @@ find "${fail_dir_root}" -maxdepth 1 -type d -name 'failure_*' | sort -V | while 
         continue
     fi
 
-    category="$(classify_category "${fdir}")"
     raw_sig="$(extract_raw_signature "${fdir}")"
+    category="$(classify_category_from_signature "${raw_sig}")"
+    if [[ "${category}" == "unknown" ]]; then
+        category="$(classify_category "${fdir}")"
+    fi
 
     per_out_dir="${HOST_OUT}/${fid}"
     mkdir -p "${per_out_dir}"
     attempts_tsv="${per_out_dir}/attempts.tsv"
-    echo -e "attempt\trun_name\treplay_exit_code\treplay_timeout\treproduced\tmatched_pattern" > "${attempts_tsv}"
+    echo -e "attempt\trun_name\treplay_exit_code\treplay_timeout\treproduced\tmatched_pattern\tcommand_node_strategy\tcommand_node_seed" > "${attempts_tsv}"
     merged_log="${per_out_dir}/merged_repro.log"
     : > "${merged_log}"
 
@@ -272,6 +363,14 @@ find "${fail_dir_root}" -maxdepth 1 -type d -name 'failure_*' | sort -V | while 
         mkdir -p "${attempt_dir}"
 
         log "[${fid}] attempt ${attempt}/${MAX_ATTEMPTS}: run_name=${run_name}"
+        strategy_idx=$(( (attempt - 1) % ${#NODE_STRATEGY_ARRAY[@]} ))
+        command_node_strategy="${NODE_STRATEGY_ARRAY[${strategy_idx}]}"
+        fid_num="$(echo "${fid}" | sed -E 's/[^0-9]//g')"
+        if [[ -z "${fid_num}" ]]; then
+            fid_num=0
+        fi
+        command_node_seed=$((COMMAND_NODE_RANDOM_BASE + fid_num * 17 + attempt))
+        log "[${fid}] attempt ${attempt}: command_node_strategy=${command_node_strategy}, command_node_seed=${command_node_seed}"
 
         set +e
         timeout --signal=TERM "${PER_FAILURE_TIMEOUT_SEC}s" \
@@ -285,6 +384,8 @@ find "${fail_dir_root}" -maxdepth 1 -type d -name 'failure_*' | sort -V | while 
             --skip-pre-clean false \
             --use-trace true \
             --print-trace true \
+            --command-node-strategy "${command_node_strategy}" \
+            --command-node-seed "${command_node_seed}" \
             > "${attempt_dir}/repro_driver.log" 2>&1
         rc=$?
         set -e
@@ -329,7 +430,7 @@ find "${fail_dir_root}" -maxdepth 1 -type d -name 'failure_*' | sort -V | while 
         rep_info="$(is_reproduced "${category}" "${attempt_merged}")"
         attempt_reproduced="${rep_info%%|*}"
         attempt_pattern="${rep_info#*|}"
-        printf "%s\t%s\t%s\t%s\t%s\t%s\n" "${attempt}" "${run_name}" "${rc}" "${timed_out}" "${attempt_reproduced}" "${attempt_pattern}" >> "${attempts_tsv}"
+        printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "${attempt}" "${run_name}" "${rc}" "${timed_out}" "${attempt_reproduced}" "${attempt_pattern}" "${command_node_strategy}" "${command_node_seed}" >> "${attempts_tsv}"
 
         if [[ "${attempt_reproduced}" == "true" ]]; then
             reproduced=true

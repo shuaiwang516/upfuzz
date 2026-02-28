@@ -23,6 +23,7 @@ REQUIRE_TRACE_SIGNAL=false
 CASSANDRA_RETRY_TIMEOUT=300
 DIFF_LANE_TIMEOUT_SEC=1200
 NODE_NUM=""
+FIXED_CONFIG_IDX=-1
 SERVER_PORT=7399
 CLIENT_PORT=7400
 SERVER_START_TIMEOUT_SEC=120
@@ -54,6 +55,7 @@ Options:
   --client-port <port>                   Client port (default: ${CLIENT_PORT}, auto-shift if busy)
   --server-start-timeout-sec <N>         Max wait for server port listen before client launch (default: ${SERVER_START_TIMEOUT_SEC})
   --node-num <N>                         Override node number (default by system: cass=2,hdfs=3,hbase=2)
+  --fixed-config-idx <N>                 Force example-testplan config index test<N> (default: random)
   --run-name <name>                      Result folder name (default: auto generated)
   --skip-pre-clean                       Skip pre-run clean.sh
   -h, --help                             Show this help
@@ -220,6 +222,7 @@ write_config_json() {
     local node_num="$5"
     local server_port="$6"
     local client_port="$7"
+    local fixed_config_idx="$8"
 
     local diff_json
     local trace_json
@@ -272,6 +275,7 @@ write_config_json() {
   "nyxMode" : false,
   "debug" : false,
   "useExampleTestPlan" : false,
+  "fixedConfigIdx" : ${fixed_config_idx},
   "startUpClusterForDebugging" : false,
   "drain" : false,
   "useFixedCommand" : false,
@@ -314,6 +318,7 @@ JSON
   "nyxMode" : false,
   "debug" : false,
   "useExampleTestPlan" : false,
+  "fixedConfigIdx" : ${fixed_config_idx},
   "startUpClusterForDebugging" : false,
   "useFixedCommand" : false,
   "prepareImageFirst" : true,
@@ -356,6 +361,7 @@ JSON
   "nyxMode" : false,
   "debug" : false,
   "useFixedCommand" : false,
+  "fixedConfigIdx" : ${fixed_config_idx},
   "enableHBaseReadResultComparison" : true,
   "enable_IS_DISABLED" : true,
   "differentialLaneTimeoutSec" : ${DIFF_LANE_TIMEOUT_SEC}
@@ -461,6 +467,10 @@ while [[ $# -gt 0 ]]; do
             NODE_NUM="$2"
             shift 2
             ;;
+        --fixed-config-idx)
+            FIXED_CONFIG_IDX="$2"
+            shift 2
+            ;;
         --run-name)
             RUN_NAME="$2"
             shift 2
@@ -530,6 +540,8 @@ if [[ "${SYSTEM}" == "hbase" ]]; then
     sanitize_hbase_cached_classpath_for_version "${UPGRADED_VERSION}"
 fi
 
+[[ "${FIXED_CONFIG_IDX}" =~ ^-?[0-9]+$ ]] || die "--fixed-config-idx must be an integer"
+
 if [[ "${USE_TRACE}" == true && "${SYSTEM}" == "cassandra" && "${NODE_NUM}" -lt 2 ]]; then
     log "WARNING: Cassandra use-trace with node-num=${NODE_NUM} can miss inter-node traffic. Prefer --node-num 2+ for trace verification."
 fi
@@ -559,7 +571,7 @@ log "Run directory: ${RUN_DIR}"
 log "Using image: ${IMAGE_TAG}"
 log "Config will be generated at: ${CONFIG_PATH}"
 
-write_config_json "${CONFIG_PATH}" "${SYSTEM}" "${ORIGINAL_VERSION}" "${UPGRADED_VERSION}" "${NODE_NUM}" "${SERVER_PORT}" "${CLIENT_PORT}"
+write_config_json "${CONFIG_PATH}" "${SYSTEM}" "${ORIGINAL_VERSION}" "${UPGRADED_VERSION}" "${NODE_NUM}" "${SERVER_PORT}" "${CLIENT_PORT}" "${FIXED_CONFIG_IDX}"
 
 cat > "${METADATA_PATH}" <<META
 SYSTEM=${SYSTEM}
@@ -581,6 +593,7 @@ ENABLE_LOG_CHECK=${ENABLE_LOG_CHECK}
 SERVER_PORT=${SERVER_PORT}
 CLIENT_PORT=${CLIENT_PORT}
 NODE_NUM=${NODE_NUM}
+FIXED_CONFIG_IDX=${FIXED_CONFIG_IDX}
 SERVER_START_TIMEOUT_SEC=${SERVER_START_TIMEOUT_SEC}
 RUN_NAME=${RUN_NAME}
 RUN_DIR=${RUN_DIR}
