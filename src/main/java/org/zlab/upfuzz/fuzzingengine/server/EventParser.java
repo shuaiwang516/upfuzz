@@ -54,16 +54,29 @@ public class EventParser {
             String restStr = eventStr.substring(idx + 1);
             switch (type) {
             case "Command":
-                // TODO: record node id and parse it
-                idx1 = restStr.indexOf("{");
-                String commandStr = restStr.substring(idx1 + 1,
-                        restStr.length() - 1);
-                return new ShellCommand(commandStr);
+                int nodeIdx = 0; // backward compatible for legacy reports
+                String commandPart = restStr.trim();
+                if (commandPart.startsWith("[Node[")) {
+                    idx1 = commandPart.indexOf("[Node[");
+                    idx2 = commandPart.indexOf("]]", idx1);
+                    if (idx2 > idx1) {
+                        nodeIdx = Integer.parseInt(commandPart.substring(
+                                idx1 + "[Node[".length(), idx2));
+                        commandPart = commandPart.substring(idx2 + 2).trim();
+                    }
+                }
+                idx1 = commandPart.indexOf("{");
+                idx2 = commandPart.lastIndexOf("}");
+                if (idx1 < 0 || idx2 <= idx1) {
+                    logger.error("cannot parse " + eventStr);
+                    return null;
+                }
+                String commandStr = commandPart.substring(idx1 + 1, idx2);
+                return new ShellCommand(commandStr, nodeIdx);
             case "UpgradeOp":
                 idx1 = restStr.indexOf("[");
                 idx2 = restStr.indexOf("]");
-                int nodeIdx = Integer
-                        .parseInt(restStr.substring(idx1 + 1, idx2));
+                nodeIdx = Integer.parseInt(restStr.substring(idx1 + 1, idx2));
                 return new UpgradeOp(nodeIdx);
             case "DowngradeOp":
                 idx1 = restStr.indexOf("[");

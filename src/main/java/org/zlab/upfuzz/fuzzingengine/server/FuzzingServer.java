@@ -66,6 +66,7 @@ import static org.zlab.upfuzz.utils.Utilities.rand;
 
 public class FuzzingServer {
     static Logger logger = LogManager.getLogger(FuzzingServer.class);
+    public static final String EXAMPLE_ORACLE_SKIP_TOKEN = "__UPFUZZ_ORACLE_SKIP__";
 
     int fixedTestIndex = 0;
 
@@ -1075,7 +1076,14 @@ public class FuzzingServer {
 
     public Packet generateExampleTestplanPacket() {
         // Modify configID for debugging
-        int configIdx = configGen.generateConfig();
+        int configIdx = Config.getConf().fixedConfigIdx >= 0
+                ? Config.getConf().fixedConfigIdx
+                : configGen.generateConfig();
+        if (Config.getConf().fixedConfigIdx >= 0) {
+            logger.info(
+                    "use fixed config index for example test plan replay: test{}",
+                    configIdx);
+        }
         String configFileName = "test" + configIdx;
 
         TestPlan testPlan = generateExampleTestPlan();
@@ -1101,10 +1109,82 @@ public class FuzzingServer {
         }
         List<String> validcommands = readCommands(
                 commandPath.resolve(validCommandsFile));
-        List<String> validationReadResultsOracle = new LinkedList<>();
+        List<String> validationReadResultsOracle = loadExampleOracle(
+                commandPath, validcommands);
 
         return new TestPlan(nodeNum, events, validcommands,
                 validationReadResultsOracle);
+    }
+
+    private List<String> loadExampleOracle(Path commandPath,
+            List<String> validationCommands) {
+        String oracleFileName = "validation_oracle.txt";
+        if ("hdfs".equals(Config.getConf().system)) {
+            oracleFileName = "validation_oracle_hdfs_example.txt";
+        }
+        Path oraclePath = commandPath.resolve(oracleFileName);
+        if (!oraclePath.toFile().exists()) {
+            return new LinkedList<>();
+        }
+
+        int commandNum = validationCommands == null ? 0
+                : validationCommands.size();
+        List<String> oracle = new ArrayList<>(
+                Collections.nCopies(commandNum, EXAMPLE_ORACLE_SKIP_TOKEN));
+        int loadedEntries = 0;
+
+        try (BufferedReader br = new BufferedReader(
+                new FileReader(oraclePath.toFile()))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
+                String[] parts = line.split("\t", 2);
+                if (parts.length != 2) {
+                    logger.warn(
+                            "Skip malformed oracle entry in {}: {}",
+                            oraclePath, line);
+                    continue;
+                }
+                int idx;
+                try {
+                    idx = Integer.parseInt(parts[0].trim());
+                } catch (NumberFormatException e) {
+                    logger.warn(
+                            "Skip malformed oracle index in {}: {}",
+                            oraclePath, line);
+                    continue;
+                }
+                if (idx < 0 || idx >= oracle.size()) {
+                    logger.warn(
+                            "Skip out-of-range oracle index {} in {} (size={})",
+                            idx, oraclePath, oracle.size());
+                    continue;
+                }
+                String decoded;
+                try {
+                    decoded = new String(Base64.getDecoder()
+                            .decode(parts[1].trim()));
+                } catch (IllegalArgumentException e) {
+                    logger.warn(
+                            "Skip malformed oracle payload in {}: {}",
+                            oraclePath, line);
+                    continue;
+                }
+                oracle.set(idx, decoded);
+                loadedEntries++;
+            }
+        } catch (IOException e) {
+            logger.warn("Failed reading example oracle file {}", oraclePath, e);
+            return new LinkedList<>();
+        }
+        if (loadedEntries == 0) {
+            return new LinkedList<>();
+        }
+        logger.info("Loaded example oracle entries from {} (commands={})",
+                oraclePath, oracle.size());
+        return oracle;
     }
 
     public static TestPlan generateTestPlan(FullStopSeed fullStopSeed) {

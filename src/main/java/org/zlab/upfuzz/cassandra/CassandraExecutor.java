@@ -8,6 +8,7 @@ import org.zlab.upfuzz.docker.DockerCluster;
 import org.zlab.upfuzz.fuzzingengine.AgentServerSocket;
 import org.zlab.upfuzz.fuzzingengine.Config;
 import org.zlab.upfuzz.fuzzingengine.executor.Executor;
+import org.zlab.upfuzz.fuzzingengine.server.FuzzingServer;
 import org.zlab.upfuzz.utils.Pair;
 
 public class CassandraExecutor extends Executor {
@@ -136,6 +137,12 @@ public class CassandraExecutor extends Executor {
             for (int i = 0; i < oriResult.size(); i++) {
                 String ori = oriResult.get(i);
                 String up = upResult.get(i);
+
+                if (!compareOldAndNew
+                        && FuzzingServer.EXAMPLE_ORACLE_SKIP_TOKEN
+                                .equals(ori)) {
+                    continue;
+                }
 
                 if (ori.compareTo(up) != 0) {
                     boolean isInBlackList = false;

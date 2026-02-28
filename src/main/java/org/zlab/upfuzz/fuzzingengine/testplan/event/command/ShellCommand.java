@@ -73,6 +73,7 @@ public class ShellCommand extends Event {
 
     @Override
     public String toString() {
-        return String.format("[Command] Execute {%s}", command);
+        return String.format("[Command][Node[%d]] Execute {%s}", nodeIndex,
+                command);
     }
 }

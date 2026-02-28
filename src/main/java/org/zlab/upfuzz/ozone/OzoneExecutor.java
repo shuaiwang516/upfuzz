@@ -13,6 +13,7 @@ import org.apache.logging.log4j.Logger;
 import org.zlab.upfuzz.fuzzingengine.AgentServerSocket;
 import org.zlab.upfuzz.fuzzingengine.Config;
 import org.zlab.upfuzz.fuzzingengine.executor.Executor;
+import org.zlab.upfuzz.fuzzingengine.server.FuzzingServer;
 import org.zlab.upfuzz.fuzzingengine.testplan.event.command.ShellCommand;
 import org.zlab.upfuzz.ozone.OzoneShellDaemon.OzonePacket;
 import org.zlab.upfuzz.utils.Pair;
@@ -163,6 +164,11 @@ public class OzoneExecutor extends Executor {
         } else {
             boolean ret = true;
             for (int i = 0; i < oriResult.size(); i++) {
+                if (!compareOldAndNew
+                        && FuzzingServer.EXAMPLE_ORACLE_SKIP_TOKEN
+                                .equals(oriResult.get(i))) {
+                    continue;
+                }
                 // Mask timestamp
                 if ((oriResult.equals("Old Version Result: [ ]"))
                         || (upResult.equals("Old Version Result: [ ]"))) {

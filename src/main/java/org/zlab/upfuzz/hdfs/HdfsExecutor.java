@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit;
 import org.zlab.upfuzz.fuzzingengine.AgentServerSocket;
 import org.zlab.upfuzz.fuzzingengine.Config;
 import org.zlab.upfuzz.fuzzingengine.executor.Executor;
+import org.zlab.upfuzz.fuzzingengine.server.FuzzingServer;
 import org.zlab.upfuzz.fuzzingengine.testplan.event.command.ShellCommand;
 import org.zlab.upfuzz.hdfs.HDFSShellDaemon.HdfsPacket;
 import org.zlab.upfuzz.utils.Pair;
@@ -148,6 +149,11 @@ public class HdfsExecutor extends Executor {
         } else {
             boolean ret = true;
             for (int i = 0; i < oriResult.size(); i++) {
+                if (!compareOldAndNew
+                        && FuzzingServer.EXAMPLE_ORACLE_SKIP_TOKEN
+                                .equals(oriResult.get(i))) {
+                    continue;
+                }
                 String str1 = oriResult.get(i);
                 String str2 = upResult.get(i);
                 // Mask timestamp

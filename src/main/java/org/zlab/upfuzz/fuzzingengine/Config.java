@@ -80,6 +80,9 @@ public class Config {
         // ------------ Input Generation ------------
         // Debug use the same command sequence
         public boolean useFixedCommand = false;
+        // Replay/debug: force a specific config file index (test<idx>)
+        // for example-testplan mode. -1 means random.
+        public int fixedConfigIdx = -1;
         // Provide multiple fixed tests and execute them in sequence
         public int fixedTestNum = 1;
 
