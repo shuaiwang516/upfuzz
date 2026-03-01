@@ -3,6 +3,7 @@ package org.zlab.upfuzz.docker;
 import org.zlab.net.tracker.Trace;
 import org.zlab.ocov.tracker.ObjectGraphCoverage;
 import org.zlab.upfuzz.fuzzingengine.LogInfo;
+import org.zlab.upfuzz.fuzzingengine.packet.ValidationResult;
 
 import java.util.Set;
 
@@ -39,4 +40,10 @@ public interface IDocker {
     String formatComposeYaml();
 
     String execCommand(String command) throws Exception;
+
+    default ValidationResult execCommandStructured(String command)
+            throws Exception {
+        String result = execCommand(command);
+        return new ValidationResult(command, 0, result, "", "OK");
+    }
 }

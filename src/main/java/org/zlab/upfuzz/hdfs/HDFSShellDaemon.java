@@ -8,6 +8,7 @@ import org.zlab.net.tracker.Trace;
 import org.zlab.upfuzz.docker.Docker;
 import org.zlab.upfuzz.fuzzingengine.Config;
 import org.zlab.upfuzz.fuzzingengine.ShellDaemon;
+import org.zlab.upfuzz.fuzzingengine.packet.ValidationResult;
 import org.zlab.upfuzz.utils.Utilities;
 
 import java.io.*;
@@ -130,6 +131,45 @@ public class HDFSShellDaemon extends ShellDaemon {
                     cp.exitValue));
         return ret;
 
+    }
+
+    @Override
+    public ValidationResult executeCommandStructured(String command)
+            throws Exception {
+        HdfsPacket cp = execute(command);
+        if (cp == null) {
+            return new ValidationResult(command, -1, "", "",
+                    "DAEMON_ERROR");
+        }
+        String failureClass = classifyHdfsFailure(cp);
+        return new ValidationResult(command, cp.exitValue,
+                cp.message, cp.error, failureClass);
+    }
+
+    private static String classifyHdfsFailure(HdfsPacket cp) {
+        if (cp.exitValue == 0 && cp.error.isEmpty()) {
+            return "OK";
+        }
+        String err = cp.error + cp.message;
+        if (err.contains("No such file or directory"))
+            return "NoSuchFile";
+        if (err.contains("already exists"))
+            return "AlreadyExists";
+        if (err.contains("safemode"))
+            return "SafeMode";
+        if (err.contains("Permission denied"))
+            return "PermissionDenied";
+        if (err.contains("is not a directory"))
+            return "NotADirectory";
+        if (err.contains("is a directory"))
+            return "IsADirectory";
+        if (err.contains("Not a valid DFS filename"))
+            return "InvalidFilename";
+        if (err.contains("Illegal"))
+            return "IllegalArgument";
+        if (cp.exitValue != 0)
+            return "NonZeroExit";
+        return "UNKNOWN";
     }
 
     public Trace collectTrace() throws Exception {

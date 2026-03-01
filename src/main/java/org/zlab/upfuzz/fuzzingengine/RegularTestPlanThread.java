@@ -289,9 +289,18 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
             } else {
                 Pair<Boolean, String> compareRes;
                 List<String> testPlanReadResults = new LinkedList<>();
-                if (!testPlanPacket.getTestPlan().validationCommands.isEmpty()) {
-                    testPlanReadResults = executor.executeCommands(
-                            testPlanPacket.getTestPlan().validationCommands);
+                if (!testPlanPacket.getTestPlan().validationCommands
+                        .isEmpty()) {
+                    // WS1: use structured execution, populate both fields
+                    List<ValidationResult> structuredResults = executor
+                            .executeCommandsStructured(
+                                    testPlanPacket
+                                            .getTestPlan().validationCommands);
+                    testPlanFeedbackPacket.validationResults = structuredResults;
+                    // Backward compat: populate legacy field
+                    for (ValidationResult vr : structuredResults) {
+                        testPlanReadResults.add(vr.toLegacyString());
+                    }
                     testPlanFeedbackPacket.validationReadResults = testPlanReadResults;
                     logger.info("[HKLOG] validationReadResults size = "
                             + testPlanReadResults.size());

@@ -15,6 +15,7 @@ import org.zlab.upfuzz.docker.Docker;
 import org.zlab.upfuzz.fuzzingengine.ShellDaemon;
 import org.zlab.upfuzz.utils.Utilities;
 import org.zlab.upfuzz.fuzzingengine.Config;
+import org.zlab.upfuzz.fuzzingengine.packet.ValidationResult;
 
 public class CassandraCqlshDaemon extends ShellDaemon {
     static Logger logger = LogManager.getLogger(CassandraCqlshDaemon.class);
@@ -213,6 +214,45 @@ public class CassandraCqlshDaemon extends ShellDaemon {
                         cp.exitValue));
             }
         return ret;
+    }
+
+    @Override
+    public ValidationResult executeCommandStructured(String command)
+            throws Exception {
+        CqlshPacket cp = execute(command);
+        if (cp == null) {
+            return new ValidationResult(command, -1, "", "",
+                    "DAEMON_ERROR");
+        }
+        String failureClass = classifyCassandraFailure(cp);
+        return new ValidationResult(command, cp.exitValue,
+                cp.message, cp.error, failureClass);
+    }
+
+    private static String classifyCassandraFailure(CqlshPacket cp) {
+        if (cp.exitValue == 0 && cp.error.isEmpty()) {
+            return "OK";
+        }
+        String err = cp.error;
+        if (err.contains("SyntaxException"))
+            return "SyntaxException";
+        if (err.contains("InvalidRequest"))
+            return "InvalidRequest";
+        if (err.contains("Unavailable"))
+            return "Unavailable";
+        if (err.contains("ReadTimeout") || err.contains("WriteTimeout"))
+            return "Timeout";
+        if (err.contains("AlreadyExists"))
+            return "AlreadyExists";
+        if (err.contains("ConfigurationException"))
+            return "ConfigurationException";
+        if (err.contains("Unauthorized"))
+            return "Unauthorized";
+        if (err.contains("OperationTimedOut"))
+            return "OperationTimedOut";
+        if (cp.exitValue != 0)
+            return "NonZeroExit";
+        return "UNKNOWN";
     }
 
     public static class CqlshPacket {

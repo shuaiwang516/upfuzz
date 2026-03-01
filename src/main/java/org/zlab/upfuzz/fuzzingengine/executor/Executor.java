@@ -15,6 +15,7 @@ import org.zlab.upfuzz.docker.DockerMeta;
 import org.zlab.upfuzz.fuzzingengine.AgentServerHandler;
 import org.zlab.upfuzz.fuzzingengine.AgentServerSocket;
 import org.zlab.upfuzz.fuzzingengine.Config;
+import org.zlab.upfuzz.fuzzingengine.packet.ValidationResult;
 import org.zlab.upfuzz.fuzzingengine.LogInfo;
 import org.zlab.upfuzz.fuzzingengine.testplan.TestPlan;
 import org.zlab.upfuzz.fuzzingengine.testplan.event.Event;
@@ -204,6 +205,42 @@ public abstract class Executor implements IExecutor {
                             +
                             +(System.currentTimeMillis() - initTime)
                             + " ms, ";
+                }
+            }
+        }
+        return ret;
+    }
+
+    public List<ValidationResult> executeCommandsStructured(
+            List<String> commandList) {
+        List<ValidationResult> ret = new LinkedList<>();
+        for (String command : commandList) {
+            if (command.isEmpty()) {
+                ret.add(new ValidationResult(command, 0, "", "", "OK"));
+            } else {
+                try {
+                    ShellCommand sc = new ShellCommand(command);
+                    int nodeIndex = sc.getNodeIndex();
+                    if (nodeIndex < 0 || nodeIndex >= nodeNum) {
+                        ret.add(new ValidationResult(command, -1, "",
+                                "Node " + nodeIndex + " out of range: "
+                                        + nodeNum,
+                                "DAEMON_ERROR"));
+                        continue;
+                    }
+                    if (!dockerCluster.dockerStates[nodeIndex].alive) {
+                        ret.add(new ValidationResult(command, -1, "",
+                                "Node " + nodeIndex + " is not alive",
+                                "DAEMON_ERROR"));
+                        continue;
+                    }
+                    ret.add(dockerCluster.getDocker(nodeIndex)
+                            .execCommandStructured(sc.getCommand()));
+                } catch (Exception e) {
+                    logger.error(e);
+                    ret.add(new ValidationResult(command, -1, "",
+                            "shell daemon execution problem " + e,
+                            "DAEMON_ERROR"));
                 }
             }
         }

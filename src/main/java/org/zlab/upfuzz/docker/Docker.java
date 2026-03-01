@@ -3,6 +3,7 @@ package org.zlab.upfuzz.docker;
 import org.zlab.net.tracker.Trace;
 import org.zlab.ocov.tracker.ObjectGraphCoverage;
 import org.zlab.upfuzz.fuzzingengine.Config;
+import org.zlab.upfuzz.fuzzingengine.packet.ValidationResult;
 import org.zlab.upfuzz.utils.Utilities;
 
 import java.io.IOException;
@@ -124,5 +125,11 @@ public abstract class Docker extends DockerMeta implements IDocker {
                     index, timeElapsed));
         }
         return ret;
+    }
+
+    public ValidationResult execCommandStructured(String command)
+            throws Exception {
+        assert shell != null;
+        return shell.executeCommandStructured(command);
     }
 }

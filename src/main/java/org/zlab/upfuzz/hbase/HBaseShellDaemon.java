@@ -8,6 +8,7 @@ import org.zlab.upfuzz.docker.Docker;
 import org.zlab.upfuzz.fuzzingengine.ClusterStuckException;
 import org.zlab.upfuzz.fuzzingengine.Config;
 import org.zlab.upfuzz.fuzzingengine.ShellDaemon;
+import org.zlab.upfuzz.fuzzingengine.packet.ValidationResult;
 import org.zlab.upfuzz.utils.Utilities;
 
 import java.io.*;
@@ -100,6 +101,47 @@ public class HBaseShellDaemon extends ShellDaemon {
                     command, cp.message, cp.error,
                     cp.exitValue));
         return ret;
+    }
+
+    @Override
+    public ValidationResult executeCommandStructured(String command)
+            throws Exception {
+        HBasePacket cp = execute(command);
+        if (cp == null) {
+            return new ValidationResult(command, -1, "", "",
+                    "DAEMON_ERROR");
+        }
+        String failureClass = classifyHBaseFailure(cp);
+        return new ValidationResult(command, cp.exitValue,
+                cp.message, cp.error, failureClass);
+    }
+
+    private static String classifyHBaseFailure(HBasePacket cp) {
+        if (cp.exitValue == 0 && cp.error.isEmpty()) {
+            return "OK";
+        }
+        String err = cp.error + cp.message;
+        if (err.contains("NoSuchColumnFamilyException"))
+            return "NoSuchColumnFamily";
+        if (err.contains("TableNotFoundException"))
+            return "TableNotFound";
+        if (err.contains("TableExistsException"))
+            return "TableExists";
+        if (err.contains("NamespaceNotFoundException"))
+            return "NamespaceNotFound";
+        if (err.contains("NamespaceExistException"))
+            return "NamespaceExists";
+        if (err.contains("TableNotDisabledException"))
+            return "TableNotDisabled";
+        if (err.contains("TableNotEnabledException"))
+            return "TableNotEnabled";
+        if (err.contains("RegionException"))
+            return "RegionException";
+        if (err.contains("ERROR:") || err.contains("ERROR"))
+            return "HBaseError";
+        if (cp.exitValue != 0)
+            return "NonZeroExit";
+        return "UNKNOWN";
     }
 
     public static class HBasePacket {

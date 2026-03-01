@@ -1428,7 +1428,8 @@ public class FuzzingClient {
         }
 
         Map<String, TestPlanFeedbackPacket> lanePackets = new HashMap<>();
-        Set<String> pendingLanes = new LinkedHashSet<>(Arrays.asList(laneOrder));
+        Set<String> pendingLanes = new LinkedHashSet<>(
+                Arrays.asList(laneOrder));
 
         while (!pendingLanes.isEmpty()) {
             boolean progressed = false;

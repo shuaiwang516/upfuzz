@@ -14,11 +14,7 @@ public class TestPlanFeedbackPacket extends Packet implements Serializable {
     static Logger logger = LogManager.getLogger(TestPlanFeedbackPacket.class);
 
     public enum LaneStatus {
-        OK,
-        TIMEOUT,
-        EXCEPTION,
-        NULL_PACKET,
-        INTERRUPTED
+        OK, TIMEOUT, EXCEPTION, NULL_PACKET, INTERRUPTED
     }
 
     public String systemID;
@@ -52,6 +48,9 @@ public class TestPlanFeedbackPacket extends Packet implements Serializable {
 
     // Validation read results for cross-cluster comparison
     public List<String> validationReadResults = new ArrayList<>();
+
+    // Structured validation results (WS1) — null when sent by old clients
+    public List<ValidationResult> validationResults = null;
 
     // TODO: We might want to compare the state between
     // (1) Rolling upgrade and (2) Full-stop upgrade
