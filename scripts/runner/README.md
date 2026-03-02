@@ -106,38 +106,33 @@ cd /home/shuai/xlab/rupfuzz/upfuzz-shuai
 
 Note: `build.gradle` currently uses `/usr/lib/jvm/java-17-openjdk-amd64` for Java tool execution. On non-Ubuntu environments, adjust that path if needed.
 
-## 4) Required prebuild archives
+## 4) Prebuild source sync
 
-Place the instrumented source archives under:
+`scripts/docker/build_rolling_image_pair.sh` auto-fetches only the required tarballs from:
+
+`https://mir.cs.illinois.edu/~swang516/rupfuzz/prebuild/`
+
+Files are downloaded into:
 
 `/home/shuai/xlab/rupfuzz/upfuzz-shuai/prebuild/`
 
-Required set:
-
-```text
-prebuild/cassandra/apache-cassandra-3.11.19-src-instrumented.tar.gz
-prebuild/cassandra/apache-cassandra-4.1.10-src-instrumented.tar.gz
-prebuild/cassandra/apache-cassandra-5.0.6-src-instrumented.tar.gz
-
-prebuild/hdfs/hadoop-2.10.2-src-instrumented.tar.gz
-prebuild/hdfs/hadoop-3.3.6-src-instrumented.tar.gz
-prebuild/hdfs/hadoop-3.4.2-src-instrumented.tar.gz
-
-prebuild/hbase/hbase-2.5.13-src-instrumented.tar.gz
-prebuild/hbase/hbase-2.6.4-src-instrumented.tar.gz
-prebuild/hbase/hbase-3.0.0-beta-1-src-instrumented.tar.gz
-```
-
-Quick check:
+Optional manual fetch for one version:
 
 ```bash
 cd /home/shuai/xlab/rupfuzz/upfuzz-shuai
-find prebuild -maxdepth 2 -type f -name '*-src-instrumented.tar.gz' | sort
+wget -O prebuild/cassandra/apache-cassandra-4.1.10.tar.gz \
+  "https://mir.cs.illinois.edu/~swang516/rupfuzz/prebuild/cassandra/apache-cassandra-4.1.10.tar.gz"
 ```
 
 ## 5) Build Docker images required by runner
 
-Use `scripts/docker/build_rolling_image_pair.sh` to run phase 1-3 (extract/materialize/build) per pair.
+Use `scripts/docker/build_rolling_image_pair.sh` to run RUN.md upgrade-testing docker prep/build per pair.
+It dispatches docker build commands to:
+- `scripts/docker/build_cassandra_docker.sh`
+- `scripts/docker/build_hdfs_docker.sh`
+- `scripts/docker/build_hbase_docker.sh`
+By default docker builds are forced (`FORCE_DOCKER_REBUILD=1`, i.e., `--no-cache --pull`).
+Set `FORCE_DOCKER_REBUILD=0` to disable forced rebuild.
 
 ```bash
 cd /home/shuai/xlab/rupfuzz/upfuzz-shuai
