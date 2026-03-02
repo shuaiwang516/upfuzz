@@ -16,6 +16,7 @@ import org.zlab.upfuzz.docker.Docker;
 import org.zlab.upfuzz.docker.DockerCluster;
 import org.zlab.upfuzz.fuzzingengine.Config;
 import org.zlab.upfuzz.fuzzingengine.LogInfo;
+import org.zlab.upfuzz.fuzzingengine.packet.ValidationResult;
 import org.zlab.upfuzz.utils.Utilities;
 
 public class HBaseDocker extends Docker {
@@ -187,7 +188,92 @@ public class HBaseDocker extends Docker {
     }
 
     public void rollingUpgrade() throws Exception {
-        // TODO
+        upgrade();
+        // Reconnect to the upgraded shell daemon endpoint.
+        start();
+        waitForControlPlaneReady();
+    }
+
+    private void waitForControlPlaneReady() throws Exception {
+        final int maxAttempts = Math.max(1,
+                Config.getConf().hbaseDaemonRetryTimes);
+        final int sleepMillis = 5000;
+        final String[] probeCommands = {
+                "status 'simple'",
+                "list_namespace"
+        };
+
+        ValidationResult lastProbe = null;
+        Exception lastException = null;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            for (String probeCommand : probeCommands) {
+                try {
+                    ValidationResult probe = execCommandStructured(
+                            probeCommand);
+                    lastProbe = probe;
+                    String mergedLower = safeLower(probe.stdout)
+                            + "\n"
+                            + safeLower(probe.stderr);
+                    boolean transientZkIssue = isZkTransient(mergedLower);
+                    if (probe.isSuccess() && !transientZkIssue) {
+                        logger.info(String.format(
+                                "Node[%d] control plane ready after %d attempts via {%s}",
+                                index, attempt, probeCommand));
+                        return;
+                    }
+
+                    logger.info(String.format(
+                            "Node[%d] readiness probe %d/%d not ready (cmd={%s}, exit=%d, class=%s, zkTransient=%s)",
+                            index, attempt, maxAttempts, probeCommand,
+                            probe.exitCode, probe.failureClass,
+                            transientZkIssue));
+                } catch (Exception e) {
+                    lastException = e;
+                    logger.info(String.format(
+                            "Node[%d] readiness probe %d/%d failed on {%s}: %s",
+                            index, attempt, maxAttempts, probeCommand,
+                            e.toString()));
+                }
+            }
+
+            Thread.sleep(sleepMillis);
+        }
+
+        String reason = lastException != null
+                ? lastException.toString()
+                : summarizeProbe(lastProbe);
+        throw new IOException(
+                "HBase rolling upgrade timed out waiting for control-plane readiness: "
+                        + reason);
+    }
+
+    private boolean isZkTransient(String mergedLower) {
+        return mergedLower.contains("zookeeper get/list could not be completed")
+                || mergedLower.contains("recoverablezookeeper")
+                || mergedLower.contains("connectionloss")
+                || mergedLower.contains("keepererrorcode = connectionloss")
+                || mergedLower.contains("annotatednoroutetohostexception")
+                || mergedLower.contains("connection refused");
+    }
+
+    private String summarizeProbe(ValidationResult probe) {
+        if (probe == null) {
+            return "no probe response";
+        }
+        String merged = ((probe.stdout == null) ? "" : probe.stdout)
+                + " "
+                + ((probe.stderr == null) ? "" : probe.stderr);
+        String compact = merged.replaceAll("\\s+", " ").trim();
+        if (compact.length() > 240) {
+            compact = compact.substring(0, 240) + "...";
+        }
+        return String.format("exit=%d,class=%s,sample=%s", probe.exitCode,
+                probe.failureClass, compact);
+    }
+
+    private String safeLower(String text) {
+        return text == null ? "" : text.toLowerCase();
     }
 
     @Override

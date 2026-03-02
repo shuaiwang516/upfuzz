@@ -331,7 +331,9 @@ public class HBaseDockerCluster extends DockerCluster {
         prepareUpgrade();
         for (int i = 0; i < dockers.length; ++i) {
             dockers[i].flush();
+            dockers[i].shutdown();
             ((HBaseDocker) dockers[i]).rollingUpgrade();
+            dockerStates[i].dockerVersion = DockerMeta.DockerVersion.upgraded;
         }
         logger.info("Cluster upgraded");
         return true;
