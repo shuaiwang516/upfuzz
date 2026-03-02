@@ -59,8 +59,8 @@ All other options are passed through to:
 Examples:
   scripts/cloudlab-runner/run_cloudlab_fuzz_job.sh --job-id 1
   scripts/cloudlab-runner/run_cloudlab_fuzz_job.sh --job-id 2 --detach --run-name cloudlab_fuzz_job2
-  scripts/cloudlab-runner/run_cloudlab_fuzz_job.sh --job-id 5 --skip-pull --skip-build
-  scripts/cloudlab-runner/run_cloudlab_fuzz_job.sh --distribute --skip-pull --skip-build
+  scripts/cloudlab-runner/run_cloudlab_fuzz_job.sh --job-id 5 --skip-docker-build --skip-build
+  scripts/cloudlab-runner/run_cloudlab_fuzz_job.sh --distribute --skip-docker-build --skip-build
   scripts/cloudlab-runner/run_cloudlab_fuzz_job.sh --distribute --machine-list scripts/cloudlab-runner/machine_list.txt
 
 Notes:

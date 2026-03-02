@@ -7,11 +7,10 @@ This directory provides entrypoint scripts to run one rolling-upgrade fuzzing jo
 - Demo/short-run script: `scripts/cloudlab-runner/run_cloudlab_job.sh`
 - Continuous-fuzzing script: `scripts/cloudlab-runner/run_cloudlab_fuzz_job.sh`
 - Under the hood it:
-1. materializes local `prebuild/` sources from `*-src-instrumented.tar.gz` if needed,
+1. builds required Docker image(s) via `scripts/docker/build_rolling_image_pair.sh` (and downloads needed prebuild tarballs from mirror if missing),
 2. builds `upfuzz` Java classes,
-3. pulls and tags the required Docker image(s),
-4. launches `scripts/runner/run_rolling_fuzzing.sh` with trace + tri-diff enabled,
-5. copies key artifacts into `scripts/cloudlab-runner/results/<run_name>`.
+3. launches `scripts/runner/run_rolling_fuzzing.sh` with trace + tri-diff enabled,
+4. copies key artifacts into `scripts/cloudlab-runner/results/<run_name>`.
 
 ## Predefined 6-Job Mapping
 
@@ -31,9 +30,9 @@ scripts/cloudlab-runner/run_cloudlab_job.sh --list-jobs
 ## Prerequisites On Each Machine
 
 1. Repo is present and on branch `rupfuzz`.
-2. Dependencies installed (Java, Gradle wrapper deps, Docker, `rg`, `ss`, `tar`).
+2. Dependencies installed (Java, Gradle wrapper deps, Docker, `rg`, `ss`, `tar`, `wget`).
 3. Docker daemon is running and your user can run Docker commands.
-4. Instrumented tarballs exist under `prebuild/<system>/*-src-instrumented.tar.gz`.
+4. Network access to prebuild mirror `https://mir.cs.illinois.edu/~swang516/rupfuzz/prebuild/` (unless required tarballs already exist in local `prebuild/`).
 
 If machine is fresh Ubuntu 22.04, run:
 
@@ -103,17 +102,16 @@ scripts/cloudlab-runner/run_cloudlab_job.sh \
   --job-id 2 \
   --run-name cloudlab_cassandra_410_506 \
   --rounds 1 \
-  --timeout-sec 5400 \
-  --namespace shuaiwang516
+  --timeout-sec 5400
 ```
 
 - `--job-id`: select one of the six predefined jobs.
 - `--run-name`: stable folder name for easier collection.
 - `--rounds`: number of differential rounds to wait for.
 - `--timeout-sec`: hard timeout.
-- `--namespace`: Docker namespace, default `shuaiwang516`.
+- `--skip-docker-build`: skip `scripts/docker/build_rolling_image_pair.sh`.
 - `--skip-build`: skip `./gradlew classes -x test`.
-- `--skip-pull`: skip `docker pull/tag` when images already local.
+- `--skip-pull`: deprecated alias for `--skip-docker-build`.
 
 Manual pair mode (without job-id):
 
@@ -156,9 +154,9 @@ Notes:
 
 ## Common Failures
 
-- `Docker image not found`: image is missing in local cache and namespace pull failed.
+- `Docker image not found`: docker build step failed or was skipped while image was absent.
 - `Path not writable: /tmp/upfuzz/hdfs`: fix ownership/permission for HDFS tmp root.
-- `Trace signal missing`: check instrumentation tarballs, `useTrace=true`, and server/client logs.
+- `Trace signal missing`: check prebuild tarball availability/instrumentation, `useTrace=true`, and server/client logs.
 
 ## Collecting Results From Each Machine
 

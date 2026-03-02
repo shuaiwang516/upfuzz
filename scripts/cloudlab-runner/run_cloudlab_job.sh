@@ -4,10 +4,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 RUNNER_SCRIPT="${ROOT_DIR}/scripts/runner/run_rolling_fuzzing.sh"
+DOCKER_BUILD_SCRIPT="${ROOT_DIR}/scripts/docker/build_rolling_image_pair.sh"
 RESULTS_ROOT="${SCRIPT_DIR}/results"
 mkdir -p "${RESULTS_ROOT}"
 
-NAMESPACE="${NAMESPACE:-shuaiwang516}"
 JOB_ID=""
 SYSTEM=""
 ORIGINAL_VERSION=""
@@ -20,7 +20,7 @@ TESTING_MODE=5
 NODE_NUM=""
 DIFF_LANE_TIMEOUT_SEC=1200
 SKIP_BUILD=false
-SKIP_PULL=false
+SKIP_DOCKER_BUILD=false
 
 usage() {
     cat <<'USAGE'
@@ -39,9 +39,9 @@ Options:
   --testing-mode <N>                 Upfuzz testing mode (default: 5)
   --diff-lane-timeout-sec <sec>      Differential lane timeout for all systems (default: 1200)
   --node-num <N>                     Override node number
-  --namespace <docker-namespace>     Docker namespace to pull from (default: shuaiwang516)
+  --skip-docker-build                Skip docker image build step
   --skip-build                       Skip './gradlew classes -x test'
-  --skip-pull                        Skip docker pull/tag
+  --skip-pull                        Deprecated alias for --skip-docker-build
   --list-jobs                        Print job-id mapping and exit
   -h, --help                         Show this help
 
@@ -166,27 +166,6 @@ assign_job() {
     esac
 }
 
-ensure_prebuild_materialized() {
-    local system="$1"
-    local version="$2"
-    local base="${ROOT_DIR}/prebuild/${system}"
-    local dir="${base}/${version}"
-    local archive="${base}/${version}-src-instrumented.tar.gz"
-    local extracted_src="${base}/${version}-src"
-
-    if [[ -d "${dir}" ]]; then
-        return
-    fi
-    [[ -f "${archive}" ]] || die "Missing prebuild archive: ${archive}"
-
-    log "Extracting prebuild archive: ${archive}"
-    tar -xzf "${archive}" -C "${base}"
-    if [[ -d "${extracted_src}" && ! -d "${dir}" ]]; then
-        mv "${extracted_src}" "${dir}"
-    fi
-    [[ -d "${dir}" ]] || die "Failed to materialize prebuild dir: ${dir}"
-}
-
 ensure_hdfs_tmp_root_writable() {
     local root="/tmp/upfuzz/hdfs"
 
@@ -205,77 +184,6 @@ ensure_hdfs_tmp_root_writable() {
     fi
 
     [[ -d "${root}" && -w "${root}" ]] || die "Path not writable: ${root}. Fix ownership/permissions before running HDFS jobs."
-}
-
-ensure_hbase_hadoop_alias() {
-    local hdfs_dir="${ROOT_DIR}/prebuild/hdfs/hadoop-2.10.2"
-    local hadoop_parent="${ROOT_DIR}/prebuild/hadoop"
-    local hadoop_dir="${hadoop_parent}/hadoop-2.10.2"
-    local required_conf="${hdfs_dir}/etc/hadoop/hdfs-site.xml"
-
-    [[ -d "${hdfs_dir}" ]] || die "Missing extracted HDFS base for HBase: ${hdfs_dir}"
-    mkdir -p "${hadoop_parent}"
-
-    # If extracted hdfs tree lacks runtime conf files, do not symlink; a later
-    # hydration step will copy a complete runtime tree from docker image.
-    if [[ ! -f "${required_conf}" ]]; then
-        return
-    fi
-
-    if [[ -L "${hadoop_dir}" ]]; then
-        return
-    fi
-    if [[ -e "${hadoop_dir}" && ! -d "${hadoop_dir}" ]]; then
-        rm -f "${hadoop_dir}"
-    fi
-    if [[ -d "${hadoop_dir}" ]]; then
-        return
-    fi
-
-    ln -s "../hdfs/hadoop-2.10.2" "${hadoop_dir}"
-}
-
-refresh_hbase_hadoop_runtime_config() {
-    local conf_src="${ROOT_DIR}/src/main/resources/hdfs/hbase-pure"
-    local hadoop_conf_dir="${ROOT_DIR}/prebuild/hadoop/hadoop-2.10.2/etc/hadoop"
-    local hdfs_conf_dir="${ROOT_DIR}/prebuild/hdfs/hadoop-2.10.2/etc/hadoop"
-
-    mkdir -p "${hadoop_conf_dir}"
-    cp -f "${conf_src}/core-site.xml" "${hadoop_conf_dir}/core-site.xml"
-    cp -f "${conf_src}/hdfs-site.xml" "${hadoop_conf_dir}/hdfs-site.xml"
-    cp -f "${conf_src}/hadoop-env.sh" "${hadoop_conf_dir}/hadoop-env.sh"
-
-    if [[ -d "${hdfs_conf_dir}" ]]; then
-        cp -f "${conf_src}/core-site.xml" "${hdfs_conf_dir}/core-site.xml"
-        cp -f "${conf_src}/hdfs-site.xml" "${hdfs_conf_dir}/hdfs-site.xml"
-        cp -f "${conf_src}/hadoop-env.sh" "${hdfs_conf_dir}/hadoop-env.sh"
-    fi
-}
-
-hydrate_hbase_hadoop_runtime_from_image() {
-    local runtime_dir="${ROOT_DIR}/prebuild/hadoop/hadoop-2.10.2"
-    local required_conf="${runtime_dir}/etc/hadoop/hdfs-site.xml"
-    local image="upfuzz_hdfs:hadoop-2.10.2"
-    local parent_dir
-    parent_dir="$(dirname "${runtime_dir}")"
-
-    if [[ -f "${required_conf}" ]]; then
-        return
-    fi
-
-    docker image inspect "${image}" >/dev/null 2>&1 \
-        || die "Missing image ${image}. Pull it first (disable --skip-pull or pull manually)."
-
-    log "Hydrating ${runtime_dir} from docker image ${image}"
-    mkdir -p "${parent_dir}"
-    rm -rf "${runtime_dir}"
-
-    local cid
-    cid="$(docker create "${image}")"
-    docker cp "${cid}:/hadoop/hadoop-2.10.2" "${runtime_dir}"
-    docker rm -f "${cid}" >/dev/null 2>&1 || true
-
-    [[ -f "${required_conf}" ]] || die "Failed to hydrate HBase hadoop runtime: ${required_conf} missing"
 }
 
 ensure_hdfs_example_files() {
@@ -321,21 +229,14 @@ resolve_java11_home() {
     return 1
 }
 
-pull_and_tag_images() {
-    local remote_img="${NAMESPACE}/upfuzz_${SYSTEM}:${ORIGINAL_VERSION}_${UPGRADED_VERSION}"
-    local local_img="upfuzz_${SYSTEM}:${ORIGINAL_VERSION}_${UPGRADED_VERSION}"
+build_required_images() {
+    [[ -x "${DOCKER_BUILD_SCRIPT}" ]] || die "Missing or non-executable docker build script: ${DOCKER_BUILD_SCRIPT}"
 
-    log "Pulling ${remote_img}"
-    docker pull "${remote_img}"
-    docker tag "${remote_img}" "${local_img}"
-
-    if [[ "${SYSTEM}" == "hbase" ]]; then
-        local dep_remote="${NAMESPACE}/upfuzz_hdfs:hadoop-2.10.2"
-        local dep_local="upfuzz_hdfs:hadoop-2.10.2"
-        log "Pulling HBase dependency image ${dep_remote}"
-        docker pull "${dep_remote}"
-        docker tag "${dep_remote}" "${dep_local}"
-    fi
+    log "Building docker image pair via ${DOCKER_BUILD_SCRIPT}"
+    (
+        cd "${ROOT_DIR}"
+        UPFUZZ_DIR="${ROOT_DIR}" "${DOCKER_BUILD_SCRIPT}" "${SYSTEM}" "${ORIGINAL_VERSION}" "${UPGRADED_VERSION}"
+    )
 }
 
 ensure_bidirectional_image_tags() {
@@ -401,16 +302,16 @@ while [[ $# -gt 0 ]]; do
             NODE_NUM="$2"
             shift 2
             ;;
-        --namespace)
-            NAMESPACE="$2"
-            shift 2
-            ;;
         --skip-build)
             SKIP_BUILD=true
             shift 1
             ;;
+        --skip-docker-build)
+            SKIP_DOCKER_BUILD=true
+            shift 1
+            ;;
         --skip-pull)
-            SKIP_PULL=true
+            SKIP_DOCKER_BUILD=true
             shift 1
             ;;
         --list-jobs)
@@ -428,7 +329,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 require_cmd docker
-require_cmd tar
 ensure_docker_compose
 
 if [[ -n "${JOB_ID}" ]]; then
@@ -466,18 +366,11 @@ mkdir -p "${LAUNCH_DIR}"
 LAUNCH_LOG="${LAUNCH_DIR}/launch.log"
 
 log "Job setup: ${SYSTEM} ${ORIGINAL_VERSION} -> ${UPGRADED_VERSION}" | tee -a "${LAUNCH_LOG}"
-log "Namespace: ${NAMESPACE}" | tee -a "${LAUNCH_LOG}"
 
-ensure_prebuild_materialized "${SYSTEM}" "${ORIGINAL_VERSION}"
-ensure_prebuild_materialized "${SYSTEM}" "${UPGRADED_VERSION}"
-if [[ "${SYSTEM}" == "hbase" ]]; then
-    ensure_prebuild_materialized "hdfs" "hadoop-2.10.2"
-    ensure_hbase_hadoop_alias
-    refresh_hbase_hadoop_runtime_config
-fi
-if [[ "${SYSTEM}" == "hdfs" ]]; then
-    ensure_hdfs_tmp_root_writable
-    ensure_hdfs_example_files
+if [[ "${SKIP_DOCKER_BUILD}" == false ]]; then
+    build_required_images 2>&1 | tee -a "${LAUNCH_LOG}"
+else
+    log "Skipping docker image build (--skip-docker-build/--skip-pull)" | tee -a "${LAUNCH_LOG}"
 fi
 
 if [[ "${SKIP_BUILD}" == false ]]; then
@@ -497,16 +390,11 @@ else
     log "Skipping Java build (--skip-build)" | tee -a "${LAUNCH_LOG}"
 fi
 
-if [[ "${SKIP_PULL}" == false ]]; then
-    pull_and_tag_images 2>&1 | tee -a "${LAUNCH_LOG}"
-else
-    log "Skipping docker pull/tag (--skip-pull)" | tee -a "${LAUNCH_LOG}"
-fi
-
 ensure_bidirectional_image_tags
 
-if [[ "${SYSTEM}" == "hbase" ]]; then
-    hydrate_hbase_hadoop_runtime_from_image
+if [[ "${SYSTEM}" == "hdfs" ]]; then
+    ensure_hdfs_tmp_root_writable
+    ensure_hdfs_example_files
 fi
 
 RUNNER_CMD=(
