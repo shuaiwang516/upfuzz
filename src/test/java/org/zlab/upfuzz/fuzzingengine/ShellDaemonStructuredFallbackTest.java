@@ -9,7 +9,8 @@ import org.zlab.upfuzz.fuzzingengine.packet.ValidationResult;
 class ShellDaemonStructuredFallbackTest {
 
     @Test
-    void defaultStructuredFallbackMarksSuccessfulCommandAsOk() throws Exception {
+    void defaultStructuredFallbackMarksSuccessfulCommandAsOk()
+            throws Exception {
         ShellDaemon daemon = new ShellDaemon() {
             @Override
             public String executeCommand(String command) {
