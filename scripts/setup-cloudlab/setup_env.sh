@@ -359,19 +359,15 @@ build_upfuzz() {
         return
     fi
 
-    log "Building upfuzz dependencies and main artifacts"
+    log "Building upfuzz dependencies and bootstrap classes"
     chmod +x "${UPFUZZ_DIR}/gradlew"
     local j11
     j11="$(java11_home)"
     (
         cd "${UPFUZZ_DIR}"
         JAVA_HOME="${j11}" PATH="${j11}/bin:${PATH}" ./gradlew --no-daemon copyDependencies
-        if [[ "${USE_EXISTING_REPOS}" == true && ! -d "${UPFUZZ_DIR}/.git" ]]; then
-            log "No .git metadata in upfuzz dir; using assemble target to avoid spotless git checks"
-            JAVA_HOME="${j11}" PATH="${j11}/bin:${PATH}" ./gradlew --no-daemon assemble -x test
-        else
-            JAVA_HOME="${j11}" PATH="${j11}/bin:${PATH}" ./gradlew --no-daemon build -x test
-        fi
+        # Bootstrap should not be blocked by formatting/quality gates (e.g. spotless).
+        JAVA_HOME="${j11}" PATH="${j11}/bin:${PATH}" ./gradlew --no-daemon classes -x test
     )
 }
 

@@ -28,10 +28,6 @@ Notes:
 
 ## 3) Required prebuild archives
 
-For Cassandra demo mode (`--mode cassandra-demo`), required archives are:
-- `prebuild/cassandra/apache-cassandra-4.1.10-src-instrumented.tar.gz`
-- `prebuild/cassandra/apache-cassandra-5.0.6-src-instrumented.tar.gz`
-
 For full mode (`--mode full`), all 9 instrumented archives are required:
 - Cassandra: `3.11.19`, `4.1.10`, `5.0.6`
 - HDFS: `2.10.2`, `3.3.6`, `3.4.2`
@@ -45,7 +41,18 @@ scp /path/to/prebuild/cassandra/apache-cassandra-4.1.10-src-instrumented.tar.gz 
 scp /path/to/prebuild/cassandra/apache-cassandra-5.0.6-src-instrumented.tar.gz <user>@<host>:/tmp/
 ```
 
-Then pass `--prebuild-source-dir /tmp` to `setup_env.sh`.
+The prebuild pathes on this local machines are in 
+```
+/home/shuai/xlab/rupfuzz/prebuild
+```
+
+You should copy these prebuild archives to the target machine (e.g., CloudLab VM) and provide the directory path to `setup_env.sh` via `--prebuild-source-dir` option. The cloudlab prebuild pathes are in 
+```
+/users/swang516/xlab/rupfuzz/upfuzz/prebuild
+```
+And you should copy the prebuild archives to this directory for all cloudlab machines.
+
+```bash
 
 ## 4) Run environment setup script
 

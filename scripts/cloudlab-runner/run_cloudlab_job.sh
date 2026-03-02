@@ -65,6 +65,39 @@ require_cmd() {
     command -v "$1" >/dev/null 2>&1 || die "Missing command: $1"
 }
 
+summary_value() {
+    local key="$1"
+    local file="$2"
+    sed -n "s/^${key}: //p" "${file}" | head -n 1
+}
+
+validate_required_trace_signal() {
+    local file="$1"
+    local trace_signal_ok
+    local merged_old
+    local merged_rolling
+    local merged_new
+
+    trace_signal_ok="$(summary_value "trace_signal_ok" "${file}")"
+    merged_old="$(summary_value "trace_merged_old_nonzero_count" "${file}")"
+    merged_rolling="$(summary_value "trace_merged_rolling_nonzero_count" "${file}")"
+    merged_new="$(summary_value "trace_merged_new_nonzero_count" "${file}")"
+
+    [[ "${trace_signal_ok}" == "true" ]] \
+        || die "Trace signal required but trace_signal_ok=${trace_signal_ok:-missing} (summary: ${file})"
+
+    [[ "${merged_old}" =~ ^[0-9]+$ ]] \
+        || die "Missing/invalid trace_merged_old_nonzero_count in ${file}: ${merged_old:-missing}"
+    [[ "${merged_rolling}" =~ ^[0-9]+$ ]] \
+        || die "Missing/invalid trace_merged_rolling_nonzero_count in ${file}: ${merged_rolling:-missing}"
+    [[ "${merged_new}" =~ ^[0-9]+$ ]] \
+        || die "Missing/invalid trace_merged_new_nonzero_count in ${file}: ${merged_new:-missing}"
+
+    if (( merged_old < 1 || merged_rolling < 1 || merged_new < 1 )); then
+        die "Trace signal required but merged nonzero counts are old=${merged_old}, rolling=${merged_rolling}, new=${merged_new} (summary: ${file})"
+    fi
+}
+
 ensure_docker_compose() {
     if docker compose version >/dev/null 2>&1; then
         return 0
@@ -513,6 +546,8 @@ if [[ -f "${SUMMARY_FILE}" ]]; then
     log "Run complete. Summary: ${SUMMARY_FILE}" | tee -a "${LAUNCH_LOG}"
     egrep "^(system:|original_version:|upgraded_version:|observed_rounds:|diff_feedback_packets:|stop_reason:|trace_signal_ok:|trace_len_positive_count:|trace_len_zero_count:|trace_merged_old_nonzero_count:|trace_merged_rolling_nonzero_count:|trace_merged_new_nonzero_count:|trace_merged_zero_count:|message_tri_diff_count:|trace_connect_refused_count:)" \
         "${SUMMARY_FILE}" | tee -a "${LAUNCH_LOG}"
+    validate_required_trace_signal "${SUMMARY_FILE}"
+    log "Trace signal requirement satisfied." | tee -a "${LAUNCH_LOG}"
 else
     die "Runner finished without summary file: ${SUMMARY_FILE}"
 fi
