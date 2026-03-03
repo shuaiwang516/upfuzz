@@ -206,7 +206,7 @@ public class XmlGenerator extends ConfigFileGenerator {
         // "false");
         // curConfigurations.put("hbase.procedure.upgrade-to-2-2", "true");
         curConfigurations.put("hbase.zookeeper.quorum",
-                "hmaster,hregion1,hregion2");
+                Config.getConf().getHBaseZookeeperQuorum());
         // curConfigurations.put("hbase.rpc.engine",
         // "org.apache.hadoop.hbase.ipc.SecureRpcEngine");
         // curConfigurations.put("hbase.procedure.store.wal.use.hsync",

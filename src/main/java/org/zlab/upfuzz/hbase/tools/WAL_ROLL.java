@@ -18,7 +18,7 @@ public class WAL_ROLL extends HBaseCommand {
                 CONSTANTSTRINGType.instance,
                 (s, c) -> Utilities
                         .strings2Parameters(
-                                Config.getConf().REGIONSERVERS),
+                                Config.getConf().getHBaseRegionServers()),
                 null).generateRandomParameter(state, this);
         params.add(regionserver); // 0 regionserver
     }

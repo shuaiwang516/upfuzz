@@ -421,8 +421,29 @@ public class Config {
 
         public boolean enableQuota = true;
         public int MAX_CF_NUM = 7;
-        public final String[] REGIONSERVERS = { "hregion1", "hregion2" };
         public int REGIONSERVER_PORT = 16020;
+
+        public String[] getHBaseRegionServers() {
+            int regionServerCount = Math.max(1, nodeNum - 1);
+            String[] regionServers = new String[regionServerCount];
+            for (int i = 0; i < regionServerCount; i++) {
+                regionServers[i] = "hregion" + (i + 1);
+            }
+            return regionServers;
+        }
+
+        public String getHBaseZookeeperQuorum() {
+            // For 2-node HBase runs, keep ZK control-plane stable by using
+            // a single-node ensemble on hmaster.
+            if (nodeNum <= 2) {
+                return "hmaster";
+            }
+            StringBuilder quorum = new StringBuilder("hmaster");
+            for (String regionServer : getHBaseRegionServers()) {
+                quorum.append(",").append(regionServer);
+            }
+            return quorum.toString();
+        }
 
         public boolean eval_HBASE22503 = false;
         public boolean reproduce_HBASE22503 = false;

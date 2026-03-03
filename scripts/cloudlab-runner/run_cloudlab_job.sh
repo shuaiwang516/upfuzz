@@ -19,6 +19,7 @@ CLIENTS=1
 TESTING_MODE=5
 NODE_NUM=""
 DIFF_LANE_TIMEOUT_SEC=1200
+HBASE_DAEMON_RETRY_TIMES=""
 SKIP_BUILD=false
 SKIP_DOCKER_BUILD=false
 
@@ -38,6 +39,7 @@ Options:
   --clients <N>                      Number of clients (default: 1)
   --testing-mode <N>                 Upfuzz testing mode (default: 5)
   --diff-lane-timeout-sec <sec>      Differential lane timeout for all systems (default: 1200)
+  --hbase-daemon-retry-times <N>     Override hbaseDaemonRetryTimes in generated config (HBase only)
   --node-num <N>                     Override node number
   --skip-docker-build                Skip docker image build step
   --skip-build                       Skip './gradlew classes -x test'
@@ -293,6 +295,10 @@ while [[ $# -gt 0 ]]; do
             DIFF_LANE_TIMEOUT_SEC="$2"
             shift 2
             ;;
+        --hbase-daemon-retry-times)
+            HBASE_DAEMON_RETRY_TIMES="$2"
+            shift 2
+            ;;
         --cassandra-retry-timeout)
             # Backward-compatible alias for old launcher calls.
             DIFF_LANE_TIMEOUT_SEC="$2"
@@ -415,27 +421,38 @@ RUNNER_CMD=(
 if [[ -n "${NODE_NUM}" ]]; then
     RUNNER_CMD+=(--node-num "${NODE_NUM}")
 fi
+if [[ "${SYSTEM}" == "hbase" && -n "${HBASE_DAEMON_RETRY_TIMES}" ]]; then
+    RUNNER_CMD+=(--hbase-daemon-retry-times "${HBASE_DAEMON_RETRY_TIMES}")
+fi
 
 log "Launching: ${RUNNER_CMD[*]}" | tee -a "${LAUNCH_LOG}"
+set +e
 (
     cd "${ROOT_DIR}"
     "${RUNNER_CMD[@]}"
 ) 2>&1 | tee -a "${LAUNCH_LOG}"
+RUNNER_RC=${PIPESTATUS[0]}
+set -e
 
 RUNNER_RESULT_DIR="${ROOT_DIR}/scripts/runner/results/${RUN_NAME}"
 SUMMARY_FILE="${RUNNER_RESULT_DIR}/summary.txt"
 
 if [[ -f "${SUMMARY_FILE}" ]]; then
     cp -f "${SUMMARY_FILE}" "${LAUNCH_DIR}/summary.txt"
-    for f in config.json server_stdout.log client_launcher_stdout.log upfuzz_server.log upfuzz_client_1.log monitor.log; do
+    for f in config.json server_stdout.log client_launcher_stdout.log upfuzz_server.log upfuzz_client_1.log monitor.log server_key_markers.log client_key_markers.log; do
         [[ -f "${RUNNER_RESULT_DIR}/${f}" ]] && cp -f "${RUNNER_RESULT_DIR}/${f}" "${LAUNCH_DIR}/${f}"
     done
 
     log "Run complete. Summary: ${SUMMARY_FILE}" | tee -a "${LAUNCH_LOG}"
     egrep "^(system:|original_version:|upgraded_version:|observed_rounds:|diff_feedback_packets:|stop_reason:|trace_signal_ok:|trace_len_positive_count:|trace_len_zero_count:|trace_merged_old_nonzero_count:|trace_merged_rolling_nonzero_count:|trace_merged_new_nonzero_count:|trace_merged_zero_count:|message_tri_diff_count:|trace_connect_refused_count:)" \
         "${SUMMARY_FILE}" | tee -a "${LAUNCH_LOG}"
+
+    if (( RUNNER_RC != 0 )); then
+        die "Runner exited with code ${RUNNER_RC}. See ${SUMMARY_FILE} and ${LAUNCH_LOG}."
+    fi
+
     validate_required_trace_signal "${SUMMARY_FILE}"
     log "Trace signal requirement satisfied." | tee -a "${LAUNCH_LOG}"
 else
-    die "Runner finished without summary file: ${SUMMARY_FILE}"
+    die "Runner finished without summary file: ${SUMMARY_FILE} (runner_rc=${RUNNER_RC})"
 fi

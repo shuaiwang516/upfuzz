@@ -339,6 +339,36 @@ public class HBaseDockerCluster extends DockerCluster {
         return true;
     }
 
+    public HBaseDocker getMasterDocker() {
+        if (dockers == null || dockers.length == 0) {
+            return null;
+        }
+        return (HBaseDocker) dockers[0];
+    }
+
+    public int getExpectedRegionServerCount() {
+        return Math.max(0, nodeNum - 1);
+    }
+
+    public String getRegionServerHostForNode(int nodeIndex) {
+        if (nodeIndex <= 0 || nodeIndex >= nodeNum) {
+            return null;
+        }
+        // RegionServer container hostnames follow hregion<nodeIndex>.
+        // Keep this independent from optional config helpers so remote
+        // cloudlab repos with slightly older Config APIs still compile.
+        return "hregion" + nodeIndex;
+    }
+
+    public String[] getExpectedRegionServerHosts() {
+        int expected = getExpectedRegionServerCount();
+        String[] hosts = new String[expected];
+        for (int i = 1; i <= expected; i++) {
+            hosts[i - 1] = "hregion" + i;
+        }
+        return hosts;
+    }
+
     @Override
     public void finalizeUpgrade() {
         logger.debug("HBase upgrade finalized");

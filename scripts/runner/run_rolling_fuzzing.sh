@@ -22,6 +22,7 @@ ENABLE_LOG_CHECK=true
 REQUIRE_TRACE_SIGNAL=false
 CASSANDRA_RETRY_TIMEOUT=300
 DIFF_LANE_TIMEOUT_SEC=1200
+HBASE_DAEMON_RETRY_TIMES=40
 NODE_NUM=""
 FIXED_CONFIG_IDX=-1
 SERVER_PORT=7399
@@ -45,6 +46,7 @@ Options:
   --testing-mode <3|5>                   3=example testplan, 5=rolling-only (default: ${TESTING_MODE})
   --diff-lane-timeout-sec <sec>          Differential lane timeout for all systems (default: ${DIFF_LANE_TIMEOUT_SEC})
   --cassandra-retry-timeout <sec>        Cassandra cqlsh retry timeout (default: ${CASSANDRA_RETRY_TIMEOUT})
+  --hbase-daemon-retry-times <N>         HBase shell daemon retry attempts (default: ${HBASE_DAEMON_RETRY_TIMES})
   --use-trace <true|false>               Enable network trace collection (default: ${USE_TRACE})
   --print-trace <true|false>             Print detailed trace entries in server log (default: ${PRINT_TRACE})
   --use-jaccard <true|false>             Enable Jaccard similarity (default: ${USE_JACCARD})
@@ -364,6 +366,7 @@ JSON
   "fixedConfigIdx" : ${fixed_config_idx},
   "enableHBaseReadResultComparison" : true,
   "enable_IS_DISABLED" : true,
+  "hbaseDaemonRetryTimes" : ${HBASE_DAEMON_RETRY_TIMES},
   "differentialLaneTimeoutSec" : ${DIFF_LANE_TIMEOUT_SEC}
 }
 JSON
@@ -425,6 +428,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --diff-lane-timeout-sec)
             DIFF_LANE_TIMEOUT_SEC="$2"
+            shift 2
+            ;;
+        --hbase-daemon-retry-times)
+            HBASE_DAEMON_RETRY_TIMES="$2"
             shift 2
             ;;
         --use-trace)
@@ -541,6 +548,7 @@ if [[ "${SYSTEM}" == "hbase" ]]; then
 fi
 
 [[ "${FIXED_CONFIG_IDX}" =~ ^-?[0-9]+$ ]] || die "--fixed-config-idx must be an integer"
+[[ "${HBASE_DAEMON_RETRY_TIMES}" =~ ^[0-9]+$ ]] || die "--hbase-daemon-retry-times must be a non-negative integer"
 
 if [[ "${USE_TRACE}" == true && "${SYSTEM}" == "cassandra" && "${NODE_NUM}" -lt 2 ]]; then
     log "WARNING: Cassandra use-trace with node-num=${NODE_NUM} can miss inter-node traffic. Prefer --node-num 2+ for trace verification."
@@ -585,6 +593,7 @@ TESTING_MODE=${TESTING_MODE}
 DIFFERENTIAL_EXECUTION=${USE_DIFF}
 CASSANDRA_RETRY_TIMEOUT=${CASSANDRA_RETRY_TIMEOUT}
 DIFF_LANE_TIMEOUT_SEC=${DIFF_LANE_TIMEOUT_SEC}
+HBASE_DAEMON_RETRY_TIMES=${HBASE_DAEMON_RETRY_TIMES}
 USE_TRACE=${USE_TRACE}
 PRINT_TRACE=${PRINT_TRACE}
 USE_JACCARD=${USE_JACCARD}

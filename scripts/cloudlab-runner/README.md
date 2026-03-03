@@ -109,6 +109,7 @@ scripts/cloudlab-runner/run_cloudlab_job.sh \
 - `--run-name`: stable folder name for easier collection.
 - `--rounds`: number of differential rounds to wait for.
 - `--timeout-sec`: hard timeout.
+- `--hbase-daemon-retry-times`: HBase shell daemon retry attempts for startup-heavy environments.
 - `--skip-docker-build`: skip `scripts/docker/build_rolling_image_pair.sh`.
 - `--skip-build`: skip `./gradlew classes -x test`.
 - `--skip-pull`: deprecated alias for `--skip-docker-build`.
@@ -130,6 +131,8 @@ Primary output:
 - `scripts/cloudlab-runner/results/<run_name>/summary.txt`
 - `scripts/cloudlab-runner/results/<run_name>/upfuzz_server.log`
 - `scripts/cloudlab-runner/results/<run_name>/upfuzz_client_1.log`
+- `scripts/cloudlab-runner/results/<run_name>/server_key_markers.log`
+- `scripts/cloudlab-runner/results/<run_name>/client_key_markers.log`
 
 Runner-native output (full details):
 
@@ -157,6 +160,8 @@ Notes:
 - `Docker image not found`: docker build step failed or was skipped while image was absent.
 - `Path not writable: /tmp/upfuzz/hdfs`: fix ownership/permission for HDFS tmp root.
 - `Trace signal missing`: check prebuild tarball availability/instrumentation, `useTrace=true`, and server/client logs.
+- HBase specific: `Trace signal missing` can happen even with `observed_rounds: 3` when each lane returns null feedback (`differential lane ... returned null feedback packet`), producing only zero-length traces.
+- HBase startup flakiness: repeated `cannot connect to hbase shell` can be mitigated by increasing retries, for example `--hbase-daemon-retry-times 120`.
 
 ## Collecting Results From Each Machine
 

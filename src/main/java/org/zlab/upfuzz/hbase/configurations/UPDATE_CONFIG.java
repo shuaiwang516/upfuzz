@@ -17,7 +17,7 @@ public class UPDATE_CONFIG extends HBaseCommand {
                 CONSTANTSTRINGType.instance,
                 (s, c) -> Utilities
                         .strings2Parameters(
-                                Config.getConf().REGIONSERVERS),
+                                Config.getConf().getHBaseRegionServers()),
                 null).generateRandomParameter(state, this);
         params.add(regionserver);
     }

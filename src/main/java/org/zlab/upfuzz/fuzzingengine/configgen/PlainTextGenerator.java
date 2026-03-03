@@ -55,7 +55,8 @@ public class PlainTextGenerator extends ConfigFileGenerator {
         if (generationType.equals("regionservers")) {
             try {
                 FileWriter writerOri = new FileWriter(oriSavePath.toFile());
-                for (String regionName : Config.getConf().REGIONSERVERS) {
+                for (String regionName : Config.getConf()
+                        .getHBaseRegionServers()) {
                     writerOri.write(regionName + "\n");
                 }
                 writerOri.close();
@@ -71,7 +72,8 @@ public class PlainTextGenerator extends ConfigFileGenerator {
             if (generationType.equals("regionservers")) {
                 try {
                     FileWriter writerUp = new FileWriter(upSavePath.toFile());
-                    for (String regionName : Config.getConf().REGIONSERVERS) {
+                    for (String regionName : Config.getConf()
+                            .getHBaseRegionServers()) {
                         writerUp.write(regionName + "\n");
                     }
                     writerUp.close();

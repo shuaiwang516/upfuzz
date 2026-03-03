@@ -8,6 +8,8 @@ import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.commons.text.StringSubstitutor;
 import org.apache.logging.log4j.LogManager;
@@ -30,10 +32,12 @@ public class HBaseDocker extends Docker {
     String javaToolOpts;
     int HBaseDaemonPort = 36000;
     public int direction;
+    private final HBaseDockerCluster hbaseDockerCluster;
 
     public String seedIP;
 
     public HBaseDocker(HBaseDockerCluster dockerCluster, int index) {
+        this.hbaseDockerCluster = dockerCluster;
         this.index = index;
         this.direction = dockerCluster.direction;
         workdir = dockerCluster.workdir;
@@ -191,10 +195,27 @@ public class HBaseDocker extends Docker {
         upgrade();
         // Reconnect to the upgraded shell daemon endpoint.
         start();
-        waitForControlPlaneReady();
+        waitForPostUpgradeHealth();
     }
 
-    private void waitForControlPlaneReady() throws Exception {
+    private void waitForPostUpgradeHealth() throws Exception {
+        if (index == 0) {
+            waitForMasterAndClusterReady(
+                    String.format("post-upgrade node[%d] master", index));
+            return;
+        }
+
+        waitForRegionServerLocalReady();
+        waitForRegionServerRejoinedFromMaster();
+    }
+
+    private void waitForMasterAndClusterReady(String phase) throws Exception {
+        waitForMasterControlPlaneReady();
+        waitForMasterReportsClusterHealthy(
+                hbaseDockerCluster.getExpectedRegionServerCount(), phase);
+    }
+
+    private void waitForMasterControlPlaneReady() throws Exception {
         final int maxAttempts = Math.max(1,
                 Config.getConf().hbaseDaemonRetryTimes);
         final int sleepMillis = 5000;
@@ -216,10 +237,11 @@ public class HBaseDocker extends Docker {
                             + "\n"
                             + safeLower(probe.stderr);
                     boolean transientZkIssue = isZkTransient(mergedLower);
-                    if (probe.isSuccess() && !transientZkIssue) {
+                    if (probe.isSuccess()) {
                         logger.info(String.format(
-                                "Node[%d] control plane ready after %d attempts via {%s}",
-                                index, attempt, probeCommand));
+                                "Node[%d] control plane ready after %d attempts via {%s} (zkTransient=%s)",
+                                index, attempt, probeCommand,
+                                transientZkIssue));
                         return;
                     }
 
@@ -248,6 +270,321 @@ public class HBaseDocker extends Docker {
                         + reason);
     }
 
+    private void waitForRegionServerLocalReady() throws Exception {
+        final int maxAttempts = Math.max(1,
+                Config.getConf().hbaseDaemonRetryTimes);
+        final int sleepMillis = 5000;
+        final String rsJpsCheck =
+                "jps -l | grep -q 'org.apache.hadoop.hbase.regionserver.HRegionServer'";
+        final String rsPortCheck = String.format(
+                "(ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep -q ':%d\\b'",
+                Config.getConf().REGIONSERVER_PORT);
+
+        ProbeCommandResult lastJps = null;
+        ProbeCommandResult lastPort = null;
+        Exception lastException = null;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                lastJps = runContainerProbe(rsJpsCheck);
+                lastPort = runContainerProbe(rsPortCheck);
+                boolean jpsReady = lastJps.exitCode == 0;
+                boolean portReady = lastPort.exitCode == 0;
+
+                if (jpsReady && portReady) {
+                    logger.info(String.format(
+                            "Node[%d] regionserver local readiness passed after %d attempts",
+                            index, attempt));
+                    return;
+                }
+
+                logger.info(String.format(
+                        "Node[%d] regionserver readiness %d/%d not ready (jpsExit=%d, portExit=%d)",
+                        index, attempt, maxAttempts,
+                        lastJps.exitCode, lastPort.exitCode));
+            } catch (Exception e) {
+                lastException = e;
+                logger.info(String.format(
+                        "Node[%d] regionserver readiness %d/%d failed: %s",
+                        index, attempt, maxAttempts, e.toString()));
+            }
+
+            Thread.sleep(sleepMillis);
+        }
+
+        String reason;
+        if (lastException != null) {
+            reason = lastException.toString();
+        } else {
+            String jpsOut = lastJps == null ? "" : lastJps.output;
+            String portOut = lastPort == null ? "" : lastPort.output;
+            reason = String.format("jpsExit=%s,portExit=%s,jpsOut=%s,portOut=%s",
+                    lastJps == null ? "NA" : Integer.toString(lastJps.exitCode),
+                    lastPort == null ? "NA"
+                            : Integer.toString(lastPort.exitCode),
+                    compactText(jpsOut), compactText(portOut));
+        }
+        throw new IOException(
+                "HBase rolling upgrade timed out waiting for regionserver local readiness: "
+                        + reason);
+    }
+
+    private void waitForRegionServerRejoinedFromMaster() throws Exception {
+        HBaseDocker masterDocker = hbaseDockerCluster.getMasterDocker();
+        if (masterDocker == null) {
+            throw new IOException(
+                    "Master docker is unavailable while checking regionserver rejoin");
+        }
+
+        masterDocker.waitForMasterAndClusterReady(
+                String.format("post-upgrade node[%d] regionserver", index));
+
+        String regionServerHost = hbaseDockerCluster.getRegionServerHostForNode(
+                index);
+        if (regionServerHost != null) {
+            masterDocker.bestEffortConfirmRegionServerListed(regionServerHost);
+        }
+    }
+
+    private void waitForMasterReportsClusterHealthy(int expectedRegionServers,
+            String phase) throws Exception {
+        final int maxAttempts = Math.max(1,
+                Config.getConf().hbaseDaemonRetryTimes);
+        final int sleepMillis = 5000;
+        ValidationResult lastProbe = null;
+        Exception lastException = null;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                ValidationResult status = execCommandStructured("status 'simple'");
+                lastProbe = status;
+                String merged = safe(status.stdout) + "\n" + safe(status.stderr);
+                String mergedLower = safeLower(merged);
+                Integer liveServers = extractLiveServerCount(merged);
+                Integer deadServers = extractDeadServerCount(merged);
+                boolean transientState = isMasterTransient(mergedLower);
+                Boolean detailedHostsReady = null;
+                if (liveServers == null && expectedRegionServers > 0) {
+                    detailedHostsReady = areExpectedRegionServersListedInDetailedStatus();
+                }
+                boolean liveReady = expectedRegionServers == 0
+                        || (liveServers != null
+                                && liveServers >= expectedRegionServers)
+                        || Boolean.TRUE.equals(detailedHostsReady);
+                boolean deadReady = deadServers == null || deadServers == 0;
+
+                if (status.isSuccess() && !transientState && liveReady
+                        && deadReady) {
+                    logger.info(String.format(
+                            "Node[%d] master-side cluster health ready after %d attempts (%s): liveServers=%s, deadServers=%s, expectedRegionServers=%d, detailedHostsReady=%s",
+                            index, attempt, phase,
+                            liveServers == null ? "NA" : liveServers.toString(),
+                            deadServers == null ? "NA"
+                                    : deadServers.toString(),
+                            expectedRegionServers,
+                            detailedHostsReady == null ? "NA"
+                                    : detailedHostsReady.toString()));
+                    return;
+                }
+
+                logger.info(String.format(
+                        "Node[%d] master-side health %d/%d not ready (%s): exit=%d,class=%s,transient=%s,liveServers=%s,deadServers=%s,expectedRegionServers=%d,detailedHostsReady=%s,sample=%s",
+                        index, attempt, maxAttempts, phase, status.exitCode,
+                        status.failureClass, transientState,
+                        liveServers == null ? "NA" : liveServers.toString(),
+                        deadServers == null ? "NA" : deadServers.toString(),
+                        expectedRegionServers,
+                        detailedHostsReady == null ? "NA"
+                                : detailedHostsReady.toString(),
+                        compactText(merged)));
+
+                if (transientState) {
+                    bestEffortRestartMasterIfDown(attempt, phase);
+                } else {
+                    bestEffortRecoverMissingRegionServers(attempt,
+                            expectedRegionServers, liveServers, phase);
+                }
+            } catch (Exception e) {
+                lastException = e;
+                logger.info(String.format(
+                        "Node[%d] master-side health %d/%d failed (%s): %s",
+                        index, attempt, maxAttempts, phase, e.toString()));
+            }
+
+            Thread.sleep(sleepMillis);
+        }
+
+        String reason = lastException != null
+                ? lastException.toString()
+                : summarizeProbe(lastProbe);
+        throw new IOException(
+                "HBase rolling upgrade timed out waiting for cluster health from master side ("
+                        + phase + "): " + reason);
+    }
+
+    private void bestEffortRestartMasterIfDown(int attempt, String phase) {
+        if (index != 0 || attempt % 3 != 0) {
+            return;
+        }
+        final String masterJpsCheck =
+                "jps -l | grep -q 'org.apache.hadoop.hbase.master.HMaster'";
+        try {
+            ProbeCommandResult jps = runContainerProbe(masterJpsCheck);
+            if (jps.exitCode == 0) {
+                return;
+            }
+            logger.info(String.format(
+                    "Node[%d] master JVM missing during %s; restarting supervisor hbase service",
+                    index, phase));
+            Process restart = runInContainer(
+                    new String[] { "/bin/bash", "-lc",
+                            "/usr/bin/supervisorctl restart upfuzz_hbase:hbase" },
+                    env);
+            String restartOutput = Utilities.readProcess(restart);
+            logger.info(String.format(
+                    "Node[%d] master restart command exit=%d output=%s",
+                    index, restart.exitValue(), compactText(restartOutput)));
+
+            for (int i = 0; i < 24; i++) {
+                Thread.sleep(2500);
+                ProbeCommandResult recheck = runContainerProbe(masterJpsCheck);
+                if (recheck.exitCode == 0) {
+                    logger.info(String.format(
+                            "Node[%d] master JVM recovered after restart during %s",
+                            index, phase));
+                    return;
+                }
+            }
+            logger.info(String.format(
+                    "Node[%d] master JVM still missing after restart attempt during %s",
+                    index, phase));
+        } catch (Exception e) {
+            logger.info(String.format(
+                    "Node[%d] failed to restart master during %s: %s",
+                    index, phase, e.toString()));
+        }
+    }
+
+    private void bestEffortRecoverMissingRegionServers(int attempt,
+            int expectedRegionServers, Integer liveServers, String phase) {
+        if (index != 0 || expectedRegionServers <= 0) {
+            return;
+        }
+        if (liveServers != null && liveServers >= expectedRegionServers) {
+            return;
+        }
+        // Avoid aggressive restarts; try once every 3 health attempts.
+        if (attempt % 3 != 0) {
+            return;
+        }
+
+        for (int node = 1; node < hbaseDockerCluster.nodeNum; node++) {
+            HBaseDocker rsDocker = (HBaseDocker) hbaseDockerCluster.getDocker(
+                    node);
+            if (rsDocker == null) {
+                continue;
+            }
+            rsDocker.bestEffortRestartRegionServerIfDown(phase);
+        }
+    }
+
+    private void bestEffortRestartRegionServerIfDown(String phase) {
+        if (index == 0) {
+            return;
+        }
+        final String rsJpsCheck =
+                "jps -l | grep -q 'org.apache.hadoop.hbase.regionserver.HRegionServer'";
+        try {
+            ProbeCommandResult jps = runContainerProbe(rsJpsCheck);
+            if (jps.exitCode == 0) {
+                return;
+            }
+
+            logger.info(String.format(
+                    "Node[%d] regionserver JVM missing during %s; restarting supervisor hbase service",
+                    index, phase));
+            Process restart = runInContainer(
+                    new String[] { "/bin/bash", "-lc",
+                            "/usr/bin/supervisorctl restart upfuzz_hbase:hbase" },
+                    env);
+            String restartOutput = Utilities.readProcess(restart);
+            logger.info(String.format(
+                    "Node[%d] regionserver restart command exit=%d output=%s",
+                    index, restart.exitValue(), compactText(restartOutput)));
+
+            for (int i = 0; i < 24; i++) {
+                Thread.sleep(2500);
+                ProbeCommandResult recheck = runContainerProbe(rsJpsCheck);
+                if (recheck.exitCode == 0) {
+                    logger.info(String.format(
+                            "Node[%d] regionserver JVM recovered after restart during %s",
+                            index, phase));
+                    return;
+                }
+            }
+            logger.info(String.format(
+                    "Node[%d] regionserver JVM still missing after restart attempt during %s",
+                    index, phase));
+        } catch (Exception e) {
+            logger.info(String.format(
+                    "Node[%d] failed to restart regionserver during %s: %s",
+                    index, phase, e.toString()));
+        }
+    }
+
+    private Boolean areExpectedRegionServersListedInDetailedStatus() {
+        try {
+            ValidationResult detailed = execCommandStructured("status 'detailed'");
+            String merged = safe(detailed.stdout) + "\n" + safe(detailed.stderr);
+            String mergedLower = safeLower(merged);
+            if (!detailed.isSuccess() || isMasterTransient(mergedLower)) {
+                return Boolean.FALSE;
+            }
+
+            String[] expectedHosts = hbaseDockerCluster.getExpectedRegionServerHosts();
+            for (String host : expectedHosts) {
+                if (!mergedLower.contains(safeLower(host))) {
+                    return Boolean.FALSE;
+                }
+            }
+            return Boolean.TRUE;
+        } catch (Exception e) {
+            logger.info(String.format(
+                    "Master-side detailed status host-list check failed: %s",
+                    e.toString()));
+            return null;
+        }
+    }
+
+    private void bestEffortConfirmRegionServerListed(String regionServerHost) {
+        try {
+            ValidationResult status = execCommandStructured("status 'detailed'");
+            String merged = safe(status.stdout) + "\n" + safe(status.stderr);
+            if (status.isSuccess()
+                    && safeLower(merged).contains(safeLower(regionServerHost))) {
+                logger.info(String.format(
+                        "Master-side detailed status confirms regionserver host [%s] is listed",
+                        regionServerHost));
+            } else {
+                logger.info(String.format(
+                        "Master-side detailed status did not explicitly list regionserver host [%s]; proceeding because simple-status health checks passed",
+                        regionServerHost));
+            }
+        } catch (Exception e) {
+            logger.info(String.format(
+                    "Master-side detailed status check failed for regionserver host [%s]: %s",
+                    regionServerHost, e.toString()));
+        }
+    }
+
+    private ProbeCommandResult runContainerProbe(String command)
+            throws IOException {
+        Process process = runInContainer(
+                new String[] { "/bin/bash", "-lc", command }, env);
+        String output = Utilities.readProcess(process);
+        return new ProbeCommandResult(process.exitValue(), output);
+    }
+
     private boolean isZkTransient(String mergedLower) {
         return mergedLower.contains("zookeeper get/list could not be completed")
                 || mergedLower.contains("recoverablezookeeper")
@@ -255,6 +592,50 @@ public class HBaseDocker extends Docker {
                 || mergedLower.contains("keepererrorcode = connectionloss")
                 || mergedLower.contains("annotatednoroutetohostexception")
                 || mergedLower.contains("connection refused");
+    }
+
+    private boolean isMasterTransient(String mergedLower) {
+        return isZkTransient(mergedLower)
+                || mergedLower.contains("failed contacting masters")
+                || mergedLower.contains("master is initializing")
+                || mergedLower.contains("pleaseholdexception");
+    }
+
+    private Integer extractLiveServerCount(String text) {
+        Integer value = extractCountByPattern(text, "(\\d+)\\s+region\\s+servers?\\b");
+        if (value != null) {
+            return value;
+        }
+        value = extractCountByPattern(text, "(\\d+)\\s+live\\s+servers?\\b");
+        if (value != null) {
+            return value;
+        }
+        value = extractCountByPattern(text, "(\\d+)\\s+regionservers?\\b");
+        if (value != null) {
+            return value;
+        }
+        return extractCountByPattern(text, "(\\d+)\\s+servers?\\b");
+    }
+
+    private Integer extractDeadServerCount(String text) {
+        Integer value = extractCountByPattern(text, "(\\d+)\\s+dead\\s+servers?\\b");
+        if (value != null) {
+            return value;
+        }
+        return extractCountByPattern(text, "(\\d+)\\s+dead\\b");
+    }
+
+    private Integer extractCountByPattern(String text, String regex) {
+        Pattern pattern = Pattern.compile(regex, Pattern.CASE_INSENSITIVE);
+        Matcher matcher = pattern.matcher(safe(text));
+        if (!matcher.find()) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(matcher.group(1));
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private String summarizeProbe(ValidationResult probe) {
@@ -274,6 +655,28 @@ public class HBaseDocker extends Docker {
 
     private String safeLower(String text) {
         return text == null ? "" : text.toLowerCase();
+    }
+
+    private String safe(String text) {
+        return text == null ? "" : text;
+    }
+
+    private String compactText(String text) {
+        String compact = safe(text).replaceAll("\\s+", " ").trim();
+        if (compact.length() > 160) {
+            return compact.substring(0, 160) + "...";
+        }
+        return compact;
+    }
+
+    private static class ProbeCommandResult {
+        private final int exitCode;
+        private final String output;
+
+        private ProbeCommandResult(int exitCode, String output) {
+            this.exitCode = exitCode;
+            this.output = output;
+        }
     }
 
     @Override
@@ -367,12 +770,9 @@ public class HBaseDocker extends Docker {
             throws Exception {
         if (nodeType == NodeType.MASTER) {
             if (index == 0) {
-                String hbaseDaemonPath = "/" + system + "/" + version + "/"
-                        + "bin/hbase-daemon.sh";
                 // N0: hbase master, zookeeper
-                String[] stopHMaster = new String[] {
-                        hbaseDaemonPath, "--config", "/etc/" + version,
-                        "stop", "master" };
+                String[] stopHMaster = buildHbaseDaemonCommand(version, "stop",
+                        "master");
                 int ret = runProcessInContainer(stopHMaster, env);
                 logger.debug("shutdown " + "hmaster" + " ret = " + ret);
 
@@ -398,9 +798,8 @@ public class HBaseDocker extends Docker {
                         "prepare upgrade environment " + " to 2.2 for hmaster"
                                 + " ret = " + ret);
 
-                String[] startHMaster = new String[] { "/bin/bash", "-c",
-                        "\"" + hbaseDaemonPath, "--config", "/etc/" + version,
-                        "start", "master\"" };
+                String[] startHMaster = buildHbaseDaemonCommand(version, "start",
+                        "master");
 
                 Process upgradeTo2_2_start = runInContainer(startHMaster);
                 ret = upgradeTo2_2_start.waitFor();
@@ -415,13 +814,10 @@ public class HBaseDocker extends Docker {
         String curVersion = type.equals("upgraded") ? upgradedVersion
                 : originalVersion;
         logger.info("[HBaseDocker] Current version: " + curVersion);
-        String hbaseDaemonPath = "/" + system + "/" + curVersion + "/"
-                + "bin/hbase-daemon.sh";
         if (nodeType == NodeType.REGIONSERVER) {
             if (index == 1 || index == 2) {
-                String[] stopNode = new String[] {
-                        hbaseDaemonPath, "--config", "/etc/" + curVersion,
-                        "stop", "regionserver" };
+                String[] stopNode = buildHbaseDaemonCommand(curVersion, "stop",
+                        "regionserver");
                 int ret = runProcessInContainer(stopNode, env);
                 logger.debug(String.format(
                         "shutdown regionserver (index = %d) ret = %d", index,
@@ -430,16 +826,14 @@ public class HBaseDocker extends Docker {
         } else if (nodeType == NodeType.MASTER) {
             if (index == 0) {
                 // N0: hbase master, zookeeper
-                String[] stopHMaster = new String[] {
-                        hbaseDaemonPath, "--config", "/etc/" + curVersion,
-                        "stop", "master" };
+                String[] stopHMaster = buildHbaseDaemonCommand(curVersion, "stop",
+                        "master");
                 int ret = runProcessInContainer(stopHMaster, env);
                 logger.debug("shutdown " + "hmaster" + " ret = " + ret);
             }
         } else if (nodeType == NodeType.ZOOKEEPER) {
-            String[] stopZK = new String[] {
-                    hbaseDaemonPath, "--config", "/etc/" + curVersion,
-                    "stop", "zookeeper" };
+            String[] stopZK = buildHbaseDaemonCommand(curVersion, "stop",
+                    "zookeeper");
             int ret = runProcessInContainer(stopZK, env);
             logger.debug("shutdown " + "zookeeper" + index + " ret = " + ret);
         } else {
@@ -453,30 +847,40 @@ public class HBaseDocker extends Docker {
         // foreground_start regionserver
         String curVersion = type.equals("upgraded") ? upgradedVersion
                 : originalVersion;
-        String hbaseDaemonPath = "/" + system + "/" + curVersion + "/"
-                + "bin/hbase-daemon.sh";
 
         if (index == 0) {
             // N0: hbase master, zookeeper
-            String[] stopHMaster = new String[] {
-                    hbaseDaemonPath, "--config", "/etc/" + curVersion,
-                    "stop", "master" };
+            String[] stopHMaster = buildHbaseDaemonCommand(curVersion, "stop",
+                    "master");
             int ret = runProcessInContainer(stopHMaster, env);
             logger.debug("shutdown " + "hmaster" + " ret = " + ret);
         } else {
             // N1, N2: regionserver
-            String[] stopNode = new String[] {
-                    hbaseDaemonPath, "--config", "/etc/" + curVersion,
-                    "stop", "regionserver" };
+            String[] stopNode = buildHbaseDaemonCommand(curVersion, "stop",
+                    "regionserver");
             int ret = runProcessInContainer(stopNode, env);
             logger.debug(String.format(
                     "shutdown regionserver (index = %d) ret = %d", index, ret));
         }
-        String[] stopZK = new String[] {
-                hbaseDaemonPath, "--config", "/etc/" + curVersion,
-                "stop", "zookeeper" };
+        String[] stopZK = buildHbaseDaemonCommand(curVersion, "stop",
+                "zookeeper");
         int ret = runProcessInContainer(stopZK, env);
         logger.debug("shutdown " + "zookeeper" + index + " ret = " + ret);
+    }
+
+    private String[] buildHbaseDaemonCommand(String version, String action,
+            String component) {
+        String daemonSh = "/" + system + "/" + version + "/bin/hbase-daemon.sh";
+        String daemonPy = "/" + system + "/" + version + "/bin/hbase-daemon.py";
+        String hbaseConf = "/etc/" + version;
+        String command = "if [ -x '" + daemonSh + "' ]; then "
+                + "'" + daemonSh + "' --config '" + hbaseConf + "' " + action
+                + " " + component + "; "
+                + "elif [ -f '" + daemonPy + "' ]; then "
+                + "python3 '" + daemonPy + "' --config '" + hbaseConf + "' "
+                + action + " " + component + "; "
+                + "else exit 127; fi";
+        return new String[] { "/bin/bash", "-lc", command };
     }
 
     @Override
