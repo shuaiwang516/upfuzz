@@ -1,0 +1,71 @@
+    70	                    break
+    71	                
+    72	                print(self.data)
+    73	                # output_file.write(self.data + "\n")
+    74	                cmd = self.data.decode("ascii")+'\n'
+    75	                output_file.write(cmd)
+    76	                output_file.flush()
+    77	                start_time = time.time()
+    78	
+    79	                ret_out = ""
+    80	                ret_err = ""
+    81	                # exit_code=-1
+    82	                print('here1')
+    83	
+    84	                try:
+    85	                    global process
+    86	                    global command_count
+    87	
+    88	                    print('here2')
+    89	                    process.stdin.write(self.data+b'\n')
+    90	                    process.stdin.flush()
+    91	                    print('here3')
+    92	                    next_shell_out = 'hbase:' + \
+    93	                        '{:0>3d}'.format(command_count) + ':0> '
+    94	                    print('next_out:', next_shell_out)
+    95	                    output_file.write('next_out: ' + next_shell_out + '\n')
+    96	                    output_file.flush()
+    97	                    command_count += 1
+    98	
+    99	                    while True:
+   100	                        newline = process.stdout.read()
+   101	                        if newline is None or len(newline) == 0:
+   102	                            err_out = process.stderr.read()
+   103	                            if err_out is not None and len(err_out) != 0:
+   104	                                ret_err += err_out.decode("utf-8")
+   105	                                output_file.write('stderr: ' + ret_err)
+   106	                            continue
+   107	                        newline = newline.decode("utf-8")
+   108	                        ret_out += newline
+   109	                        # print(newline, end='')
+   110	                        output_file.write('stdout: ' + newline)
+   111	                        output_file.flush()
+   112	                        err_out = process.stderr.read()
+   113	                        if err_out is not None and len(err_out) != 0:
+   114	                            ret_err += err_out.decode("utf-8")
+   115	                            output_file.write('stderr: ' + ret_err)
+   116	                        if ret_out.endswith(next_shell_out) or ret_out.endswith(next_shell_out+'\n'):
+   117	                            break
+   118	                    print("stdout of process: " + ret_out)
+   119	                    ret_out = '\n'.join(ret_out.split('\n')[1:-1])
+   120	                    # ret_out = process.stdout.read()
+   121	                    # ret_out, ret_err = process.communicate(input=cmd.encode(), timeout=5)
+   122	                    # exit_code = process.returncode
+   123	                    # print("exit code = " + str(exit_code))
+   124	                except Exception as e:
+   125	                    print("exception pipe: " + e)
+   126	
+   127	                # message_out = ""
+   128	                # message_err = ""
+   129	
+   130	                # if ret_out != "":
+   131	                    # message_out = ret_out.decode('utf-8');
+   132	
+   133	                # if ret_err != "":
+   134	                    # message_err = ret_err.decode('utf-8');
+   135	
+   136	                exit_code = 0 if len(ret_err) == 0 else -1
+   137	                print(exit_code)
+   138	
+   139	                end_time = time.time()
+   140	                resp = {

@@ -68,7 +68,7 @@ Observed stack traces (container `system.log`) included:
 - `apache-cassandra-5.0.6` (JDK17, `ant ... jar`)
 
 2. Rebuilt rolling image:
-- `scripts/docker/build_rolling_image_pair.sh cassandra apache-cassandra-4.1.10 apache-cassandra-5.0.6`
+- `scripts/docker/build_rolling_image_pair.sh cassandra apache-cassandra-4.1.10 apache-cassandra-5.0.6` (wrapper script that now dispatches to `build_cassandra_docker.sh`)
 - New local image:
   - `upfuzz_cassandra:apache-cassandra-4.1.10_apache-cassandra-5.0.6`
   - image id: `88555193d10e`

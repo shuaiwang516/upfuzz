@@ -1,0 +1,456 @@
+Took 1.0481 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:12:36,382 [pool-3-thread-3] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {alter 'uuidc3e9daa490974fec875d0ba4c9f39f07', {NAME => 'uuidcb021ebf822f4ec1ab7dbe3b7c94dd75', BLOOMFILTER => 'NONE'}}
+
+2026-03-02 21:12:36,541 [pool-3-thread-3] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {alter 'uuidc3e9daa490974fec875d0ba4c9f39f07', {NAME => 'uuidcb021ebf822f4ec1ab7dbe3b7c94dd75', BLOOMFILTER => 'NONE'}}, result = {
+ERROR: Failed contacting masters after 1 attempts.
+Exceptions:
+java.net.ConnectException: Call to address=hregion1:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hregion1/192.168.70.3:16000
+
+For usage try 'help "alter"'
+
+Took 0.0218 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:12:36,542 [pool-3-thread-3] INFO  Executor.java:execute:255: 
+handle [Command][Node[0]] Execute {deleteall }
+
+2026-03-02 21:12:36,609 [pool-3-thread-3] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {deleteall }, result = {
+ERROR: wrong number of arguments (given 0, expected 2..5)
+
+For usage try 'help "deleteall"'
+
+Took 0.0023 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:12:36,610 [pool-3-thread-3] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {alter 'uuid0383c3f4e56146978695b18b8fd9803f', {NAME => 'UBzKHDlzvN', VERSIONS => 1, BLOOMFILTER => 'ROW'}}
+
+2026-03-02 21:12:36,727 [pool-3-thread-3] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {alter 'uuid0383c3f4e56146978695b18b8fd9803f', {NAME => 'UBzKHDlzvN', VERSIONS => 1, BLOOMFILTER => 'ROW'}}, result = {
+ERROR: Failed contacting masters after 1 attempts.
+Exceptions:
+java.net.ConnectException: Call to address=hregion1:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hregion1/192.168.70.3:16000
+
+For usage try 'help "alter"'
+
+Took 0.0152 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:12:36,728 [pool-3-thread-3] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {truncate_preserve 'uuid0383c3f4e56146978695b18b8fd9803f'}
+
+2026-03-02 21:12:36,954 [pool-3-thread-3] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {truncate_preserve 'uuid0383c3f4e56146978695b18b8fd9803f'}, result = {
+ERROR: Failed contacting masters after 1 attempts.
+Exceptions:
+java.net.ConnectException: Call to address=hregion1:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hregion1/192.168.70.3:16000
+
+For usage try 'help "truncate_preserve"'
+
+Took 0.0203 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:12:36,954 [pool-3-thread-3] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {truncate 'uuidb023ba35195f4509bfce284db4005fa5'}
+
+2026-03-02 21:12:37,159 [pool-3-thread-3] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {truncate 'uuidb023ba35195f4509bfce284db4005fa5'}, result = {
+ERROR: Failed contacting masters after 1 attempts.
+Exceptions:
+java.net.ConnectException: Call to address=hregion1:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hregion1/192.168.70.3:16000
+
+For usage try 'help "truncate"'
+
+Took 0.0260 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:12:37,160 [pool-3-thread-3] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {restore_snapshot }
+
+2026-03-02 21:12:37,311 [pool-3-thread-3] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {restore_snapshot }, result = {
+ERROR: wrong number of arguments (given 0, expected 1..2)
+
+For usage try 'help "restore_snapshot"'
+
+Took 0.0057 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:12:37,312 [pool-3-thread-3] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {create 'uuid5b0d2dc1a8384316a687a9e9f1a037d4', {NAME => 'uuid1c0f395a3f17432e9ce0b11a5b802a7c', VERSIONS => 2, BLOOMFILTER => 'ROWCOL', IN_MEMORY => 'true', MOB_THRESHOLD => 1715981, MOB_COMPACT_PARTITION_POLICY => 'monthly', CONFIGURATION => { 'CACHE_DATA_IN_L1' => 'false', 'hbase.regionserver.region.split_restriction.type' => 'KeyPrefix', 'hbase.regionserver.region.split_restriction.prefix_length' => '3' }}, {NAME => 'uuid3f3d56924f904085b3308b93954dcb52', VERSIONS => 2, COMPRESSION => 'GZ', IN_MEMORY => 'true', TTL => 559504, IS_MOB => true, MOB_THRESHOLD => 1038683, MOB_COMPACT_PARTITION_POLICY => 'monthly'}, REGION_REPLICATION => 2, NORMALIZER_TARGET_REGION_COUNT => 61, MAX_FILESIZE => 757692676, NORMALIZATION_ENABLED => 'false', MAX_FILESIZE => 757692676}
+
+2026-03-02 21:12:37,482 [pool-3-thread-1] DEBUG HBaseShellDaemon.java:<init>:31: [HKLOG] executor ID = byt0o7zy  Connect to hbase shell:192.168.154.3...15
+2026-03-02 21:12:37,618 [pool-3-thread-3] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {create 'uuid5b0d2dc1a8384316a687a9e9f1a037d4', {NAME => 'uuid1c0f395a3f17432e9ce0b11a5b802a7c', VERSIONS => 2, BLOOMFILTER => 'ROWCOL', IN_MEMORY => 'true', MOB_THRESHOLD => 1715981, MOB_COMPACT_PARTITION_POLICY => 'monthly', CONFIGURATION => { 'CACHE_DATA_IN_L1' => 'false', 'hbase.regionserver.region.split_restriction.type' => 'KeyPrefix', 'hbase.regionserver.region.split_restriction.prefix_length' => '3' }}, {NAME => 'uuid3f3d56924f904085b3308b93954dcb52', VERSIONS => 2, COMPRESSION => 'GZ', IN_MEMORY => 'true', TTL => 559504, IS_MOB => true, MOB_THRESHOLD => 1038683, MOB_COMPACT_PARTITION_POLICY => 'monthly'}, REGION_REPLICATION => 2, NORMALIZER_TARGET_REGION_COUNT => 61, MAX_FILESIZE => 757692676, NORMALIZATION_ENABLED => 'false', MAX_FILESIZE => 757692676}, result = {
+ERROR: Failed contacting masters after 1 attempts.
+Exceptions:
+java.net.ConnectException: Call to address=hregion1:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hregion1/192.168.70.3:16000
+
+For usage try 'help "create"'
+
+Took 0.0194 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:12:37,618 [pool-3-thread-3] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {major_compact 'uuid5b0d2dc1a8384316a687a9e9f1a037d4', 'uuid1c0f395a3f17432e9ce0b11a5b802a7c'}
+
+2026-03-02 21:12:37,702 [pool-3-thread-3] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {major_compact 'uuid5b0d2dc1a8384316a687a9e9f1a037d4', 'uuid1c0f395a3f17432e9ce0b11a5b802a7c'}, result = {
+ERROR: Failed contacting masters after 1 attempts.
+Exceptions:
+java.net.ConnectException: Call to address=hregion1:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hregion1/192.168.70.3:16000
+
+For usage try 'help "major_compact"'
+
+Took 0.0212 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:12:37,702 [pool-3-thread-3] INFO  Executor.java:execute:255: 
+handle [Command][Node[0]] Execute {truncate_preserve 'uuid5b0d2dc1a8384316a687a9e9f1a037d4'}
+
+2026-03-02 21:12:37,883 [pool-3-thread-3] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {truncate_preserve 'uuid5b0d2dc1a8384316a687a9e9f1a037d4'}, result = {Truncating 'uuid5b0d2dc1a8384316a687a9e9f1a037d4' table (it may take a while):
+
+ERROR: Unknown table uuid5b0d2dc1a8384316a687a9e9f1a037d4!
+
+For usage try 'help "truncate_preserve"'
+
+Took 0.0357 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:12:37,884 [pool-3-thread-3] INFO  Executor.java:execute:255: 
+handle [FinalizeUpgrade] Finalize Upgrade Process
+
+2026-03-02 21:12:37,978 [pool-3-thread-3] DEBUG HBaseDockerCluster.java:finalizeUpgrade:344: HBase upgrade finalized
+2026-03-02 21:12:37,981 [pool-3-thread-3] INFO  DockerCluster.java:collectTrace:334: [HKLOG] collecting network traces for node 0
+2026-03-02 21:12:38,082 [pool-3-thread-3] DEBUG Docker.java:collectTrace:87: Received trace = org.zlab.net.tracker.Trace@591783d0
+2026-03-02 21:12:38,083 [pool-3-thread-3] INFO  DockerCluster.java:collectTrace:334: [HKLOG] collecting network traces for node 1
+2026-03-02 21:12:38,186 [pool-3-thread-3] DEBUG Docker.java:collectTrace:87: Received trace = org.zlab.net.tracker.Trace@471f3452
+2026-03-02 21:12:39,323 [pool-3-thread-3] INFO  RegularTestPlanThread.java:call:305: [HKLOG] validationReadResults size = 10
+2026-03-02 21:12:39,324 [pool-3-thread-3] DEBUG RegularTestPlanThread.java:call:329: validationReadResultsOracle is empty!
+2026-03-02 21:12:39,325 [pool-3-thread-3] DEBUG AgentServerHandler.java:collect:211: collect coverage for hbase-Pbc4SD7P_upgraded-1-org.apache.hadoop.hbase.regionserver.HRegionServer...
+2026-03-02 21:12:40,144 [pool-3-thread-3] DEBUG AgentServerHandler.java:collect:211: collect coverage for hbase-Pbc4SD7P_upgraded-0-org.apache.hadoop.hbase.master.HMaster...
+2026-03-02 21:12:41,116 [pool-3-thread-3] INFO  RegularTestPlanThread.java:call:369: [HKLOG] error log checking
+2026-03-02 21:12:41,723 [pool-3-thread-3] DEBUG HBaseDockerCluster.java:teardown:124: kill all containers
+2026-03-02 21:12:41,725 [pool-3-thread-3] DEBUG HBaseDockerCluster.java:teardown:126: killing container hbase-hbase-3.0.0-beta-1_hbase-2.6.4_Pbc4SD7P_N0
+2026-03-02 21:12:41,726 [pool-3-thread-3] DEBUG DockerCluster.java:forceKillContainer:626: workdir = fuzzing_storage/hbase/hbase-2.6.4/hbase-3.0.0-beta-1/2026-03-02-21-08-19-Pbc4SD7P
+2026-03-02 21:12:42,226 [pool-3-thread-3] DEBUG DockerCluster.java:forceKillContainer:636: Container Force Kill Output: hbase-hbase-3.0.0-beta-1_hbase-2.6.4_Pbc4SD7P_N0
+2026-03-02 21:12:42,231 [pool-3-thread-3] DEBUG HBaseDockerCluster.java:teardown:126: killing container hbase-hbase-3.0.0-beta-1_hbase-2.6.4_Pbc4SD7P_N1
+2026-03-02 21:12:42,231 [pool-3-thread-3] DEBUG DockerCluster.java:forceKillContainer:626: workdir = fuzzing_storage/hbase/hbase-2.6.4/hbase-3.0.0-beta-1/2026-03-02-21-08-19-Pbc4SD7P
+2026-03-02 21:12:42,741 [pool-3-thread-3] DEBUG DockerCluster.java:forceKillContainer:636: Container Force Kill Output: hbase-hbase-3.0.0-beta-1_hbase-2.6.4_Pbc4SD7P_N1
+2026-03-02 21:12:42,745 [pool-3-thread-3] DEBUG HBaseDockerCluster.java:teardown:130: killing container hdfs-hbase-2.6.4_hbase-3.0.0-beta-1_Pbc4SD7P_N100
+2026-03-02 21:12:42,746 [pool-3-thread-3] DEBUG DockerCluster.java:forceKillContainer:626: workdir = fuzzing_storage/hbase/hbase-2.6.4/hbase-3.0.0-beta-1/2026-03-02-21-08-19-Pbc4SD7P
+2026-03-02 21:12:43,275 [pool-3-thread-3] DEBUG DockerCluster.java:forceKillContainer:636: Container Force Kill Output: hdfs-hbase-2.6.4_hbase-3.0.0-beta-1_Pbc4SD7P_N100
+2026-03-02 21:12:43,281 [pool-3-thread-3] DEBUG HBaseDockerCluster.java:teardown:133: finished killing containers
+2026-03-02 21:12:43,953 [pool-3-thread-3] INFO  HBaseDockerCluster.java:teardown:141: teardown docker compose in fuzzing_storage/hbase/hbase-2.6.4/hbase-3.0.0-beta-1/2026-03-02-21-08-19-Pbc4SD7P
+2026-03-02 21:12:51,269 [pool-3-thread-2] DEBUG HBaseShellDaemon.java:<init>:31: [HKLOG] executor ID = aqGPEbLC  Connect to hbase shell:192.168.197.3...15
+2026-03-02 21:12:51,270 [pool-3-thread-2] INFO  HBaseShellDaemon.java:<init>:38: [HKLOG] executor ID = aqGPEbLC  hbase shell connected: 192.168.197.3
+2026-03-02 21:12:51,271 [pool-3-thread-2] INFO  HBaseDocker.java:rollingUpgrade:197: Node[1] skip strict control-plane readiness probe (master-only check)
+2026-03-02 21:12:51,272 [pool-3-thread-2] INFO  HBaseDockerCluster.java:upgrade:258: Node[1] is upgraded
+2026-03-02 21:12:51,273 [pool-3-thread-2] INFO  Executor.java:execute:255: 
+handle [Command][Node[0]] Execute {disable 'uuidc3e9daa490974fec875d0ba4c9f39f07'}
+
+2026-03-02 21:12:52,486 [pool-3-thread-1] INFO  HBaseShellDaemon.java:<init>:38: [HKLOG] executor ID = byt0o7zy  hbase shell connected: 192.168.154.3
+2026-03-02 21:12:52,486 [pool-3-thread-1] INFO  Docker.java:restart:30: Node1 restart successfully!
+2026-03-02 21:12:52,487 [pool-3-thread-1] INFO  Executor.java:execute:255: 
+handle [Command][Node[0]] Execute {disable 'uuidc3e9daa490974fec875d0ba4c9f39f07'}
+
+2026-03-02 21:12:54,331 [pool-3-thread-1] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {disable 'uuidc3e9daa490974fec875d0ba4c9f39f07'}, result = {Took 1.6495 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:12:54,332 [pool-3-thread-1] INFO  Executor.java:execute:255: 
+handle [Command][Node[0]] Execute {incr }
+
+2026-03-02 21:12:54,495 [pool-3-thread-1] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {incr }, result = {
+ERROR: wrong number of arguments (given 0, expected 3..5)
+
+For usage try 'help "incr"'
+
+Took 0.0322 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:12:54,496 [pool-3-thread-1] INFO  Executor.java:execute:255: 
+handle [Command][Node[0]] Execute {alter 'uuidb023ba35195f4509bfce284db4005fa5', {NAME => 'wMxLxUeM'}}
+
+2026-03-02 21:12:58,451 [pool-3-thread-1] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {alter 'uuidb023ba35195f4509bfce284db4005fa5', {NAME => 'wMxLxUeM'}}, result = {Updating all regions with the new schema...
+11/11 regions updated.
+Done.
+Took 3.7688 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:12:58,452 [pool-3-thread-1] INFO  Executor.java:execute:255: 
+handle [Command][Node[0]] Execute {incr }
+
+2026-03-02 21:12:58,585 [pool-3-thread-1] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {incr }, result = {
+ERROR: wrong number of arguments (given 0, expected 3..5)
+
+For usage try 'help "incr"'
+
+Took 0.0055 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:12:58,585 [pool-3-thread-1] INFO  Executor.java:execute:255: 
+handle [Command][Node[0]] Execute {catalogjanitor_switch false}
+
+2026-03-02 21:12:58,907 [pool-3-thread-1] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {catalogjanitor_switch false}, result = {true
+Took 0.0813 seconds
+=> true}, error = {}, exitValue = {0}
+2026-03-02 21:12:58,907 [pool-3-thread-1] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {clone_table_schema 'uuidc3e9daa490974fec875d0ba4c9f39f07', 'uuid0383c3f4e56146978695b18b8fd9803f'}
+
+2026-03-02 21:12:59,753 [pool-3-thread-2] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {disable 'uuidc3e9daa490974fec875d0ba4c9f39f07'}, result = {
+ERROR: Failed contacting masters after 1 attempts.
+Exceptions:
+java.net.ConnectException: Call to address=hmaster:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hmaster/192.168.197.2:16000
+
+For usage try 'help "disable"'
+
+Took 8.2948 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:12:59,754 [pool-3-thread-2] INFO  Executor.java:execute:255: 
+handle [Command][Node[0]] Execute {incr }
+
+2026-03-02 21:12:59,889 [pool-3-thread-2] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {incr }, result = {
+ERROR: wrong number of arguments (given 0, expected 3..5)
+
+For usage try 'help "incr"'
+
+Took 0.0052 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:12:59,889 [pool-3-thread-2] INFO  Executor.java:execute:255: 
+handle [Command][Node[0]] Execute {alter 'uuidb023ba35195f4509bfce284db4005fa5', {NAME => 'wMxLxUeM'}}
+
+2026-03-02 21:13:08,323 [pool-3-thread-2] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {alter 'uuidb023ba35195f4509bfce284db4005fa5', {NAME => 'wMxLxUeM'}}, result = {
+ERROR: Failed contacting masters after 1 attempts.
+Exceptions:
+java.net.ConnectException: Call to address=hmaster:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hmaster/192.168.197.2:16000
+
+For usage try 'help "alter"'
+
+Took 8.2262 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:13:08,323 [pool-3-thread-2] INFO  Executor.java:execute:255: 
+handle [Command][Node[0]] Execute {incr }
+
+2026-03-02 21:13:08,444 [pool-3-thread-2] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {incr }, result = {
+ERROR: wrong number of arguments (given 0, expected 3..5)
+
+For usage try 'help "incr"'
+
+Took 0.0019 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:13:08,445 [pool-3-thread-2] INFO  Executor.java:execute:255: 
+handle [Command][Node[0]] Execute {catalogjanitor_switch false}
+
+2026-03-02 21:13:09,250 [pool-3-thread-1] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {clone_table_schema 'uuidc3e9daa490974fec875d0ba4c9f39f07', 'uuid0383c3f4e56146978695b18b8fd9803f'}, result = {
+ERROR: Zookeeper GET could not be completed in 10000 ms
+
+For usage try 'help "clone_table_schema"'
+
+Took 10.1558 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:13:09,250 [pool-3-thread-1] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {alter 'uuidc3e9daa490974fec875d0ba4c9f39f07', {NAME => 'uuidcb021ebf822f4ec1ab7dbe3b7c94dd75', BLOOMFILTER => 'NONE'}}
+
+2026-03-02 21:13:12,897 [pool-3-thread-2] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {catalogjanitor_switch false}, result = {
+ERROR: Failed contacting masters after 1 attempts.
+Exceptions:
+java.net.ConnectException: Call to address=hmaster:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hmaster/192.168.197.2:16000
+
+For usage try 'help "catalogjanitor_switch"'
+
+Took 4.2181 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:13:12,898 [pool-3-thread-2] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {clone_table_schema 'uuidc3e9daa490974fec875d0ba4c9f39f07', 'uuid0383c3f4e56146978695b18b8fd9803f'}
+
+2026-03-02 21:13:14,067 [pool-3-thread-2] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {clone_table_schema 'uuidc3e9daa490974fec875d0ba4c9f39f07', 'uuid0383c3f4e56146978695b18b8fd9803f'}, result = {
+ERROR: Failed contacting masters after 1 attempts.
+Exceptions:
+java.net.ConnectException: Call to address=hregion1:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hregion1/192.168.197.3:16000
+
+For usage try 'help "clone_table_schema"'
+
+Took 0.9861 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:13:14,067 [pool-3-thread-2] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {alter 'uuidc3e9daa490974fec875d0ba4c9f39f07', {NAME => 'uuidcb021ebf822f4ec1ab7dbe3b7c94dd75', BLOOMFILTER => 'NONE'}}
+
+2026-03-02 21:13:14,223 [pool-3-thread-2] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {alter 'uuidc3e9daa490974fec875d0ba4c9f39f07', {NAME => 'uuidcb021ebf822f4ec1ab7dbe3b7c94dd75', BLOOMFILTER => 'NONE'}}, result = {
+ERROR: Failed contacting masters after 1 attempts.
+Exceptions:
+java.net.ConnectException: Call to address=hregion1:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hregion1/192.168.197.3:16000
+
+For usage try 'help "alter"'
+
+Took 0.0221 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:13:14,224 [pool-3-thread-2] INFO  Executor.java:execute:255: 
+handle [Command][Node[0]] Execute {deleteall }
+
+2026-03-02 21:13:14,298 [pool-3-thread-2] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {deleteall }, result = {
+ERROR: wrong number of arguments (given 0, expected 2..5)
+
+For usage try 'help "deleteall"'
+
+Took 0.0042 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:13:14,299 [pool-3-thread-2] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {alter 'uuid0383c3f4e56146978695b18b8fd9803f', {NAME => 'UBzKHDlzvN', VERSIONS => 1, BLOOMFILTER => 'ROW'}}
+
+2026-03-02 21:13:14,406 [pool-3-thread-2] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {alter 'uuid0383c3f4e56146978695b18b8fd9803f', {NAME => 'UBzKHDlzvN', VERSIONS => 1, BLOOMFILTER => 'ROW'}}, result = {
+ERROR: Failed contacting masters after 1 attempts.
+Exceptions:
+java.net.ConnectException: Call to address=hregion1:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hregion1/192.168.197.3:16000
+
+For usage try 'help "alter"'
+
+Took 0.0195 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:13:14,407 [pool-3-thread-2] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {truncate_preserve 'uuid0383c3f4e56146978695b18b8fd9803f'}
+
+2026-03-02 21:13:14,687 [pool-3-thread-2] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {truncate_preserve 'uuid0383c3f4e56146978695b18b8fd9803f'}, result = {
+ERROR: Failed contacting masters after 1 attempts.
+Exceptions:
+java.net.ConnectException: Call to address=hregion1:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hregion1/192.168.197.3:16000
+
+For usage try 'help "truncate_preserve"'
+
+Took 0.0226 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:13:14,688 [pool-3-thread-2] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {truncate 'uuidb023ba35195f4509bfce284db4005fa5'}
+
+2026-03-02 21:13:14,855 [pool-3-thread-2] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {truncate 'uuidb023ba35195f4509bfce284db4005fa5'}, result = {
+ERROR: Failed contacting masters after 1 attempts.
+Exceptions:
+java.net.ConnectException: Call to address=hregion1:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hregion1/192.168.197.3:16000
+
+For usage try 'help "truncate"'
+
+Took 0.0313 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:13:14,855 [pool-3-thread-2] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {restore_snapshot }
+
+2026-03-02 21:13:14,961 [pool-3-thread-2] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {restore_snapshot }, result = {
+ERROR: wrong number of arguments (given 0, expected 1..2)
+
+For usage try 'help "restore_snapshot"'
+
+Took 0.0052 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:13:14,962 [pool-3-thread-2] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {create 'uuid5b0d2dc1a8384316a687a9e9f1a037d4', {NAME => 'uuid1c0f395a3f17432e9ce0b11a5b802a7c', VERSIONS => 2, BLOOMFILTER => 'ROWCOL', IN_MEMORY => 'true', MOB_THRESHOLD => 1715981, MOB_COMPACT_PARTITION_POLICY => 'monthly', CONFIGURATION => { 'CACHE_DATA_IN_L1' => 'false', 'hbase.regionserver.region.split_restriction.type' => 'KeyPrefix', 'hbase.regionserver.region.split_restriction.prefix_length' => '3' }}, {NAME => 'uuid3f3d56924f904085b3308b93954dcb52', VERSIONS => 2, COMPRESSION => 'GZ', IN_MEMORY => 'true', TTL => 559504, IS_MOB => true, MOB_THRESHOLD => 1038683, MOB_COMPACT_PARTITION_POLICY => 'monthly'}, REGION_REPLICATION => 2, NORMALIZER_TARGET_REGION_COUNT => 61, MAX_FILESIZE => 757692676, NORMALIZATION_ENABLED => 'false', MAX_FILESIZE => 757692676}
+
+2026-03-02 21:13:15,289 [pool-3-thread-2] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {create 'uuid5b0d2dc1a8384316a687a9e9f1a037d4', {NAME => 'uuid1c0f395a3f17432e9ce0b11a5b802a7c', VERSIONS => 2, BLOOMFILTER => 'ROWCOL', IN_MEMORY => 'true', MOB_THRESHOLD => 1715981, MOB_COMPACT_PARTITION_POLICY => 'monthly', CONFIGURATION => { 'CACHE_DATA_IN_L1' => 'false', 'hbase.regionserver.region.split_restriction.type' => 'KeyPrefix', 'hbase.regionserver.region.split_restriction.prefix_length' => '3' }}, {NAME => 'uuid3f3d56924f904085b3308b93954dcb52', VERSIONS => 2, COMPRESSION => 'GZ', IN_MEMORY => 'true', TTL => 559504, IS_MOB => true, MOB_THRESHOLD => 1038683, MOB_COMPACT_PARTITION_POLICY => 'monthly'}, REGION_REPLICATION => 2, NORMALIZER_TARGET_REGION_COUNT => 61, MAX_FILESIZE => 757692676, NORMALIZATION_ENABLED => 'false', MAX_FILESIZE => 757692676}, result = {
+ERROR: Failed contacting masters after 1 attempts.
+Exceptions:
+java.net.ConnectException: Call to address=hregion1:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hregion1/192.168.197.3:16000
+
+For usage try 'help "create"'
+
+Took 0.0199 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:13:15,290 [pool-3-thread-2] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {major_compact 'uuid5b0d2dc1a8384316a687a9e9f1a037d4', 'uuid1c0f395a3f17432e9ce0b11a5b802a7c'}
+
+2026-03-02 21:13:15,382 [pool-3-thread-2] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {major_compact 'uuid5b0d2dc1a8384316a687a9e9f1a037d4', 'uuid1c0f395a3f17432e9ce0b11a5b802a7c'}, result = {
+ERROR: Failed contacting masters after 1 attempts.
+Exceptions:
+java.net.ConnectException: Call to address=hregion1:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hregion1/192.168.197.3:16000
+
+For usage try 'help "major_compact"'
+
+Took 0.0284 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:13:15,382 [pool-3-thread-2] INFO  Executor.java:execute:255: 
+handle [Command][Node[0]] Execute {truncate_preserve 'uuid5b0d2dc1a8384316a687a9e9f1a037d4'}
+
+2026-03-02 21:13:19,405 [pool-3-thread-1] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {alter 'uuidc3e9daa490974fec875d0ba4c9f39f07', {NAME => 'uuidcb021ebf822f4ec1ab7dbe3b7c94dd75', BLOOMFILTER => 'NONE'}}, result = {
+ERROR: Zookeeper GET could not be completed in 10000 ms
+
+For usage try 'help "alter"'
+
+Took 10.0104 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:13:19,405 [pool-3-thread-1] INFO  Executor.java:execute:255: 
+handle [Command][Node[0]] Execute {deleteall }
+
+2026-03-02 21:13:19,485 [pool-3-thread-1] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {deleteall }, result = {
+ERROR: wrong number of arguments (given 0, expected 2..5)
+
+For usage try 'help "deleteall"'
+
+Took 0.0052 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:13:19,486 [pool-3-thread-1] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {alter 'uuid0383c3f4e56146978695b18b8fd9803f', {NAME => 'UBzKHDlzvN', VERSIONS => 1, BLOOMFILTER => 'ROW'}}
+
+2026-03-02 21:13:29,616 [pool-3-thread-1] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {alter 'uuid0383c3f4e56146978695b18b8fd9803f', {NAME => 'UBzKHDlzvN', VERSIONS => 1, BLOOMFILTER => 'ROW'}}, result = {
+ERROR: Zookeeper GET could not be completed in 10000 ms
+
+For usage try 'help "alter"'
+
+Took 10.0108 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:13:29,616 [pool-3-thread-1] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {truncate_preserve 'uuid0383c3f4e56146978695b18b8fd9803f'}
+
+2026-03-02 21:13:39,842 [pool-3-thread-1] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {truncate_preserve 'uuid0383c3f4e56146978695b18b8fd9803f'}, result = {
+ERROR: Zookeeper GET could not be completed in 10000 ms
+
+For usage try 'help "truncate_preserve"'
+
+Took 10.0075 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:13:39,843 [pool-3-thread-1] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {truncate 'uuidb023ba35195f4509bfce284db4005fa5'}
+
+2026-03-02 21:13:50,000 [pool-3-thread-1] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {truncate 'uuidb023ba35195f4509bfce284db4005fa5'}, result = {
+ERROR: Zookeeper GET could not be completed in 10000 ms
+
+For usage try 'help "truncate"'
+
+Took 10.0073 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:13:50,001 [pool-3-thread-1] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {restore_snapshot }
+
+2026-03-02 21:13:50,110 [pool-3-thread-1] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {restore_snapshot }, result = {
+ERROR: wrong number of arguments (given 0, expected 1..2)
+
+For usage try 'help "restore_snapshot"'
+
+Took 0.0073 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:13:50,111 [pool-3-thread-1] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {create 'uuid5b0d2dc1a8384316a687a9e9f1a037d4', {NAME => 'uuid1c0f395a3f17432e9ce0b11a5b802a7c', VERSIONS => 2, BLOOMFILTER => 'ROWCOL', IN_MEMORY => 'true', MOB_THRESHOLD => 1715981, MOB_COMPACT_PARTITION_POLICY => 'monthly', CONFIGURATION => { 'CACHE_DATA_IN_L1' => 'false', 'hbase.regionserver.region.split_restriction.type' => 'KeyPrefix', 'hbase.regionserver.region.split_restriction.prefix_length' => '3' }}, {NAME => 'uuid3f3d56924f904085b3308b93954dcb52', VERSIONS => 2, COMPRESSION => 'GZ', IN_MEMORY => 'true', TTL => 559504, IS_MOB => true, MOB_THRESHOLD => 1038683, MOB_COMPACT_PARTITION_POLICY => 'monthly'}, REGION_REPLICATION => 2, NORMALIZER_TARGET_REGION_COUNT => 61, MAX_FILESIZE => 757692676, NORMALIZATION_ENABLED => 'false', MAX_FILESIZE => 757692676}
+
+2026-03-02 21:14:00,435 [pool-3-thread-1] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {create 'uuid5b0d2dc1a8384316a687a9e9f1a037d4', {NAME => 'uuid1c0f395a3f17432e9ce0b11a5b802a7c', VERSIONS => 2, BLOOMFILTER => 'ROWCOL', IN_MEMORY => 'true', MOB_THRESHOLD => 1715981, MOB_COMPACT_PARTITION_POLICY => 'monthly', CONFIGURATION => { 'CACHE_DATA_IN_L1' => 'false', 'hbase.regionserver.region.split_restriction.type' => 'KeyPrefix', 'hbase.regionserver.region.split_restriction.prefix_length' => '3' }}, {NAME => 'uuid3f3d56924f904085b3308b93954dcb52', VERSIONS => 2, COMPRESSION => 'GZ', IN_MEMORY => 'true', TTL => 559504, IS_MOB => true, MOB_THRESHOLD => 1038683, MOB_COMPACT_PARTITION_POLICY => 'monthly'}, REGION_REPLICATION => 2, NORMALIZER_TARGET_REGION_COUNT => 61, MAX_FILESIZE => 757692676, NORMALIZATION_ENABLED => 'false', MAX_FILESIZE => 757692676}, result = {
+ERROR: Zookeeper GET could not be completed in 10000 ms
+
+For usage try 'help "create"'
+
+Took 10.0148 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:14:00,435 [pool-3-thread-1] INFO  Executor.java:execute:255: 
+handle [Command][Node[1]] Execute {major_compact 'uuid5b0d2dc1a8384316a687a9e9f1a037d4', 'uuid1c0f395a3f17432e9ce0b11a5b802a7c'}
+
+2026-03-02 21:14:10,522 [pool-3-thread-1] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {major_compact 'uuid5b0d2dc1a8384316a687a9e9f1a037d4', 'uuid1c0f395a3f17432e9ce0b11a5b802a7c'}, result = {
+ERROR: Zookeeper GET could not be completed in 10000 ms
+
+For usage try 'help "major_compact"'
+
+Took 10.0165 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:14:10,523 [pool-3-thread-1] INFO  Executor.java:execute:255: 
+handle [Command][Node[0]] Execute {truncate_preserve 'uuid5b0d2dc1a8384316a687a9e9f1a037d4'}
+
+2026-03-02 21:14:10,720 [pool-3-thread-1] DEBUG HBaseShellDaemon.java:executeCommand:99: command = {truncate_preserve 'uuid5b0d2dc1a8384316a687a9e9f1a037d4'}, result = {Truncating 'uuid5b0d2dc1a8384316a687a9e9f1a037d4' table (it may take a while):
+
+ERROR: Unknown table uuid5b0d2dc1a8384316a687a9e9f1a037d4!
+
+For usage try 'help "truncate_preserve"'
+
+Took 0.0456 seconds}, error = {}, exitValue = {0}
+2026-03-02 21:14:10,720 [pool-3-thread-1] INFO  Executor.java:execute:255: 
+handle [FinalizeUpgrade] Finalize Upgrade Process
+
+2026-03-02 21:14:10,815 [pool-3-thread-1] DEBUG HBaseDockerCluster.java:finalizeUpgrade:344: HBase upgrade finalized
+2026-03-02 21:14:10,815 [pool-3-thread-1] INFO  DockerCluster.java:collectTrace:334: [HKLOG] collecting network traces for node 0
+2026-03-02 21:14:10,918 [pool-3-thread-1] DEBUG Docker.java:collectTrace:87: Received trace = org.zlab.net.tracker.Trace@6c44adae
+2026-03-02 21:14:10,920 [pool-3-thread-1] INFO  DockerCluster.java:collectTrace:334: [HKLOG] collecting network traces for node 1
+2026-03-02 21:14:11,031 [pool-3-thread-1] DEBUG Docker.java:collectTrace:87: Received trace = org.zlab.net.tracker.Trace@320e3095
+2026-03-02 21:14:12,953 [pool-3-thread-1] INFO  RegularTestPlanThread.java:call:305: [HKLOG] validationReadResults size = 10
+2026-03-02 21:14:12,954 [pool-3-thread-1] DEBUG RegularTestPlanThread.java:call:329: validationReadResultsOracle is empty!
+2026-03-02 21:14:12,954 [pool-3-thread-1] ERROR Executor.java:collectCoverageSeparate:524: No agent connection with executor byt0o7zy
+2026-03-02 21:14:12,955 [pool-3-thread-1] INFO  RegularTestPlanThread.java:call:369: [HKLOG] error log checking
+2026-03-02 21:14:13,566 [pool-3-thread-1] DEBUG HBaseDockerCluster.java:teardown:124: kill all containers
+2026-03-02 21:14:13,566 [pool-3-thread-1] DEBUG HBaseDockerCluster.java:teardown:126: killing container hbase-hbase-2.6.4_hbase-3.0.0-beta-1_byt0o7zy_N0
+2026-03-02 21:14:13,567 [pool-3-thread-1] DEBUG DockerCluster.java:forceKillContainer:626: workdir = fuzzing_storage/hbase/hbase-2.6.4/hbase-3.0.0-beta-1/2026-03-02-21-08-19-byt0o7zy
+2026-03-02 21:14:14,141 [pool-3-thread-1] DEBUG DockerCluster.java:forceKillContainer:636: Container Force Kill Output: hbase-hbase-2.6.4_hbase-3.0.0-beta-1_byt0o7zy_N0
+2026-03-02 21:14:14,147 [pool-3-thread-1] DEBUG HBaseDockerCluster.java:teardown:126: killing container hbase-hbase-2.6.4_hbase-3.0.0-beta-1_byt0o7zy_N1
+2026-03-02 21:14:14,147 [pool-3-thread-1] DEBUG DockerCluster.java:forceKillContainer:626: workdir = fuzzing_storage/hbase/hbase-2.6.4/hbase-3.0.0-beta-1/2026-03-02-21-08-19-byt0o7zy
+2026-03-02 21:14:14,675 [pool-3-thread-1] DEBUG DockerCluster.java:forceKillContainer:636: Container Force Kill Output: hbase-hbase-2.6.4_hbase-3.0.0-beta-1_byt0o7zy_N1
+2026-03-02 21:14:14,677 [pool-3-thread-1] DEBUG HBaseDockerCluster.java:teardown:130: killing container hdfs-hbase-2.6.4_hbase-3.0.0-beta-1_byt0o7zy_N100
+2026-03-02 21:14:14,678 [pool-3-thread-1] DEBUG DockerCluster.java:forceKillContainer:626: workdir = fuzzing_storage/hbase/hbase-2.6.4/hbase-3.0.0-beta-1/2026-03-02-21-08-19-byt0o7zy
+2026-03-02 21:14:15,165 [pool-3-thread-1] DEBUG DockerCluster.java:forceKillContainer:636: Container Force Kill Output: hdfs-hbase-2.6.4_hbase-3.0.0-beta-1_byt0o7zy_N100
+2026-03-02 21:14:15,171 [pool-3-thread-1] DEBUG HBaseDockerCluster.java:teardown:133: finished killing containers
+2026-03-02 21:14:15,847 [pool-3-thread-1] INFO  HBaseDockerCluster.java:teardown:141: teardown docker compose in fuzzing_storage/hbase/hbase-2.6.4/hbase-3.0.0-beta-1/2026-03-02-21-08-19-byt0o7zy
+2026-03-02 21:17:15,577 [pool-3-thread-2] ERROR Executor.java:execShellCommand:430: org.zlab.upfuzz.fuzzingengine.ClusterStuckException: Command execution timed out.
+2026-03-02 21:17:15,577 [pool-3-thread-2] INFO  Executor.java:execute:255: 
+handle [FinalizeUpgrade] Finalize Upgrade Process
+
+2026-03-02 21:17:15,672 [pool-3-thread-2] DEBUG HBaseDockerCluster.java:finalizeUpgrade:344: HBase upgrade finalized
+2026-03-02 21:17:15,672 [pool-3-thread-2] INFO  DockerCluster.java:collectTrace:334: [HKLOG] collecting network traces for node 0
+2026-03-02 21:17:15,762 [pool-3-thread-2] DEBUG Docker.java:collectTrace:87: Received trace = org.zlab.net.tracker.Trace@7b278639
+2026-03-02 21:17:15,763 [pool-3-thread-2] INFO  DockerCluster.java:collectTrace:334: [HKLOG] collecting network traces for node 1
+2026-03-02 21:17:15,870 [pool-3-thread-2] DEBUG Docker.java:collectTrace:87: Received trace = org.zlab.net.tracker.Trace@4e51795c
+2026-03-02 21:21:15,954 [pool-3-thread-2] ERROR Executor.java:executeCommandsStructured:240: org.zlab.upfuzz.fuzzingengine.ClusterStuckException: Command execution timed out.
+2026-03-02 21:25:16,056 [pool-3-thread-2] ERROR Executor.java:executeCommandsStructured:240: org.zlab.upfuzz.fuzzingengine.ClusterStuckException: Command execution timed out.
+2026-03-02 21:28:19,937 [Thread-1] ERROR FuzzingClient.java:collectDifferentialFeedbackPackets:1462: [HKLOG] differential lane Rolling timed out while waiting for feedback
+2026-03-02 21:28:19,946 [Thread-1] DEBUG FuzzingClient.java:executeTestPlanPacketDifferential:1403: [HKLOG] trace diff: all three packets are collected
+2026-03-02 21:28:20,268 [Thread-1] DEBUG FuzzingClientSocket.java:run:125: [HKLOG] feedback packet sent to server
+2026-03-02 21:28:21,072 [Thread-1] DEBUG TestPlanPacket.java:read:117: packet length: 7039
+2026-03-02 21:28:21,081 [Thread-1] INFO  FuzzingClient.java:executeTestPlanPacketDifferential:1338: [Fuzzing Client] executeTestPlanPacketDifferential
+2026-03-02 21:28:21,082 [Thread-1] INFO  FuzzingClient.java:executeTestPlanPacketDifferential:1346: [HKLOG] configPath = configtests/hbase-2.6.4_hbase-3.0.0-beta-1/test149
+2026-03-02 21:28:21,103 [Thread-1] INFO  FuzzingClient.java:executeTestPlanPacketDifferential:1388: [HKLOG] differentialLaneTimeoutSec = 1200
+2026-03-02 21:28:21,104 [pool-4-thread-3] DEBUG AgentServerSocket.java:<init>:25: Executor: pOZIhJT2  Client socket Server start at: /0.0.0.0:42005
+2026-03-02 21:28:21,104 [pool-4-thread-1] DEBUG AgentServerSocket.java:<init>:25: Executor: VDUD6rAz  Client socket Server start at: /0.0.0.0:39047
+2026-03-02 21:28:21,104 [pool-4-thread-2] DEBUG AgentServerSocket.java:<init>:25: Executor: E6HxmlWf  Client socket Server start at: /0.0.0.0:40773
+2026-03-02 21:28:21,119 [pool-4-thread-1] INFO  HBaseExecutor.java:startup:102: [Old Version] HBase Start...
+2026-03-02 21:28:21,119 [pool-4-thread-3] INFO  HBaseExecutor.java:startup:102: [Old Version] HBase Start...
+2026-03-02 21:28:21,119 [pool-4-thread-2] INFO  HBaseExecutor.java:startup:102: [Old Version] HBase Start...
+2026-03-02 21:28:22,985 [pool-4-thread-2] INFO  HBaseShellDaemon.java:<init>:26: [HKLOG] executor ID = E6HxmlWf  Connect to hbase shell daemon:192.168.130.2...
+2026-03-02 21:28:22,988 [pool-4-thread-2] DEBUG HBaseShellDaemon.java:<init>:31: [HKLOG] executor ID = E6HxmlWf  Connect to hbase shell:192.168.130.2...0
+2026-03-02 21:28:23,186 [pool-4-thread-3] INFO  HBaseShellDaemon.java:<init>:26: [HKLOG] executor ID = pOZIhJT2  Connect to hbase shell daemon:192.168.139.2...
+2026-03-02 21:28:23,187 [pool-4-thread-3] DEBUG HBaseShellDaemon.java:<init>:31: [HKLOG] executor ID = pOZIhJT2  Connect to hbase shell:192.168.139.2...0
+2026-03-02 21:28:23,274 [pool-4-thread-1] INFO  HBaseShellDaemon.java:<init>:26: [HKLOG] executor ID = VDUD6rAz  Connect to hbase shell daemon:192.168.226.2...
+2026-03-02 21:28:23,275 [pool-4-thread-1] DEBUG HBaseShellDaemon.java:<init>:31: [HKLOG] executor ID = VDUD6rAz  Connect to hbase shell:192.168.226.2...0

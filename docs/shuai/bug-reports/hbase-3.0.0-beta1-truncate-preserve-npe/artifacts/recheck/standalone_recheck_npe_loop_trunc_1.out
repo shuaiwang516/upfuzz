@@ -1,0 +1,59 @@
+mesg: ttyname failed: Inappropriate ioctl for device
+mesg: ttyname failed: Inappropriate ioctl for device
+2026-03-03T01:39:27.535Z [main] WARN FilenoUtil : Native subprocess control requires open access to the JDK IO subsystem
+Pass '--add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/java.io=ALL-UNNAMED' to enable.
+hbase:001:0> truncate_preserve "uuidrepro11772501947"
+Took 0.8119 secondsUnhandled Java exception: org.apache.hadoop.hbase.client.RetriesExhaustedException: Failed contacting masters after 1 attempts.
+Exceptions:
+java.net.ConnectException: Call to address=hmaster:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hmaster/192.168.197.2:16000
+
+org.apache.hadoop.hbase.client.RetriesExhaustedException: Failed contacting masters after 1 attempts.
+Exceptions:
+java.net.ConnectException: Call to address=hmaster:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hmaster/192.168.197.2:16000
+
+            lambda$groupCall$1 at org/apache/hadoop/hbase/client/AbstractRpcBasedConnectionRegistry.java:197
+          lambda$addListener$0 at org/apache/hadoop/hbase/util/FutureUtils.java:71
+               uniWhenComplete at java/util/concurrent/CompletableFuture.java:863
+                       tryFire at java/util/concurrent/CompletableFuture.java:841
+                  postComplete at java/util/concurrent/CompletableFuture.java:510
+         completeExceptionally at java/util/concurrent/CompletableFuture.java:2162
+                 lambda$call$0 at org/apache/hadoop/hbase/client/AbstractRpcBasedConnectionRegistry.java:153
+                           run at org/apache/hbase/thirdparty/com/google/protobuf/RpcUtil.java:79
+                           run at org/apache/hbase/thirdparty/com/google/protobuf/RpcUtil.java:70
+                onCallFinished at org/apache/hadoop/hbase/ipc/AbstractRpcClient.java:396
+                    access$100 at org/apache/hadoop/hbase/ipc/AbstractRpcClient.java:93
+                           run at org/apache/hadoop/hbase/ipc/AbstractRpcClient.java:429
+                           run at org/apache/hadoop/hbase/ipc/AbstractRpcClient.java:424
+                  callComplete at org/apache/hadoop/hbase/ipc/Call.java:117
+                  setException at org/apache/hadoop/hbase/ipc/Call.java:132
+            userEventTriggered at org/apache/hadoop/hbase/ipc/BufferCallBeforeInitHandler.java:106
+      invokeUserEventTriggered at org/apache/hbase/thirdparty/io/netty/channel/AbstractChannelHandlerContext.java:398
+      invokeUserEventTriggered at org/apache/hbase/thirdparty/io/netty/channel/AbstractChannelHandlerContext.java:376
+        fireUserEventTriggered at org/apache/hbase/thirdparty/io/netty/channel/AbstractChannelHandlerContext.java:368
+            userEventTriggered at org/apache/hbase/thirdparty/io/netty/channel/DefaultChannelPipeline.java:1428
+      invokeUserEventTriggered at org/apache/hbase/thirdparty/io/netty/channel/AbstractChannelHandlerContext.java:396
+      invokeUserEventTriggered at org/apache/hbase/thirdparty/io/netty/channel/AbstractChannelHandlerContext.java:376
+        fireUserEventTriggered at org/apache/hbase/thirdparty/io/netty/channel/DefaultChannelPipeline.java:913
+                      failInit at org/apache/hadoop/hbase/ipc/NettyRpcConnection.java:202
+                    access$400 at org/apache/hadoop/hbase/ipc/NettyRpcConnection.java:82
+                          fail at org/apache/hadoop/hbase/ipc/NettyRpcConnection.java:320
+             operationComplete at org/apache/hadoop/hbase/ipc/NettyRpcConnection.java:328
+             operationComplete at org/apache/hadoop/hbase/ipc/NettyRpcConnection.java:303
+               notifyListener0 at org/apache/hbase/thirdparty/io/netty/util/concurrent/DefaultPromise.java:590
+              notifyListeners0 at org/apache/hbase/thirdparty/io/netty/util/concurrent/DefaultPromise.java:583
+            notifyListenersNow at org/apache/hbase/thirdparty/io/netty/util/concurrent/DefaultPromise.java:559
+               notifyListeners at org/apache/hbase/thirdparty/io/netty/util/concurrent/DefaultPromise.java:492
+                     setValue0 at org/apache/hbase/thirdparty/io/netty/util/concurrent/DefaultPromise.java:636
+                   setFailure0 at org/apache/hbase/thirdparty/io/netty/util/concurrent/DefaultPromise.java:629
+                    tryFailure at org/apache/hbase/thirdparty/io/netty/util/concurrent/DefaultPromise.java:118
+         fulfillConnectPromise at org/apache/hbase/thirdparty/io/netty/channel/nio/AbstractNioChannel.java:321
+                 finishConnect at org/apache/hbase/thirdparty/io/netty/channel/nio/AbstractNioChannel.java:337
+            processSelectedKey at org/apache/hbase/thirdparty/io/netty/channel/nio/NioEventLoop.java:776
+  processSelectedKeysOptimized at org/apache/hbase/thirdparty/io/netty/channel/nio/NioEventLoop.java:724
+           processSelectedKeys at org/apache/hbase/thirdparty/io/netty/channel/nio/NioEventLoop.java:650
+                           run at org/apache/hbase/thirdparty/io/netty/channel/nio/NioEventLoop.java:562
+                           run at org/apache/hbase/thirdparty/io/netty/util/concurrent/SingleThreadEventExecutor.java:997
+                           run at org/apache/hbase/thirdparty/io/netty/util/internal/ThreadExecutorMap.java:74
+                           run at org/apache/hbase/thirdparty/io/netty/util/concurrent/FastThreadLocalRunnable.java:30
+                           run at java/lang/Thread.java:833
+

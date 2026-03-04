@@ -1,0 +1,3 @@
+6:Truncating 'uuid5b0d2dc1a8384316a687a9e9f1a037d4' table (it may take a while):
+8:java.lang.NullPointerException: Cannot invoke "java.util.Optional.isPresent()" because "tableState" is null
+9:	at org.apache.hadoop.hbase.client.RawAsyncHBaseAdmin.lambda$isTableEnabled$39(RawAsyncHBaseAdmin.java:781) ~[hbase-client-3.0.0-beta-1.jar:3.0.0-beta-1]

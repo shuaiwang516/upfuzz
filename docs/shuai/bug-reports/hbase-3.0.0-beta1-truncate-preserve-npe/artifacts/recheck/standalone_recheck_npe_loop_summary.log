@@ -1,0 +1,25 @@
+[iter 1] create uuidrepro11772501947
+[iter 1] kill master then truncate_preserve
+[iter 2] create uuidrepro21772502040
+[iter 2] kill master then truncate_preserve
+[iter 3] create uuidrepro31772502126
+[iter 3] kill master then truncate_preserve
+[iter 4] create uuidrepro41772502212
+[iter 4] kill master then truncate_preserve
+[iter 5] create uuidrepro51772502298
+[iter 5] kill master then truncate_preserve
+[iter 6] create uuidrepro61772502385
+[iter 6] kill master then truncate_preserve
+[iter 7] create uuidrepro71772502471
+[iter 7] kill master then truncate_preserve
+[iter 8] create uuidrepro81772502557
+[iter 8] kill master then truncate_preserve
+[iter 9] create uuidrepro91772502643
+[iter 9] kill master then truncate_preserve
+[iter 10] create uuidrepro101772502729
+[iter 10] kill master then truncate_preserve
+[iter 11] create uuidrepro111772502815
+[iter 11] kill master then truncate_preserve
+[iter 12] create uuidrepro121772502901
+[iter 12] kill master then truncate_preserve
+NPE_NOT_HIT

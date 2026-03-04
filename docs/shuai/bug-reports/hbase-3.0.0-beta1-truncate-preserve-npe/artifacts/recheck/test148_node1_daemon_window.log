@@ -1,0 +1,33 @@
+    90	stdout: Took 0.0313 secondsstdout: 
+    91	stdout: hbase:006:0> restore_snapshot
+    92	next_out: hbase:007:0> 
+    93	stdout: restore_snapshot
+    94	stdout: 
+    95	stdout: ERROR: wrong number of arguments (given 0, expected 1..2)stdout: 
+    96	stdout: 
+    97	stdout: For usage try 'help "restore_snapshot"'stdout: 
+    98	stdout: 
+    99	stdout: Took 0.0052 secondsstdout: 
+   100	stdout: hbase:007:0> create 'uuid5b0d2dc1a8384316a687a9e9f1a037d4', {NAME => 'uuid1c0f395a3f17432e9ce0b11a5b802a7c', VERSIONS => 2, BLOOMFILTER => 'ROWCOL', IN_MEMORY => 'true', MOB_THRESHOLD => 1715981, MOB_COMPACT_PARTITION_POLICY => 'monthly', CONFIGURATION => { 'CACHE_DATA_IN_L1' => 'false', 'hbase.regionserver.region.split_restriction.type' => 'KeyPrefix', 'hbase.regionserver.region.split_restriction.prefix_length' => '3' }}, {NAME => 'uuid3f3d56924f904085b3308b93954dcb52', VERSIONS => 2, COMPRESSION => 'GZ', IN_MEMORY => 'true', TTL => 559504, IS_MOB => true, MOB_THRESHOLD => 1038683, MOB_COMPACT_PARTITION_POLICY => 'monthly'}, REGION_REPLICATION => 2, NORMALIZER_TARGET_REGION_COUNT => 61, MAX_FILESIZE => 757692676, NORMALIZATION_ENABLED => 'false', MAX_FILESIZE => 757692676
+   101	next_out: hbase:008:0> 
+   102	stdout: create 'uuid5b0d2dc1a8384316a687a9e9f1a037d4', {NAME => 'uuid1c0f395a3f17432e9ce0b11a5b802a7c', VERSIONS => 2, BLOOMFILTER => 'ROWCOL', IN_MEMORY => 'true', MOB_THRESHOLD => 1715981, MOB_COMPACT_PARTITION_POLICY => 'monthly', CONFIGURATION => { 'CACHE_DATA_IN_L1' => 'false', 'hbase.regionserver.region.split_restriction.type' => 'KeyPrefix', 'hbase.regionserver.region.split_restriction.prefix_length' => '3' }}, {NAME => 'uuid3f3d56924f904085b3308b93954dcb52', VERSIONS => 2, COMPRESSION => 'GZ', IN_MEMORY => 'true', TTL => 559504, IS_MOB => true, MOB_THRESHOLD => 1038683, MOB_COMPACT_PARTITION_POLICY => 'monthly'}, REGION_REPLICATION => 2, NORMALIZER_TARGET_REGION_COUNT => 61, MAX_FILESIZE => 757692676, NORMALIZATION_ENABLED => 'false', MAX_FILESIZE => 757692676
+   103	stdout: 
+   104	stdout: ERROR: Failed contacting masters after 1 attempts.
+   105	Exceptions:
+   106	java.net.ConnectException: Call to address=hregion1:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hregion1/192.168.197.3:16000
+   107	stdout: 
+   108	stdout: For usage try 'help "create"'stdout: 
+   109	stdout: 
+   110	stdout: Took 0.0199 secondsstdout: 
+   111	stdout: hbase:008:0> major_compact 'uuid5b0d2dc1a8384316a687a9e9f1a037d4', 'uuid1c0f395a3f17432e9ce0b11a5b802a7c'
+   112	next_out: hbase:009:0> 
+   113	stdout: major_compact 'uuid5b0d2dc1a8384316a687a9e9f1a037d4', 'uuid1c0f395a3f17432e9ce0b11a5b802a7c'
+   114	stdout: 
+   115	stdout: ERROR: Failed contacting masters after 1 attempts.
+   116	Exceptions:
+   117	java.net.ConnectException: Call to address=hregion1:16000 failed on connection exception: org.apache.hbase.thirdparty.io.netty.channel.AbstractChannel$AnnotatedConnectException: Connection refused: hregion1/192.168.197.3:16000
+   118	stdout: 
+   119	stdout: For usage try 'help "major_compact"'stdout: 
+   120	
+   121	stdout: Took 0.0284 secondsstdout: 
+   122	stdout: hbase:009:0> 

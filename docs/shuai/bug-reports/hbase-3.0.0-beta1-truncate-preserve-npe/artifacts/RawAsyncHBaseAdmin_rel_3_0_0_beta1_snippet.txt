@@ -1,0 +1,61 @@
+   750	      new DisableTableProcedureBiConsumer(tableName));
+   751	  }
+   752	
+   753	  /**
+   754	   * Utility for completing passed TableState {@link CompletableFuture} <code>future</code> using
+   755	   * passed parameters. Sets error or boolean result ('true' if table matches the passed-in
+   756	   * targetState).
+   757	   */
+   758	  private static CompletableFuture<Boolean> completeCheckTableState(
+   759	    CompletableFuture<Boolean> future, TableState tableState, Throwable error,
+   760	    TableState.State targetState, TableName tableName) {
+   761	    if (error != null) {
+   762	      future.completeExceptionally(error);
+   763	    } else {
+   764	      if (tableState != null) {
+   765	        future.complete(tableState.inStates(targetState));
+   766	      } else {
+   767	        future.completeExceptionally(new TableNotFoundException(tableName));
+   768	      }
+   769	    }
+   770	    return future;
+   771	  }
+   772	
+   773	  @Override
+   774	  public CompletableFuture<Boolean> isTableEnabled(TableName tableName) {
+   775	    if (TableName.isMetaTableName(tableName)) {
+   776	      return CompletableFuture.completedFuture(true);
+   777	    }
+   778	    CompletableFuture<Boolean> future = new CompletableFuture<>();
+   779	    addListener(ClientMetaTableAccessor.getTableState(metaTable, tableName),
+   780	      (tableState, error) -> {
+   781	        completeCheckTableState(future, tableState.isPresent() ? tableState.get() : null, error,
+   782	          TableState.State.ENABLED, tableName);
+   783	      });
+   784	    return future;
+   785	  }
+   786	
+   787	  @Override
+   788	  public CompletableFuture<Boolean> isTableDisabled(TableName tableName) {
+   789	    if (TableName.isMetaTableName(tableName)) {
+   790	      return CompletableFuture.completedFuture(false);
+   791	    }
+   792	    CompletableFuture<Boolean> future = new CompletableFuture<>();
+   793	    addListener(ClientMetaTableAccessor.getTableState(metaTable, tableName),
+   794	      (tableState, error) -> {
+   795	        completeCheckTableState(future, tableState.isPresent() ? tableState.get() : null, error,
+   796	          TableState.State.DISABLED, tableName);
+   797	      });
+   798	    return future;
+   799	  }
+   800	
+   801	  @Override
+   802	  public CompletableFuture<Boolean> isTableAvailable(TableName tableName) {
+   803	    if (TableName.isMetaTableName(tableName)) {
+   804	      return connection.registry.getMetaRegionLocations().thenApply(locs -> Stream
+   805	        .of(locs.getRegionLocations()).allMatch(loc -> loc != null && loc.getServerName() != null));
+   806	    }
+   807	    CompletableFuture<Boolean> future = new CompletableFuture<>();
+   808	    addListener(isTableEnabled(tableName), (enabled, error) -> {
+   809	      if (error != null) {
+   810	        if (error instanceof TableNotFoundException) {

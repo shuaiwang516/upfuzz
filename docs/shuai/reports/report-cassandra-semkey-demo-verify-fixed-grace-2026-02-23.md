@@ -21,7 +21,7 @@ Evidence:
 
 ### 1) Rebuild freshness fix for Cassandra materialization
 File:
-- `scripts/docker/build_rolling_image_pair.sh`
+- `scripts/docker/build_rolling_image_pair.sh` (wrapper; now dispatches to per-system docker build scripts)
 
 Change:
 - `materialize_cassandra_version()` now rebuilds Cassandra when:

@@ -1,0 +1,41 @@
+   820	   * passed parameters. Sets error or boolean result ('true' if table matches the passed-in
+   821	   * targetState).
+   822	   */
+   823	  private static CompletableFuture<Boolean> completeCheckTableState(
+   824	    CompletableFuture<Boolean> future, Optional<TableState> tableState, Throwable error,
+   825	    TableState.State targetState, TableName tableName) {
+   826	    if (error != null) {
+   827	      future.completeExceptionally(error);
+   828	    } else {
+   829	      if (tableState.isPresent()) {
+   830	        future.complete(tableState.get().inStates(targetState));
+   831	      } else {
+   832	        future.completeExceptionally(new TableNotFoundException(tableName));
+   833	      }
+   834	    }
+   835	    return future;
+   836	  }
+   837	
+   838	  @Override
+   839	  public CompletableFuture<Boolean> isTableEnabled(TableName tableName) {
+   840	    if (TableName.isMetaTableName(tableName)) {
+   841	      return CompletableFuture.completedFuture(true);
+   842	    }
+   843	    CompletableFuture<Boolean> future = new CompletableFuture<>();
+   844	    addListener(ClientMetaTableAccessor.getTableState(metaTable, tableName),
+   845	      (tableState, error) -> {
+   846	        completeCheckTableState(future, tableState, error, TableState.State.ENABLED, tableName);
+   847	      });
+   848	    return future;
+   849	  }
+   850	
+   851	  @Override
+   852	  public CompletableFuture<Boolean> isTableDisabled(TableName tableName) {
+   853	    if (TableName.isMetaTableName(tableName)) {
+   854	      return CompletableFuture.completedFuture(false);
+   855	    }
+   856	    CompletableFuture<Boolean> future = new CompletableFuture<>();
+   857	    addListener(ClientMetaTableAccessor.getTableState(metaTable, tableName),
+   858	      (tableState, error) -> {
+   859	        completeCheckTableState(future, tableState, error, TableState.State.DISABLED, tableName);
+   860	      });

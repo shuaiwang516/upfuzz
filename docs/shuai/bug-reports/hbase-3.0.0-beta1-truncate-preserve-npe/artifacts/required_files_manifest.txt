@@ -1,0 +1,18 @@
+Replay inputs required for standalone reproduction:
+
+1) Failing replay workdir (stateful)
+- /users/swang516/xlab/rupfuzz/upfuzz/fuzzing_storage/hbase/hbase-2.6.4/hbase-3.0.0-beta-1/2026-03-02-21-08-19-aqGPEbLC/
+  - docker-compose.yaml
+  - persistent/config/{oriconfig,upconfig}
+  - persistent/node_0/env.sh
+  - persistent/node_1/env.sh
+  - persistent/node_*/log and consolelog (optional for debugging)
+
+2) Binaries / tarballs mounted by compose
+- /users/swang516/xlab/rupfuzz/upfuzz/prebuild/hbase/hbase-2.6.4/
+- /users/swang516/xlab/rupfuzz/upfuzz/prebuild/hbase/hbase-3.0.0-beta-1/
+- /users/swang516/xlab/rupfuzz/upfuzz/prebuild/hadoop/hadoop-2.10.2/
+
+3) Docker images
+- upfuzz_hbase:hbase-2.6.4_hbase-3.0.0-beta-1
+- upfuzz_hdfs:hadoop-2.10.2
