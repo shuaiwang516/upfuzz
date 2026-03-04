@@ -2033,7 +2033,8 @@ public class FuzzingServer {
                                 testPlanDiffFeedbackPacket.testPacketID,
                                 DiffReportHelper.eventCrashHeader(laneTag)
                                         + testPlanFeedbackPackets[i].eventFailedReport,
-                                laneTag);
+                                laneTag, DiffVerdict.ORACLE_NOISE,
+                                rollingFb.configFileName);
                     }
                 }
                 noiseNum++;
@@ -2045,7 +2046,9 @@ public class FuzzingServer {
                         testPlanDiffFeedbackPacket.testPacketID,
                         DiffReportHelper.eventCrashHeader("Rolling")
                                 + rollingFb.eventFailedReport,
-                        "Rolling");
+                        "Rolling",
+                        DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE,
+                        rollingFb.configFileName);
                 candidateNum++;
             } else if (eventVerdict == DiffVerdict.SAME_VERSION_BUG) {
                 sameVersionDir = ensureVerdictDir(sameVersionDir,
@@ -2059,7 +2062,8 @@ public class FuzzingServer {
                                 testPlanDiffFeedbackPacket.testPacketID,
                                 DiffReportHelper.eventCrashHeader(laneTag)
                                         + testPlanFeedbackPackets[i].eventFailedReport,
-                                laneTag);
+                                laneTag, DiffVerdict.SAME_VERSION_BUG,
+                                rollingFb.configFileName);
                     }
                 }
                 sameVersionBugNum++;
@@ -2076,7 +2080,8 @@ public class FuzzingServer {
                                 testPlanDiffFeedbackPacket.testPacketID,
                                 DiffReportHelper.eventCrashHeader(laneTag)
                                         + testPlanFeedbackPackets[i].eventFailedReport,
-                                laneTag);
+                                laneTag, DiffVerdict.ORACLE_NOISE,
+                                rollingFb.configFileName);
                     }
                 }
                 noiseNum++;
@@ -2091,7 +2096,9 @@ public class FuzzingServer {
                     DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE);
             saveInconsistencyReport(candidateDir,
                     testPlanDiffFeedbackPacket.testPacketID,
-                    crossClusterReport);
+                    crossClusterReport,
+                    DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE,
+                    rollingFb.configFileName);
             candidateNum++;
         }
 
@@ -2112,7 +2119,9 @@ public class FuzzingServer {
                                 DiffReportHelper.errorLogHeader(laneTag)
                                         + testPlanFeedbackPackets[i].errorLogReport,
                                 testPlanDiffFeedbackPacket.testPacketID,
-                                laneTag);
+                                laneTag,
+                                DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE,
+                                rollingFb.configFileName);
                     }
                 }
                 candidateNum++;
@@ -2128,7 +2137,8 @@ public class FuzzingServer {
                                 DiffReportHelper.errorLogHeader(laneTag)
                                         + testPlanFeedbackPackets[i].errorLogReport,
                                 testPlanDiffFeedbackPacket.testPacketID,
-                                laneTag);
+                                laneTag, DiffVerdict.SAME_VERSION_BUG,
+                                rollingFb.configFileName);
                     }
                 }
                 sameVersionBugNum++;
@@ -2144,7 +2154,8 @@ public class FuzzingServer {
                                 DiffReportHelper.errorLogHeader(laneTag)
                                         + testPlanFeedbackPackets[i].errorLogReport,
                                 testPlanDiffFeedbackPacket.testPacketID,
-                                laneTag);
+                                laneTag, DiffVerdict.ORACLE_NOISE,
+                                rollingFb.configFileName);
                     }
                 }
                 noiseNum++;
@@ -3281,16 +3292,29 @@ public class FuzzingServer {
 
     private void saveEventCrashReport(Path failureDir, int testID,
             String report) {
-        saveEventCrashReport(failureDir, testID, report, null);
+        saveEventCrashReport(failureDir, testID, report, null, null, null);
     }
 
     private void saveEventCrashReport(Path failureDir, int testID,
             String report, String laneTag) {
+        saveEventCrashReport(failureDir, testID, report, laneTag, null,
+                null);
+    }
+
+    private void saveEventCrashReport(Path failureDir, int testID,
+            String report, String laneTag, DiffVerdict verdict,
+            String configIdx) {
         Path subDir = createFailureSubDir(failureDir, "event_crash");
         String fileName = DiffReportHelper.reportFileName(
                 DiffReportHelper.CheckerType.EVENT_CRASH, testID, laneTag);
+        String fullReport = verdict != null
+                ? DiffReportHelper.buildMetadataBlock(
+                        DiffReportHelper.CheckerType.EVENT_CRASH,
+                        laneTag, verdict, testID, configIdx, null)
+                        + report
+                : report;
         Path crashReportPath = Paths.get(subDir.toString(), fileName);
-        Utilities.write2TXT(crashReportPath.toFile(), report, false);
+        Utilities.write2TXT(crashReportPath.toFile(), fullReport, false);
         eventCrashNum++;
     }
 
@@ -3332,14 +3356,25 @@ public class FuzzingServer {
 
     private void saveInconsistencyReport(Path failureDir, int testID,
             String report) {
+        saveInconsistencyReport(failureDir, testID, report, null, null);
+    }
+
+    private void saveInconsistencyReport(Path failureDir, int testID,
+            String report, DiffVerdict verdict, String configIdx) {
         Path inconsistencySubDir = createFailureSubDir(failureDir,
                 "inconsistency");
         String fileName = DiffReportHelper.reportFileName(
                 DiffReportHelper.CheckerType.CROSS_CLUSTER_INCONSISTENCY,
                 testID, null);
+        String fullReport = verdict != null
+                ? DiffReportHelper.buildMetadataBlock(
+                        DiffReportHelper.CheckerType.CROSS_CLUSTER_INCONSISTENCY,
+                        null, verdict, testID, configIdx, null)
+                        + report
+                : report;
         Path crashReportPath = Paths.get(
                 inconsistencySubDir.toString(), fileName);
-        Utilities.write2TXT(crashReportPath.toFile(), report, false);
+        Utilities.write2TXT(crashReportPath.toFile(), fullReport, false);
         inconsistencyNum++;
     }
 
@@ -3349,11 +3384,22 @@ public class FuzzingServer {
 
     private void saveErrorReport(Path failureDir, String report, int testID,
             String laneTag) {
+        saveErrorReport(failureDir, report, testID, laneTag, null, null);
+    }
+
+    private void saveErrorReport(Path failureDir, String report, int testID,
+            String laneTag, DiffVerdict verdict, String configIdx) {
         Path errorSubDir = createFailureSubDir(failureDir, "errorLog");
         String fileName = DiffReportHelper.reportFileName(
                 DiffReportHelper.CheckerType.ERROR_LOG, testID, laneTag);
+        String fullReport = verdict != null
+                ? DiffReportHelper.buildMetadataBlock(
+                        DiffReportHelper.CheckerType.ERROR_LOG,
+                        laneTag, verdict, testID, configIdx, null)
+                        + report
+                : report;
         Path reportPath = Paths.get(errorSubDir.toString(), fileName);
-        Utilities.write2TXT(reportPath.toFile(), report, false);
+        Utilities.write2TXT(reportPath.toFile(), fullReport, false);
         errorLogNum++;
     }
 

@@ -254,19 +254,25 @@ count_lane_error_reports_since_run() {
         "${repo}/failure/same_version" \
         "${repo}/failure/noise"; do
         [[ -d "${dir}" ]] || continue
-        while IFS= read -r -d '' line; do
-            case "${line}" in
-                "[${lane_tag}] [ERROR LOG]"*|"[${lane_tag_nospace}] [ERROR LOG]"*)
-                    total=$((total + 1))
-                    ;;
-            esac
+        while IFS= read -r -d '' rfile; do
+            # Read first 10 lines to look past any metadata block prefix
+            local matched=false
+            while IFS= read -r fline; do
+                case "${fline}" in
+                    "[${lane_tag}] [ERROR LOG]"*|"[${lane_tag_nospace}] [ERROR LOG]"*)
+                        matched=true
+                        break
+                        ;;
+                esac
+            done < <(head -n10 "${rfile}" 2>/dev/null)
+            if ${matched}; then
+                total=$((total + 1))
+            fi
         done < <(
             find "${dir}" \
                 -type f \( -path '*/errorLog/error_*.report' -o -path '*/errorLog/error_log_*.report' \) \
                 "${time_filter[@]}" \
-                -exec head -n1 {} \; 2>/dev/null \
-                | tr -d '\r' \
-                | tr '\n' '\0'
+                -print0 2>/dev/null
         )
     done
     echo "${total}"

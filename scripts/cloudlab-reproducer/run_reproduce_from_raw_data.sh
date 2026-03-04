@@ -187,12 +187,14 @@ build_oracle_from_inconsistency_report() {
             continue
         fi
 
-        if [[ "${line}" == "Full Stop Result:" ]]; then
+        # Match both legacy ("Full Stop Result:") and new ("Baseline Result:") markers
+        if [[ "${line}" == "Full Stop Result:" || "${line}" == "Baseline Result:" ]]; then
             collecting_full_stop=true
             continue
         fi
 
-        if [[ "${line}" == "Rolling Upgrade Result:" ]]; then
+        # Match both legacy ("Rolling Upgrade Result:") and new ("Lane Result:") markers
+        if [[ "${line}" == "Rolling Upgrade Result:" || "${line}" == "Lane Result:" ]]; then
             collecting_full_stop=false
             if [[ -n "${full_stop_tmp}" ]]; then
                 append_oracle_entry "${current_read_id}" "${full_stop_tmp}" "${oracle_tmp}"
