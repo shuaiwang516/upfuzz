@@ -189,6 +189,13 @@ classify_category() {
             hbase) echo "hbase_result_inconsistency" ;;
             *) echo "result_inconsistency" ;;
         esac
+    elif rg -q "Cross-cluster inconsistency detected" "$fdir"; then
+        case "${SYSTEM}" in
+            cassandra) echo "cassandra_result_inconsistency" ;;
+            hdfs) echo "hdfs_result_inconsistency" ;;
+            hbase) echo "hbase_result_inconsistency" ;;
+            *) echo "result_inconsistency" ;;
+        esac
     else
         echo "unknown"
     fi
@@ -221,6 +228,13 @@ classify_category_from_signature() {
             hbase) echo "hbase_result_inconsistency" ;;
             *) echo "result_inconsistency" ;;
         esac
+    elif [[ "${sig}" =~ Cross-cluster\ inconsistency\ detected ]]; then
+        case "${SYSTEM}" in
+            cassandra) echo "cassandra_result_inconsistency" ;;
+            hdfs) echo "hdfs_result_inconsistency" ;;
+            hbase) echo "hbase_result_inconsistency" ;;
+            *) echo "result_inconsistency" ;;
+        esac
     else
         echo "unknown"
     fi
@@ -229,7 +243,7 @@ classify_category_from_signature() {
 extract_raw_signature() {
     local fdir="$1"
     local sig
-    sig="$(find "$fdir" -type f \( -name 'error_*.report' -o -name 'inconsistency_*.report' \) | sort -V | while read -r f; do sed -n '1,80p' "$f"; done | rg -m1 "RollingUpgradeException|RecoverableZooKeeper|ConnectionLossException|Failed get of master address|TableNotEnabledException|NullPointerException|Undefined column name|ReadTimeout|Results inconsistency|container .* is not running|AssertionError" || true)"
+    sig="$(find "$fdir" -type f \( -name 'error_*.report' -o -name 'error_log_*.report' -o -name 'inconsistency_*.report' -o -name 'inconsistency_crosscluster_*.report' -o -name 'event_crash_*.report' \) | sort -V | while read -r f; do sed -n '1,80p' "$f"; done | rg -m1 "RollingUpgradeException|RecoverableZooKeeper|ConnectionLossException|Failed get of master address|TableNotEnabledException|NullPointerException|Undefined column name|ReadTimeout|Results inconsistency|Cross-cluster inconsistency|container .* is not running|AssertionError" || true)"
     if [[ -z "${sig}" ]]; then
         sig="$(find "$fdir" -type f | sort -V | head -n1 | xargs -r sed -n '1,6p' | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g' | cut -c1-220 || true)"
     fi
@@ -270,7 +284,7 @@ is_reproduced() {
             pattern="container .* is not running"
             ;;
         cassandra_result_inconsistency|hdfs_result_inconsistency|hbase_result_inconsistency|result_inconsistency)
-            pattern="Results inconsistency between full-stop and rolling upgrade"
+            pattern="Results inconsistency between full-stop and rolling upgrade|Cross-cluster inconsistency detected|Structured validation divergence"
             ;;
         *)
             pattern="AssertionError|Exception|ERROR LOG"
@@ -466,14 +480,14 @@ find "${fail_dir_root}" -maxdepth 1 -type d -name 'failure_*' | sort -V | while 
         cat "${attempts_tsv}"
         echo
         echo "## Raw Snippet"
-        find "${fdir}" -type f \( -name 'error_*.report' -o -name 'inconsistency_*.report' -o -name 'fullSequence_*.report' \) | sort -V | while read -r ff; do
+        find "${fdir}" -type f \( -name 'error_*.report' -o -name 'error_log_*.report' -o -name 'inconsistency_*.report' -o -name 'inconsistency_crosscluster_*.report' -o -name 'event_crash_*.report' -o -name 'fullSequence_*.report' \) | sort -V | while read -r ff; do
             echo "### ${ff}"
             sed -n '1,80p' "${ff}"
             echo
         done
         echo
         echo "## Repro Key Snippet"
-        rg -n "RollingUpgradeException|already in progress|RecoverableZooKeeper|ConnectionLossException|Zookeeper LIST could not be completed|Failed get of master address|TableNotEnabledException|NullPointerException|Undefined column name|ReadTimeout|Results inconsistency|container .* is not running|AssertionError|All 3 clusters failed|trace\[[0-9]+\] len =|Message identity tri-diff|TestPlanDiffFeedbackPacket received|total exec :" "${merged_log}" | sed -n '1,200p' || true
+        rg -n "RollingUpgradeException|already in progress|RecoverableZooKeeper|ConnectionLossException|Zookeeper LIST could not be completed|Failed get of master address|TableNotEnabledException|NullPointerException|Undefined column name|ReadTimeout|Results inconsistency|Cross-cluster inconsistency|Structured validation divergence|container .* is not running|AssertionError|All 3 clusters failed|trace\[[0-9]+\] len =|Message identity tri-diff|TestPlanDiffFeedbackPacket received|total exec :" "${merged_log}" | sed -n '1,200p' || true
     } > "${analysis_file}"
 
     printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \

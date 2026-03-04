@@ -176,10 +176,10 @@ public class CassandraExecutor extends Executor {
                                 + up.strip()
                                 + "\n";
                     } else {
-                        errorMsg += "Full Stop Result:\n"
+                        errorMsg += "Baseline Result:\n"
                                 + ori.strip()
                                 + "\n"
-                                + "Rolling Upgrade Result:\n"
+                                + "Lane Result:\n"
                                 + up.strip()
                                 + "\n";
                     }

@@ -12,7 +12,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jacoco.core.data.ExecutionDataStore;
 import org.zlab.upfuzz.fuzzingengine.packet.*;
-import org.zlab.upfuzz.utils.Pair;
 import org.zlab.upfuzz.utils.Utilities;
 import org.zlab.upfuzz.fuzzingengine.executor.Executor;
 
@@ -287,7 +286,6 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
                 }
 
             } else {
-                Pair<Boolean, String> compareRes;
                 List<String> testPlanReadResults = new LinkedList<>();
                 if (!testPlanPacket.getTestPlan().validationCommands
                         .isEmpty()) {
@@ -308,26 +306,10 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
                     logger.debug("validationCommands is empty!");
                 }
 
-                // read comparison between oracle and rolling
-                if (!testPlanPacket.getTestPlan().validationReadResultsOracle
-                        .isEmpty()) {
-                    compareRes = executor
-                            .checkResultConsistency(
-                                    testPlanPacket
-                                            .getTestPlan().validationReadResultsOracle,
-                                    testPlanReadResults, false);
-                    if (!compareRes.left) {
-                        testPlanFeedbackPacket.isInconsistent = true;
-                        testPlanFeedbackPacket.inconsistencyReport = genTestPlanInconsistencyReport(
-                                executor.executorID,
-                                testPlanPacket.configFileName,
-                                compareRes.right, testPlanPacketStr);
-                    }
-                }
-                if (testPlanPacket.getTestPlan().validationReadResultsOracle
-                        .isEmpty()) {
-                    logger.debug("validationReadResultsOracle is empty!");
-                }
+                // Lane-local oracle-vs-lane mismatch (Checker C) has been
+                // removed for mode-3/mode-5 rolling differential paths.
+                // Bug detection relies on the cross-cluster structured
+                // comparison (Checker D) in FuzzingServer instead.
 
                 try {
                     ExecutionDataStore[] upCoverages = executor

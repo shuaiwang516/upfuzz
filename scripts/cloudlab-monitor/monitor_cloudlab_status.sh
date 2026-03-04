@@ -260,7 +260,7 @@ count_lane_error_reports_since_run() {
             esac
         done < <(
             find "${dir}" \
-                -type f -path '*/errorLog/error_*.report' \
+                -type f \( -path '*/errorLog/error_*.report' -o -path '*/errorLog/error_log_*.report' \) \
                 "${time_filter[@]}" \
                 -exec head -n1 {} \; 2>/dev/null \
                 | tr -d '\r' \

@@ -367,7 +367,7 @@ while IFS= read -r cand; do
     if rg -q '^test plan:' "${cand}"; then
         source_report="${cand}"
     fi
-done < <(find "${FAILURE_DIR}" -type f \( -name 'inconsistency_*.report' -o -name 'error_*.report' \) | sort -V)
+done < <(find "${FAILURE_DIR}" -type f \( -name 'inconsistency_*.report' -o -name 'inconsistency_crosscluster_*.report' -o -name 'error_*.report' -o -name 'error_log_*.report' -o -name 'event_crash_*.report' \) | sort -V)
 
 if [[ -z "${source_report}" ]]; then
     while IFS= read -r cand; do
@@ -468,16 +468,20 @@ if [[ "${SYSTEM}" == "hdfs" ]]; then
 fi
 
 oracle_source_report=""
-if [[ "$(basename "${source_report}")" == inconsistency_*.report ]]; then
+if [[ "$(basename "${source_report}")" == inconsistency_*.report ]] || \
+   [[ "$(basename "${source_report}")" == inconsistency_crosscluster_*.report ]]; then
     oracle_source_report="${source_report}"
 else
     while IFS= read -r cand; do
         [[ -n "${cand}" ]] || continue
-        if rg -q 'Result inconsistency at read id:' "${cand}" || rg -q 'Insignificant Result inconsistency at read id:' "${cand}"; then
+        if rg -q 'Result inconsistency at read id:' "${cand}" || \
+           rg -q 'Insignificant Result inconsistency at read id:' "${cand}" || \
+           rg -q 'Cross-cluster inconsistency detected' "${cand}" || \
+           rg -q 'Structured validation divergence' "${cand}"; then
             oracle_source_report="${cand}"
             break
         fi
-    done < <(find "${FAILURE_DIR}/inconsistency" -maxdepth 1 -type f -name 'inconsistency_*.report' 2>/dev/null | sort -V)
+    done < <(find "${FAILURE_DIR}/inconsistency" -maxdepth 1 -type f \( -name 'inconsistency_*.report' -o -name 'inconsistency_crosscluster_*.report' \) 2>/dev/null | sort -V)
 fi
 
 oracle_entries=0

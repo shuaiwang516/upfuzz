@@ -1204,8 +1204,11 @@ public class FuzzingServer {
         if (rollingSeed == null) {
             return null;
         }
+        // Mode-5 rolling differential paths no longer depend on persistent
+        // per-seed oracle. Pass empty oracle; Checker D (cross-cluster
+        // structured comparison) is the canonical oracle at verdict time.
         return generateTestPlanFromSeed(rollingSeed.seed,
-                rollingSeed.validationReadResultsOracle);
+                new LinkedList<>());
     }
 
     private static TestPlan generateTestPlanFromSeed(
@@ -1906,10 +1909,11 @@ public class FuzzingServer {
             }
         }
 
-        // 3. Cross-cluster inconsistency → always CANDIDATE (existing tri-diff
-        // is correct)
+        // 3. Cross-cluster structured inconsistency (Checker D) — primary
+        // rolling-upgrade bug oracle. Gated strictly: all 3 lanes must be OK
+        // and all 3 must have non-null structured validationResults.
         String crossClusterReport = null;
-        if (hasValidationResults(testPlanFeedbackPackets)) {
+        if (allLanesOkWithStructuredResults(testPlanFeedbackPackets)) {
             crossClusterReport = checkCrossClusterInconsistencyStructured(
                     testPlanFeedbackPackets);
             if (crossClusterReport != null) {
@@ -1920,18 +1924,9 @@ public class FuzzingServer {
             }
         }
 
-        // 4. Per-cluster inconsistency classification
-        DiffVerdict perClusterVerdict = DiffVerdict.NONE;
-        boolean anyInconsistent = testPlanFeedbackPackets[0].isInconsistent
-                || testPlanFeedbackPackets[1].isInconsistent
-                || testPlanFeedbackPackets[2].isInconsistent;
-        if (anyInconsistent) {
-            perClusterVerdict = classifyPerClusterInconsistency(
-                    testPlanFeedbackPackets);
-            if (perClusterVerdict.moreSignificantThan(overallVerdict)) {
-                overallVerdict = perClusterVerdict;
-            }
-        }
+        // 4. Per-cluster inconsistency (Checker E) — REMOVED for mode-3/mode-5
+        // rolling differential paths. Checker E was driven by isInconsistent
+        // flags from the removed lane-local oracle mismatch (Checker C).
 
         // 5. ERROR log classification
         DiffVerdict errorLogVerdict = DiffVerdict.NONE;
@@ -1948,7 +1943,6 @@ public class FuzzingServer {
         logger.info("Verdict classification: overall=" + overallVerdict
                 + " event=" + eventVerdict + " crossCluster="
                 + (crossClusterReport != null ? "CANDIDATE" : "NONE")
-                + " perCluster=" + perClusterVerdict
                 + " errorLog=" + errorLogVerdict);
 
         // === Corpus update (gated by verdict) ===
@@ -1961,27 +1955,20 @@ public class FuzzingServer {
                     "Suppressing corpus add: test triggers SAME_VERSION_BUG");
             addToCorpus = false;
         }
-        List<String> oldOldValidationResults = testPlanFeedbackPackets[0] == null
-                ? new LinkedList<>()
-                : testPlanFeedbackPackets[0].validationReadResults;
+        // Mode-3/mode-5 rolling differential paths no longer persist the
+        // old-old lane results as validationReadResultsOracle. Checker D
+        // (cross-cluster structured comparison) runs at verdict time and
+        // does not depend on a stored per-seed oracle.
         if (addToCorpus) {
             TestPlan testPlan = testID2TestPlan
                     .get(testPlanDiffFeedbackPacket.testPacketID);
             if (testPlan != null) {
-                if (oldOldValidationResults != null
-                        && !oldOldValidationResults.isEmpty()) {
-                    testPlan.validationReadResultsOracle = new LinkedList<>(
-                            oldOldValidationResults);
-                }
                 testPlanCorpus.addTestPlan(testPlan);
                 if (Config.getConf().testingMode == 5
                         && testPlan.seed != null) {
                     rollingSeedCorpus.addSeed(new RollingSeed(
                             SerializationUtils.clone(testPlan.seed),
-                            testPlan.validationReadResultsOracle == null
-                                    ? new LinkedList<>()
-                                    : new LinkedList<>(
-                                            testPlan.validationReadResultsOracle)));
+                            new LinkedList<>()));
                     logger.info(
                             "Mode 5 rollingSeedCorpus updated from interesting test plan, size={}",
                             rollingSeedCorpus.size());
@@ -2038,9 +2025,17 @@ public class FuzzingServer {
                 noiseDir = ensureVerdictDir(noiseDir,
                         rollingFb.configFileName, rollingFb.fullSequence,
                         DiffVerdict.ORACLE_NOISE);
-                saveEventCrashReport(noiseDir,
-                        testPlanDiffFeedbackPacket.testPacketID,
-                        "[All3Failed] " + rollingFb.eventFailedReport);
+                for (int i = 0; i < 3; i++) {
+                    if (testPlanFeedbackPackets[i].isEventFailed) {
+                        String laneTag = testPlanID2Setup.getOrDefault(i,
+                                "Unknown").replace(" ", "");
+                        saveEventCrashReport(noiseDir,
+                                testPlanDiffFeedbackPacket.testPacketID,
+                                DiffReportHelper.eventCrashHeader(laneTag)
+                                        + testPlanFeedbackPackets[i].eventFailedReport,
+                                laneTag);
+                    }
+                }
                 noiseNum++;
             } else if (eventVerdict == DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE) {
                 candidateDir = ensureVerdictDir(candidateDir,
@@ -2048,7 +2043,9 @@ public class FuzzingServer {
                         DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE);
                 saveEventCrashReport(candidateDir,
                         testPlanDiffFeedbackPacket.testPacketID,
-                        "[Rolling] " + rollingFb.eventFailedReport);
+                        DiffReportHelper.eventCrashHeader("Rolling")
+                                + rollingFb.eventFailedReport,
+                        "Rolling");
                 candidateNum++;
             } else if (eventVerdict == DiffVerdict.SAME_VERSION_BUG) {
                 sameVersionDir = ensureVerdictDir(sameVersionDir,
@@ -2056,10 +2053,13 @@ public class FuzzingServer {
                         DiffVerdict.SAME_VERSION_BUG);
                 for (int i = 0; i < 3; i++) {
                     if (testPlanFeedbackPackets[i].isEventFailed) {
+                        String laneTag = testPlanID2Setup.getOrDefault(i,
+                                "Unknown").replace(" ", "");
                         saveEventCrashReport(sameVersionDir,
                                 testPlanDiffFeedbackPacket.testPacketID,
-                                "[" + testPlanID2Setup.get(i) + "] "
-                                        + testPlanFeedbackPackets[i].eventFailedReport);
+                                DiffReportHelper.eventCrashHeader(laneTag)
+                                        + testPlanFeedbackPackets[i].eventFailedReport,
+                                laneTag);
                     }
                 }
                 sameVersionBugNum++;
@@ -2070,10 +2070,13 @@ public class FuzzingServer {
                         DiffVerdict.ORACLE_NOISE);
                 for (int i = 0; i < 3; i++) {
                     if (testPlanFeedbackPackets[i].isEventFailed) {
+                        String laneTag = testPlanID2Setup.getOrDefault(i,
+                                "Unknown").replace(" ", "");
                         saveEventCrashReport(noiseDir,
                                 testPlanDiffFeedbackPacket.testPacketID,
-                                "[" + testPlanID2Setup.get(i) + "] "
-                                        + testPlanFeedbackPackets[i].eventFailedReport);
+                                DiffReportHelper.eventCrashHeader(laneTag)
+                                        + testPlanFeedbackPackets[i].eventFailedReport,
+                                laneTag);
                     }
                 }
                 noiseNum++;
@@ -2092,49 +2095,8 @@ public class FuzzingServer {
             candidateNum++;
         }
 
-        // 4. Per-cluster inconsistency — routed by perClusterVerdict
-        if (anyInconsistent) {
-            if (perClusterVerdict == DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE) {
-                candidateDir = ensureVerdictDir(candidateDir,
-                        rollingFb.configFileName, rollingFb.fullSequence,
-                        DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE);
-                for (int i = 0; i < 3; i++) {
-                    if (testPlanFeedbackPackets[i].isInconsistent) {
-                        saveInconsistencyReport(candidateDir,
-                                testPlanDiffFeedbackPacket.testPacketID,
-                                "[" + testPlanID2Setup.get(i) + "] "
-                                        + testPlanFeedbackPackets[i].inconsistencyReport);
-                    }
-                }
-                candidateNum++;
-            } else if (perClusterVerdict == DiffVerdict.SAME_VERSION_BUG) {
-                sameVersionDir = ensureVerdictDir(sameVersionDir,
-                        rollingFb.configFileName, rollingFb.fullSequence,
-                        DiffVerdict.SAME_VERSION_BUG);
-                for (int i = 0; i < 3; i++) {
-                    if (testPlanFeedbackPackets[i].isInconsistent) {
-                        saveInconsistencyReport(sameVersionDir,
-                                testPlanDiffFeedbackPacket.testPacketID,
-                                "[" + testPlanID2Setup.get(i) + "] "
-                                        + testPlanFeedbackPackets[i].inconsistencyReport);
-                    }
-                }
-                sameVersionBugNum++;
-            } else {
-                noiseDir = ensureVerdictDir(noiseDir,
-                        rollingFb.configFileName, rollingFb.fullSequence,
-                        DiffVerdict.ORACLE_NOISE);
-                for (int i = 0; i < 3; i++) {
-                    if (testPlanFeedbackPackets[i].isInconsistent) {
-                        saveInconsistencyReport(noiseDir,
-                                testPlanDiffFeedbackPacket.testPacketID,
-                                "[" + testPlanID2Setup.get(i) + "] "
-                                        + testPlanFeedbackPackets[i].inconsistencyReport);
-                    }
-                }
-                noiseNum++;
-            }
-        }
+        // 4. Per-cluster inconsistency (Checker E) — REMOVED.
+        // Lane-local isInconsistent flags are no longer set by Checker C.
 
         // 5. ERROR logs — routed by errorLogVerdict
         if (anyErrorLog) {
@@ -2144,10 +2106,13 @@ public class FuzzingServer {
                         DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE);
                 for (int i = 0; i < 3; i++) {
                     if (testPlanFeedbackPackets[i].hasERRORLog) {
+                        String laneTag = testPlanID2Setup.getOrDefault(i,
+                                "Unknown").replace(" ", "");
                         saveErrorReport(candidateDir,
-                                "[" + testPlanID2Setup.get(i) + "] "
+                                DiffReportHelper.errorLogHeader(laneTag)
                                         + testPlanFeedbackPackets[i].errorLogReport,
-                                testPlanDiffFeedbackPacket.testPacketID);
+                                testPlanDiffFeedbackPacket.testPacketID,
+                                laneTag);
                     }
                 }
                 candidateNum++;
@@ -2157,10 +2122,13 @@ public class FuzzingServer {
                         DiffVerdict.SAME_VERSION_BUG);
                 for (int i = 0; i < 3; i++) {
                     if (testPlanFeedbackPackets[i].hasERRORLog) {
+                        String laneTag = testPlanID2Setup.getOrDefault(i,
+                                "Unknown").replace(" ", "");
                         saveErrorReport(sameVersionDir,
-                                "[" + testPlanID2Setup.get(i) + "] "
+                                DiffReportHelper.errorLogHeader(laneTag)
                                         + testPlanFeedbackPackets[i].errorLogReport,
-                                testPlanDiffFeedbackPacket.testPacketID);
+                                testPlanDiffFeedbackPacket.testPacketID,
+                                laneTag);
                     }
                 }
                 sameVersionBugNum++;
@@ -2170,10 +2138,13 @@ public class FuzzingServer {
                         DiffVerdict.ORACLE_NOISE);
                 for (int i = 0; i < 3; i++) {
                     if (testPlanFeedbackPackets[i].hasERRORLog) {
+                        String laneTag = testPlanID2Setup.getOrDefault(i,
+                                "Unknown").replace(" ", "");
                         saveErrorReport(noiseDir,
-                                "[" + testPlanID2Setup.get(i) + "] "
+                                DiffReportHelper.errorLogHeader(laneTag)
                                         + testPlanFeedbackPackets[i].errorLogReport,
-                                testPlanDiffFeedbackPacket.testPacketID);
+                                testPlanDiffFeedbackPacket.testPacketID,
+                                laneTag);
                     }
                 }
                 noiseNum++;
@@ -2222,46 +2193,43 @@ public class FuzzingServer {
     }
 
     /**
-     * Structured cross-cluster comparison (WS2).
-     * Uses ValidationResultComparator when structured results are available,
-     * falls back to legacy List.equals() otherwise.
+     * Structured cross-cluster comparison (Checker D).
+     * Requires all 3 packets to have non-null structured validationResults.
+     * No legacy string-based fallback for mode-3/mode-5 paths.
      */
     private String checkCrossClusterInconsistencyStructured(
             TestPlanFeedbackPacket[] packets) {
-        // If all 3 packets have structured results, use outcome-aware
-        // comparison
-        if (packets[0].validationResults != null
-                && packets[1].validationResults != null
-                && packets[2].validationResults != null) {
-            String oldVsRolling = ValidationResultComparator.compare(
-                    packets[0].validationResults,
-                    packets[1].validationResults,
-                    "Old-Old", "Rolling");
-            String newVsRolling = ValidationResultComparator.compare(
-                    packets[2].validationResults,
-                    packets[1].validationResults,
-                    "New-New", "Rolling");
-            String oldVsNew = ValidationResultComparator.compare(
-                    packets[0].validationResults,
-                    packets[2].validationResults,
-                    "Old-Old", "New-New");
-
-            // Rolling diverges from both baselines, and baselines agree
-            if (oldVsRolling != null && newVsRolling != null
-                    && oldVsNew == null) {
-                StringBuilder sb = new StringBuilder();
-                sb.append(
-                        "Cross-cluster inconsistency detected (structured)!\n");
-                sb.append(
-                        "Old-Old and New-New agree but Rolling differs.\n");
-                sb.append(oldVsRolling).append("\n");
-                sb.append(newVsRolling).append("\n");
-                return sb.toString();
-            }
+        if (packets[0].validationResults == null
+                || packets[1].validationResults == null
+                || packets[2].validationResults == null) {
             return null;
         }
-        // Fall back to legacy comparison
-        return checkCrossClusterInconsistency(packets);
+        String oldVsRolling = ValidationResultComparator.compare(
+                packets[0].validationResults,
+                packets[1].validationResults,
+                "Old-Old", "Rolling");
+        String newVsRolling = ValidationResultComparator.compare(
+                packets[2].validationResults,
+                packets[1].validationResults,
+                "New-New", "Rolling");
+        String oldVsNew = ValidationResultComparator.compare(
+                packets[0].validationResults,
+                packets[2].validationResults,
+                "Old-Old", "New-New");
+
+        // Rolling diverges from both baselines, and baselines agree
+        if (oldVsRolling != null && newVsRolling != null
+                && oldVsNew == null) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(
+                    DiffReportHelper.crossClusterHeader());
+            sb.append(
+                    "Old-Old and New-New agree but Rolling differs.\n");
+            sb.append(oldVsRolling).append("\n");
+            sb.append(newVsRolling).append("\n");
+            return sb.toString();
+        }
+        return null;
     }
 
     // Helper to lazily create failure dir (reuses existing pattern)
@@ -2342,15 +2310,26 @@ public class FuzzingServer {
         return DiffVerdict.ORACLE_NOISE;
     }
 
-    // Check if packets have validation results
-    private boolean hasValidationResults(
+    /**
+     * Strict gate for cross-cluster structured checker (Checker D).
+     * All 3 lanes must be OK and all 3 must have non-null, non-empty
+     * structured validationResults.
+     */
+    private boolean allLanesOkWithStructuredResults(
             TestPlanFeedbackPacket[] packets) {
-        for (TestPlanFeedbackPacket p : packets) {
-            if (p.validationReadResults != null
-                    && !p.validationReadResults.isEmpty())
-                return true;
+        if (packets.length < 3)
+            return false;
+        for (int i = 0; i < 3; i++) {
+            if (packets[i] == null)
+                return false;
+            if (normalizeLaneStatus(
+                    packets[i]) != TestPlanFeedbackPacket.LaneStatus.OK)
+                return false;
+            if (packets[i].validationResults == null
+                    || packets[i].validationResults.isEmpty())
+                return false;
         }
-        return false;
+        return true;
     }
 
     public Path createFailureDirAndSaveFullSequence(
@@ -3302,10 +3281,15 @@ public class FuzzingServer {
 
     private void saveEventCrashReport(Path failureDir, int testID,
             String report) {
+        saveEventCrashReport(failureDir, testID, report, null);
+    }
+
+    private void saveEventCrashReport(Path failureDir, int testID,
+            String report, String laneTag) {
         Path subDir = createFailureSubDir(failureDir, "event_crash");
-        Path crashReportPath = Paths.get(
-                subDir.toString(),
-                "event_crash_" + testID + ".report");
+        String fileName = DiffReportHelper.reportFileName(
+                DiffReportHelper.CheckerType.EVENT_CRASH, testID, laneTag);
+        Path crashReportPath = Paths.get(subDir.toString(), fileName);
         Utilities.write2TXT(crashReportPath.toFile(), report, false);
         eventCrashNum++;
     }
@@ -3350,18 +3334,25 @@ public class FuzzingServer {
             String report) {
         Path inconsistencySubDir = createFailureSubDir(failureDir,
                 "inconsistency");
+        String fileName = DiffReportHelper.reportFileName(
+                DiffReportHelper.CheckerType.CROSS_CLUSTER_INCONSISTENCY,
+                testID, null);
         Path crashReportPath = Paths.get(
-                inconsistencySubDir.toString(),
-                "inconsistency_" + testID + ".report");
+                inconsistencySubDir.toString(), fileName);
         Utilities.write2TXT(crashReportPath.toFile(), report, false);
         inconsistencyNum++;
     }
 
     private void saveErrorReport(Path failureDir, String report, int testID) {
+        saveErrorReport(failureDir, report, testID, (String) null);
+    }
+
+    private void saveErrorReport(Path failureDir, String report, int testID,
+            String laneTag) {
         Path errorSubDir = createFailureSubDir(failureDir, "errorLog");
-        Path reportPath = Paths.get(
-                errorSubDir.toString(),
-                String.format("error_%d.report", testID));
+        String fileName = DiffReportHelper.reportFileName(
+                DiffReportHelper.CheckerType.ERROR_LOG, testID, laneTag);
+        Path reportPath = Paths.get(errorSubDir.toString(), fileName);
         Utilities.write2TXT(reportPath.toFile(), report, false);
         errorLogNum++;
     }

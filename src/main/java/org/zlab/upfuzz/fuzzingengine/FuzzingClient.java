@@ -21,6 +21,9 @@ import org.zlab.upfuzz.fuzzingengine.packet.Packet.PacketType;
 import org.zlab.upfuzz.fuzzingengine.executor.Executor;
 import org.zlab.upfuzz.fuzzingengine.testplan.event.Event;
 import org.zlab.upfuzz.fuzzingengine.testplan.event.fault.RestartFailure;
+import org.zlab.upfuzz.fuzzingengine.testplan.event.upgradeop.FinalizeUpgrade;
+import org.zlab.upfuzz.fuzzingengine.testplan.event.upgradeop.HDFSStopSNN;
+import org.zlab.upfuzz.fuzzingengine.testplan.event.upgradeop.PrepareUpgrade;
 import org.zlab.upfuzz.fuzzingengine.testplan.event.upgradeop.UpgradeOp;
 import org.zlab.upfuzz.hdfs.HdfsExecutor;
 import org.zlab.upfuzz.hbase.HBaseExecutor;
@@ -1949,10 +1952,16 @@ public class FuzzingClient {
                 singleTestPacket + "\n";
     }
 
+    /**
+     * @deprecated Checker C (lane-local oracle mismatch) is removed from
+     *             mode-3/mode-5 rolling paths. This method is retained only
+     *             for non-rolling (legacy full-stop) paths.
+     */
+    @Deprecated
     public static String genTestPlanInconsistencyReport(String executorID,
             String configFileName, String inconsistencyRecord,
             String singleTestPacket) {
-        return "[Results inconsistency between full-stop and rolling upgrade]\n"
+        return "[Results inconsistency between two executions]\n"
                 +
                 "executionId = " + executorID + "\n" +
                 "ConfigIdx = " + configFileName + "\n" +
@@ -2133,7 +2142,10 @@ public class FuzzingClient {
         TestPlanPacket updatedTestPlanPacket = SerializationUtils
                 .clone(testPlanPacket);
 
-        // Update events are enough
+        // For baseline lanes (OnlyOld / OnlyNew):
+        // - Replace UpgradeOp with same-version restart
+        // - Strip PrepareUpgrade, FinalizeUpgrade, HDFSStopSNN entirely
+        // so baseline lanes are pure no-upgrade-lifecycle lanes.
 
         List<Event> updatedEvents = new LinkedList<>();
         for (Event event : updatedTestPlanPacket.getTestPlan().events) {
@@ -2142,6 +2154,11 @@ public class FuzzingClient {
                 RestartFailure restartOp = new RestartFailure(
                         ((UpgradeOp) event).nodeIndex);
                 updatedEvents.add(restartOp);
+            } else if (event instanceof PrepareUpgrade
+                    || event instanceof FinalizeUpgrade
+                    || event instanceof HDFSStopSNN) {
+                // Strip upgrade lifecycle events from baseline lanes
+                continue;
             } else {
                 updatedEvents.add(event);
             }

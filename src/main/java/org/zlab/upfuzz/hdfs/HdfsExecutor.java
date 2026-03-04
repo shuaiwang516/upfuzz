@@ -178,10 +178,10 @@ public class HdfsExecutor extends Executor {
                                 + upResult.get(i).strip()
                                 + "\n";
                     } else {
-                        errorMsg += "Full Stop Result:\n"
+                        errorMsg += "Baseline Result:\n"
                                 + oriResult.get(i).strip()
                                 + "\n"
-                                + "Rolling Upgrade Result:\n"
+                                + "Lane Result:\n"
                                 + upResult.get(i).strip()
                                 + "\n";
                     }

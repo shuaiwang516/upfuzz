@@ -274,8 +274,7 @@ public class HBaseDocker extends Docker {
         final int maxAttempts = Math.max(1,
                 Config.getConf().hbaseDaemonRetryTimes);
         final int sleepMillis = 5000;
-        final String rsJpsCheck =
-                "jps -l | grep -q 'org.apache.hadoop.hbase.regionserver.HRegionServer'";
+        final String rsJpsCheck = "jps -l | grep -q 'org.apache.hadoop.hbase.regionserver.HRegionServer'";
         final String rsPortCheck = String.format(
                 "(ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | grep -q ':%d\\b'",
                 Config.getConf().REGIONSERVER_PORT);
@@ -318,7 +317,8 @@ public class HBaseDocker extends Docker {
         } else {
             String jpsOut = lastJps == null ? "" : lastJps.output;
             String portOut = lastPort == null ? "" : lastPort.output;
-            reason = String.format("jpsExit=%s,portExit=%s,jpsOut=%s,portOut=%s",
+            reason = String.format(
+                    "jpsExit=%s,portExit=%s,jpsOut=%s,portOut=%s",
                     lastJps == null ? "NA" : Integer.toString(lastJps.exitCode),
                     lastPort == null ? "NA"
                             : Integer.toString(lastPort.exitCode),
@@ -356,9 +356,11 @@ public class HBaseDocker extends Docker {
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                ValidationResult status = execCommandStructured("status 'simple'");
+                ValidationResult status = execCommandStructured(
+                        "status 'simple'");
                 lastProbe = status;
-                String merged = safe(status.stdout) + "\n" + safe(status.stderr);
+                String merged = safe(status.stdout) + "\n"
+                        + safe(status.stderr);
                 String mergedLower = safeLower(merged);
                 Integer liveServers = extractLiveServerCount(merged);
                 Integer deadServers = extractDeadServerCount(merged);
@@ -426,8 +428,7 @@ public class HBaseDocker extends Docker {
         if (index != 0 || attempt % 3 != 0) {
             return;
         }
-        final String masterJpsCheck =
-                "jps -l | grep -q 'org.apache.hadoop.hbase.master.HMaster'";
+        final String masterJpsCheck = "jps -l | grep -q 'org.apache.hadoop.hbase.master.HMaster'";
         try {
             ProbeCommandResult jps = runContainerProbe(masterJpsCheck);
             if (jps.exitCode == 0) {
@@ -492,8 +493,7 @@ public class HBaseDocker extends Docker {
         if (index == 0) {
             return;
         }
-        final String rsJpsCheck =
-                "jps -l | grep -q 'org.apache.hadoop.hbase.regionserver.HRegionServer'";
+        final String rsJpsCheck = "jps -l | grep -q 'org.apache.hadoop.hbase.regionserver.HRegionServer'";
         try {
             ProbeCommandResult jps = runContainerProbe(rsJpsCheck);
             if (jps.exitCode == 0) {
@@ -534,14 +534,17 @@ public class HBaseDocker extends Docker {
 
     private Boolean areExpectedRegionServersListedInDetailedStatus() {
         try {
-            ValidationResult detailed = execCommandStructured("status 'detailed'");
-            String merged = safe(detailed.stdout) + "\n" + safe(detailed.stderr);
+            ValidationResult detailed = execCommandStructured(
+                    "status 'detailed'");
+            String merged = safe(detailed.stdout) + "\n"
+                    + safe(detailed.stderr);
             String mergedLower = safeLower(merged);
             if (!detailed.isSuccess() || isMasterTransient(mergedLower)) {
                 return Boolean.FALSE;
             }
 
-            String[] expectedHosts = hbaseDockerCluster.getExpectedRegionServerHosts();
+            String[] expectedHosts = hbaseDockerCluster
+                    .getExpectedRegionServerHosts();
             for (String host : expectedHosts) {
                 if (!mergedLower.contains(safeLower(host))) {
                     return Boolean.FALSE;
@@ -558,10 +561,12 @@ public class HBaseDocker extends Docker {
 
     private void bestEffortConfirmRegionServerListed(String regionServerHost) {
         try {
-            ValidationResult status = execCommandStructured("status 'detailed'");
+            ValidationResult status = execCommandStructured(
+                    "status 'detailed'");
             String merged = safe(status.stdout) + "\n" + safe(status.stderr);
             if (status.isSuccess()
-                    && safeLower(merged).contains(safeLower(regionServerHost))) {
+                    && safeLower(merged)
+                            .contains(safeLower(regionServerHost))) {
                 logger.info(String.format(
                         "Master-side detailed status confirms regionserver host [%s] is listed",
                         regionServerHost));
@@ -602,7 +607,8 @@ public class HBaseDocker extends Docker {
     }
 
     private Integer extractLiveServerCount(String text) {
-        Integer value = extractCountByPattern(text, "(\\d+)\\s+region\\s+servers?\\b");
+        Integer value = extractCountByPattern(text,
+                "(\\d+)\\s+region\\s+servers?\\b");
         if (value != null) {
             return value;
         }
@@ -618,7 +624,8 @@ public class HBaseDocker extends Docker {
     }
 
     private Integer extractDeadServerCount(String text) {
-        Integer value = extractCountByPattern(text, "(\\d+)\\s+dead\\s+servers?\\b");
+        Integer value = extractCountByPattern(text,
+                "(\\d+)\\s+dead\\s+servers?\\b");
         if (value != null) {
             return value;
         }
@@ -798,7 +805,8 @@ public class HBaseDocker extends Docker {
                         "prepare upgrade environment " + " to 2.2 for hmaster"
                                 + " ret = " + ret);
 
-                String[] startHMaster = buildHbaseDaemonCommand(version, "start",
+                String[] startHMaster = buildHbaseDaemonCommand(version,
+                        "start",
                         "master");
 
                 Process upgradeTo2_2_start = runInContainer(startHMaster);
@@ -826,7 +834,8 @@ public class HBaseDocker extends Docker {
         } else if (nodeType == NodeType.MASTER) {
             if (index == 0) {
                 // N0: hbase master, zookeeper
-                String[] stopHMaster = buildHbaseDaemonCommand(curVersion, "stop",
+                String[] stopHMaster = buildHbaseDaemonCommand(curVersion,
+                        "stop",
                         "master");
                 int ret = runProcessInContainer(stopHMaster, env);
                 logger.debug("shutdown " + "hmaster" + " ret = " + ret);
