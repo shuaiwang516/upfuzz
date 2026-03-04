@@ -11,7 +11,7 @@
   "STACKED_TESTS_NUM_G2": 1,
   "DROP_TEST_PROB_G2": 0.1,
   "sequenceMutationEpoch": 80,
-  "nodeNum": 2,
+  "nodeNum": 3,
   "faultMaxNum": 0,
   "testSingleVersion": false,
   "testingMode": 0,

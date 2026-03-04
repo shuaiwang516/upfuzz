@@ -40,7 +40,7 @@ Options:
   --testing-mode <N>                 Upfuzz testing mode (default: 5)
   --diff-lane-timeout-sec <sec>      Differential lane timeout for all systems (default: 1200)
   --hbase-daemon-retry-times <N>     Override hbaseDaemonRetryTimes in generated config (HBase only)
-  --node-num <N>                     Override node number
+  --node-num <N>                     Override node number (default for HBase jobs: 3)
   --skip-docker-build                Skip docker image build step
   --skip-build                       Skip './gradlew classes -x test'
   --skip-pull                        Deprecated alias for --skip-docker-build
@@ -353,6 +353,7 @@ case "${SYSTEM}" in
     hbase)
         [[ "${ORIGINAL_VERSION}" == hbase-* ]] || die "Invalid HBase original version: ${ORIGINAL_VERSION}"
         [[ "${UPGRADED_VERSION}" == hbase-* ]] || die "Invalid HBase upgraded version: ${UPGRADED_VERSION}"
+        [[ -n "${NODE_NUM}" ]] || NODE_NUM=3
         ;;
     hdfs)
         [[ "${ORIGINAL_VERSION}" == hadoop-* ]] || die "Invalid HDFS original version: ${ORIGINAL_VERSION}"

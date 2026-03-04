@@ -56,7 +56,7 @@ Options:
   --server-port <port>                   Server port (default: ${SERVER_PORT}, auto-shift if busy)
   --client-port <port>                   Client port (default: ${CLIENT_PORT}, auto-shift if busy)
   --server-start-timeout-sec <N>         Max wait for server port listen before client launch (default: ${SERVER_START_TIMEOUT_SEC})
-  --node-num <N>                         Override node number (default by system: cass=2,hdfs=3,hbase=2)
+  --node-num <N>                         Override node number (default by system: cass=2,hdfs=3,hbase=3)
   --fixed-config-idx <N>                 Force example-testplan config index test<N> (default: random)
   --run-name <name>                      Result folder name (default: auto generated)
   --skip-pre-clean                       Skip pre-run clean.sh
@@ -514,7 +514,7 @@ case "${SYSTEM}" in
     hbase)
         [[ "${ORIGINAL_VERSION}" == hbase-* ]] || die "HBase original version must start with hbase-"
         [[ "${UPGRADED_VERSION}" == hbase-* ]] || die "HBase upgraded version must start with hbase-"
-        [[ -n "${NODE_NUM}" ]] || NODE_NUM=2
+        [[ -n "${NODE_NUM}" ]] || NODE_NUM=3
         ;;
     *)
         die "Unsupported system: ${SYSTEM}"

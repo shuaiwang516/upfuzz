@@ -433,9 +433,7 @@ public class Config {
         }
 
         public String getHBaseZookeeperQuorum() {
-            // For 2-node HBase runs, keep ZK control-plane stable by using
-            // a single-node ensemble on hmaster.
-            if (nodeNum <= 2) {
+            if (nodeNum <= 1) {
                 return "hmaster";
             }
             StringBuilder quorum = new StringBuilder("hmaster");

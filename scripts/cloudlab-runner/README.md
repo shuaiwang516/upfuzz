@@ -110,6 +110,7 @@ scripts/cloudlab-runner/run_cloudlab_job.sh \
 - `--rounds`: number of differential rounds to wait for.
 - `--timeout-sec`: hard timeout.
 - `--hbase-daemon-retry-times`: HBase shell daemon retry attempts for startup-heavy environments.
+- `--node-num`: override node count; for HBase jobs default is 3 (`hmaster,hregion1,hregion2`).
 - `--skip-docker-build`: skip `scripts/docker/build_rolling_image_pair.sh`.
 - `--skip-build`: skip `./gradlew classes -x test`.
 - `--skip-pull`: deprecated alias for `--skip-docker-build`.

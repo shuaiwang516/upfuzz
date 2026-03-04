@@ -233,7 +233,7 @@ Common options:
 | `--testing-mode` | `3` (smoke/example), `5` (rolling-focused) |
 | `--diff-lane-timeout-sec` | differential lane timeout for all systems |
 | `--cassandra-retry-timeout` | cqlsh retry timeout for Cassandra |
-| `--node-num` | override node count (default cass=2,hdfs=3,hbase=2) |
+| `--node-num` | override node count (default cass=2,hdfs=3,hbase=3) |
 | `--run-name` | output directory name |
 | `--server-port` / `--client-port` | base ports (auto-shifted if occupied) |
 | `--use-trace` / `--use-jaccard` / `--use-branch-coverage` | feedback toggles |
