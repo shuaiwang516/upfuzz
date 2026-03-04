@@ -240,6 +240,8 @@ fi
 count_lane_error_reports_since_run() {
     local lane_tag="$1"
     local start_ts="$2"
+    # Build no-space variant for new-style reports (e.g. "Only Old" -> "OnlyOld")
+    local lane_tag_nospace="${lane_tag// /}"
     local total=0
     local line=""
     local dir=""
@@ -254,7 +256,7 @@ count_lane_error_reports_since_run() {
         [[ -d "${dir}" ]] || continue
         while IFS= read -r -d '' line; do
             case "${line}" in
-                "[${lane_tag}] [ERROR LOG]"*)
+                "[${lane_tag}] [ERROR LOG]"*|"[${lane_tag_nospace}] [ERROR LOG]"*)
                     total=$((total + 1))
                     ;;
             esac
