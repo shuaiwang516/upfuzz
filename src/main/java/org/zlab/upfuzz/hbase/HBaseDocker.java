@@ -23,6 +23,9 @@ import org.zlab.upfuzz.utils.Utilities;
 
 public class HBaseDocker extends Docker {
     protected final Logger logger = LogManager.getLogger(getClass());
+    private static final Pattern LEADING_MAJOR_PATTERN = Pattern
+            .compile("^(\\d+)");
+    private static final Pattern ANY_MAJOR_PATTERN = Pattern.compile("(\\d+)");
 
     public enum NodeType {
         ZOOKEEPER, MASTER, REGIONSERVER
@@ -152,19 +155,11 @@ public class HBaseDocker extends Docker {
             javaToolOpts = "JAVA_TOOL_OPTIONS=\"\"";
         }
 
-        String pythonVersion = "python2";
-
-        String[] spStrings = originalVersion.split("-");
-        try {
-            int main_version = Integer
-                    .parseInt(spStrings[spStrings.length - 1].substring(0, 1));
-            if (Config.getConf().debug)
-                logger.debug("[HKLOG] original main version = " + main_version);
-            if (main_version > 3)
-                pythonVersion = "python3";
-        } catch (Exception e) {
-            e.printStackTrace();
+        int originalMajorVersion = extractMajorVersion(originalVersion);
+        if (Config.getConf().debug) {
+            logger.debug("[HKLOG] original main version = " + originalMajorVersion);
         }
+        String pythonVersion = pythonVersionForMajor(originalMajorVersion);
 
         env = new String[] {
                 "HBASE_HOME=\"" + HBaseHome + "\"",
@@ -746,16 +741,8 @@ public class HBaseDocker extends Docker {
         }
         HBaseDaemonPort ^= 1;
 
-        String pythonVersion = "python2";
-        String[] spStrings = upgradedVersion.split("-");
-        try {
-            int main_version = Integer
-                    .parseInt(spStrings[spStrings.length - 1].substring(0, 1));
-            if (main_version >= 3)
-                pythonVersion = "python3";
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        int upgradedMajorVersion = extractMajorVersion(upgradedVersion);
+        String pythonVersion = pythonVersionForMajor(upgradedMajorVersion);
         env = new String[] {
                 "HBASE_HOME=\"" + HBaseHome + "\"",
                 "HBASE_CONF=\"" + HBaseConf + "\"", javaToolOpts,
@@ -767,6 +754,38 @@ public class HBaseDocker extends Docker {
                 "ENABLE_NETWORK_TRACE=" + Config.getConf().useTrace,
                 "NET_TRACE_NODE_ID=" + executorID + "-N" + index };
         setEnvironment();
+    }
+
+    private int extractMajorVersion(String version) {
+        String normalized = version == null ? "" : version.trim();
+        if (normalized.startsWith("hbase-")) {
+            normalized = normalized.substring("hbase-".length());
+        }
+
+        // Snapshot tags are suffix metadata (e.g. 4.0.0-alpha-1-SNAPSHOT).
+        if (normalized.contains("SNAPSHOT")) {
+            normalized = normalized.replace("-SNAPSHOT", "");
+        }
+
+        Matcher leading = LEADING_MAJOR_PATTERN.matcher(normalized);
+        if (leading.find()) {
+            return Integer.parseInt(leading.group(1));
+        }
+
+        // Fallback: first numeric token anywhere in the string.
+        Matcher any = ANY_MAJOR_PATTERN.matcher(normalized);
+        if (any.find()) {
+            return Integer.parseInt(any.group(1));
+        }
+
+        logger.warn(
+                "Cannot parse HBase major version from '{}', defaulting to 2",
+                version);
+        return 2;
+    }
+
+    private String pythonVersionForMajor(int majorVersion) {
+        return majorVersion >= 3 ? "python3" : "python2";
     }
 
     @Override
