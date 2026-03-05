@@ -328,8 +328,8 @@ select_hbase_dist_tar() {
   local version="$1"
   local dir="$2"
   local candidate
-  candidate="$(find "${dir}/hbase-assembly/target" -maxdepth 1 -type f -name "hbase-${version}*-bin.tar.gz" | head -n1)"
-  [[ -n "${candidate}" ]] || die "cannot find built hbase dist tar for ${version}"
+  candidate="${dir}/hbase-assembly/target/hbase-${version}-bin.tar.gz"
+  [[ -f "${candidate}" ]] || die "cannot find built hbase dist tar for ${version}: ${candidate}"
   echo "${candidate}"
 }
 
