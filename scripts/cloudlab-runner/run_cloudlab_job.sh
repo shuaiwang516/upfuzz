@@ -124,7 +124,7 @@ Job Mapping (6 machines):
   1 -> cassandra  apache-cassandra-3.11.19      -> apache-cassandra-4.1.10
   2 -> cassandra  apache-cassandra-4.1.10       -> apache-cassandra-5.0.6
   3 -> hbase      hbase-2.5.13                  -> hbase-2.6.4
-  4 -> hbase      hbase-2.6.4                   -> hbase-3.0.0-beta-1
+  4 -> hbase      hbase-2.6.4                   -> hbase-4.0.0-alpha-1-SNAPSHOT
   5 -> hdfs       hadoop-2.10.2                 -> hadoop-3.3.6
   6 -> hdfs       hadoop-3.3.6                  -> hadoop-3.4.2
 JOBS
@@ -150,7 +150,7 @@ assign_job() {
         4)
             SYSTEM="hbase"
             ORIGINAL_VERSION="hbase-2.6.4"
-            UPGRADED_VERSION="hbase-3.0.0-beta-1"
+            UPGRADED_VERSION="hbase-4.0.0-alpha-1-SNAPSHOT"
             ;;
         5)
             SYSTEM="hdfs"

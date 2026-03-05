@@ -1,6 +1,6 @@
 {
   "originalVersion": "hbase-2.6.4",
-  "upgradedVersion": "hbase-3.0.0-beta-1",
+  "upgradedVersion": "hbase-4.0.0-alpha-1-SNAPSHOT",
   "system": "hbase",
   "depSystem": "hadoop",
   "depVersion": "hadoop-2.10.2",

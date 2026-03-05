@@ -328,7 +328,8 @@ select_hbase_dist_tar() {
   local version="$1"
   local dir="$2"
   local candidate
-  candidate="${dir}/hbase-assembly/target/hbase-${version}-bin.tar.gz"
+  local target_dir="${dir}/hbase-assembly/target"
+  candidate="${target_dir}/hbase-${version}-bin.tar.gz"
   [[ -f "${candidate}" ]] || die "cannot find built hbase dist tar for ${version}: ${candidate}"
   echo "${candidate}"
 }
@@ -362,7 +363,7 @@ build_hbase_version() {
   extract_src_archive "hbase" "${version}"
 
   case "${version}" in
-    hbase-3.*)
+    hbase-3.*|hbase-4.*)
       java_home="${JAVA17}"
       extra_profile=("-Phadoop-3.0")
       ;;
@@ -428,9 +429,15 @@ main() {
 
   if should_run_target "hbase"; then
     log "Building HBase binaries"
-    build_hbase_version "hbase-2.5.13"
-    build_hbase_version "hbase-2.6.4"
-    build_hbase_version "hbase-3.0.0-beta-1"
+    local hbase_versions
+    if [[ -n "${HBASE_VERSIONS:-}" ]]; then
+      read -r -a hbase_versions <<< "${HBASE_VERSIONS}"
+    else
+      hbase_versions=("hbase-2.5.13" "hbase-2.6.4" "hbase-4.0.0-alpha-1-SNAPSHOT")
+    fi
+    for version in "${hbase_versions[@]}"; do
+      build_hbase_version "${version}"
+    done
   fi
 
   log "Requested binary builds complete (TARGETS=${TARGETS:-all})"

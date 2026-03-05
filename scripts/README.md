@@ -31,7 +31,7 @@ Notes:
 For full mode (`--mode full`), all 9 instrumented archives are required:
 - Cassandra: `3.11.19`, `4.1.10`, `5.0.6`
 - HDFS: `2.10.2`, `3.3.6`, `3.4.2`
-- HBase: `2.5.13`, `2.6.4`, `3.0.0-beta-1`
+- HBase: `hbase-2.5.13`, `hbase-2.6.4`, `hbase-4.0.0-alpha-1-SNAPSHOT`
 
 If archives are on another machine, copy them to the new server first.
 Example (run from your local machine):

@@ -144,7 +144,7 @@ scripts/docker/build_rolling_image_pair.sh hdfs hadoop-2.10.2 hadoop-3.3.6
 scripts/docker/build_rolling_image_pair.sh hdfs hadoop-3.3.6 hadoop-3.4.2
 
 scripts/docker/build_rolling_image_pair.sh hbase hbase-2.5.13 hbase-2.6.4
-scripts/docker/build_rolling_image_pair.sh hbase hbase-2.6.4 hbase-3.0.0-beta-1
+scripts/docker/build_rolling_image_pair.sh hbase hbase-2.6.4 hbase-4.0.0-alpha-1-SNAPSHOT
 ```
 
 The HBase flow also prepares/builds dependency image `upfuzz_hdfs:hadoop-2.10.2` automatically if missing.
@@ -208,7 +208,7 @@ scripts/runner/run_rolling_fuzzing.sh --system hdfs --original hadoop-3.3.6 --up
 
 # HBase
 scripts/runner/run_rolling_fuzzing.sh --system hbase --original hbase-2.5.13 --upgraded hbase-2.6.4 --rounds 2
-scripts/runner/run_rolling_fuzzing.sh --system hbase --original hbase-2.6.4 --upgraded hbase-3.0.0-beta-1 --rounds 2
+scripts/runner/run_rolling_fuzzing.sh --system hbase --original hbase-2.6.4 --upgraded hbase-4.0.0-alpha-1-SNAPSHOT --rounds 2
 ```
 
 If a pair is missing `configtests/<old>_<new>`, that run will not be fully usable until metadata is added.

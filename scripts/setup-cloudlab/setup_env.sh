@@ -157,13 +157,13 @@ PREBUILD_REQUIRED=(
     "prebuild/hdfs/hadoop-3.4.2-src-instrumented.tar.gz"
     "prebuild/hbase/hbase-2.5.13-src-instrumented.tar.gz"
     "prebuild/hbase/hbase-2.6.4-src-instrumented.tar.gz"
-    "prebuild/hbase/hbase-3.0.0-beta-1-src-instrumented.tar.gz"
+    "prebuild/hbase/hbase-4.0.0-alpha-1-SNAPSHOT-src-instrumented.tar.gz"
 )
 
 IMAGE_REQUIRED=(
     "upfuzz_cassandra:apache-cassandra-4.1.10_apache-cassandra-5.0.6"
     "upfuzz_hbase:hbase-2.5.13_hbase-2.6.4"
-    "upfuzz_hbase:hbase-2.6.4_hbase-3.0.0-beta-1"
+    "upfuzz_hbase:hbase-2.6.4_hbase-4.0.0-alpha-1-SNAPSHOT"
     "upfuzz_hdfs:hadoop-2.10.2"
     "upfuzz_hdfs:hadoop-2.10.2_hadoop-3.3.6"
     "upfuzz_hdfs:hadoop-3.3.6_hadoop-3.4.2"

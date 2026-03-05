@@ -17,7 +17,7 @@ This directory provides entrypoint scripts to run one rolling-upgrade fuzzing jo
 - `1`: Cassandra `apache-cassandra-3.11.19 -> apache-cassandra-4.1.10`
 - `2`: Cassandra `apache-cassandra-4.1.10 -> apache-cassandra-5.0.6`
 - `3`: HBase `hbase-2.5.13 -> hbase-2.6.4`
-- `4`: HBase `hbase-2.6.4 -> hbase-3.0.0-beta-1`
+- `4`: HBase `hbase-2.6.4 -> hbase-4.0.0-alpha-1-SNAPSHOT`
 - `5`: HDFS `hadoop-2.10.2 -> hadoop-3.3.6`
 - `6`: HDFS `hadoop-3.3.6 -> hadoop-3.4.2`
 
