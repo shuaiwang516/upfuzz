@@ -85,6 +85,8 @@ public class HBaseDockerCluster extends DockerCluster {
         blackListErrorLog.add(
                 "procedure2.ProcedureExecutor: ThreadGroup java.lang.ThreadGroup");
         blackListErrorLog.add(
+                "procedure2.ProcedureExecutor: There are still active thread in group");
+        blackListErrorLog.add(
                 "zookeeper.ClientCnxn");
     }
 
