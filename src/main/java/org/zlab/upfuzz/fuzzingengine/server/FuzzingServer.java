@@ -989,20 +989,33 @@ public class FuzzingServer {
     }
 
     private boolean mutateAndEnqueueExistingTestPlan(TestPlan testPlan) {
+        boolean anyEnqueued = false;
         for (int i = 0; i < Config.getConf().testPlanMutationEpoch; i++) {
             TestPlan mutateTestPlan = null;
             int j = 0;
             for (; j < Config.getConf().testPlanMutationRetry; j++) {
                 mutateTestPlan = SerializationUtils.clone(testPlan);
-                mutateTestPlan.mutate(commandPool, stateClass);
+                boolean mutationSuccess;
+                try {
+                    mutationSuccess = mutateTestPlan.mutate(commandPool,
+                            stateClass);
+                } catch (Exception | AssertionError e) {
+                    logger.error(
+                            "Unexpected error during test plan mutation, skipping attempt",
+                            e);
+                    continue;
+                }
+                if (!mutationSuccess) {
+                    continue;
+                }
                 if (testPlanVerifier(mutateTestPlan.getEvents(),
                         testPlan.nodeNum)) {
                     break;
                 }
             }
-            // Always failed mutating this test plan
+            // This epoch exhausted its retry budget; skip to next epoch
             if (j == Config.getConf().testPlanMutationRetry)
-                return false;
+                continue;
             testID2TestPlan.put(testID, mutateTestPlan);
 
             int configIdx = configGen.generateConfig();
@@ -1011,8 +1024,9 @@ public class FuzzingServer {
             testPlanPackets.add(new TestPlanPacket(
                     Config.getConf().system,
                     testID++, configFileName, mutateTestPlan));
+            anyEnqueued = true;
         }
-        return true;
+        return anyEnqueued;
     }
 
     private boolean generateAndEnqueueTestPlansFromFullStopSeed(

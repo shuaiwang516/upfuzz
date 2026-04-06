@@ -157,7 +157,8 @@ public class HBaseDocker extends Docker {
 
         int originalMajorVersion = extractMajorVersion(originalVersion);
         if (Config.getConf().debug) {
-            logger.debug("[HKLOG] original main version = " + originalMajorVersion);
+            logger.debug(
+                    "[HKLOG] original main version = " + originalMajorVersion);
         }
         String pythonVersion = pythonVersionForMajor(originalMajorVersion);
 

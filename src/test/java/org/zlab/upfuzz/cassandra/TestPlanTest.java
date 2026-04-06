@@ -79,4 +79,71 @@ public class TestPlanTest extends AbstractTest {
             mutateTestPlan.print();
         }
     }
+
+    /**
+     * Stress test: repeatedly mutate the same TestPlan (simulating corpus
+     * re-use). Without the type-4 seed sync fix, this triggers
+     * AssertionError when shellCommandIdxes.size() !=
+     * seed.originalCommandSequence.getSize() after consecutive type-4
+     * mutations.
+     */
+    @Test
+    public void testRepeatedMutationSeedSync() {
+        CassandraCommandPool cassandraCommandPool = new CassandraCommandPool();
+        Config.getConf().system = "cassandra";
+        Seed seed = generateSeed(cassandraCommandPool, CassandraState.class,
+                -1);
+
+        FullStopSeed fullStopSeed = new FullStopSeed(seed, new LinkedList<>());
+
+        TestPlan testPlan = null;
+        for (int i = 0; i < 20; i++) {
+            testPlan = FuzzingServer.generateTestPlan(fullStopSeed);
+            if (testPlan != null)
+                break;
+        }
+
+        assert testPlan != null : "Failed to generate initial test plan";
+
+        int successCount = 0;
+        int failCount = 0;
+
+        // Simulate corpus re-use: mutate, clone result, mutate again
+        for (int round = 0; round < 200; round++) {
+            TestPlan mutateTestPlan = SerializationUtils.clone(testPlan);
+            boolean success = mutateTestPlan.mutate(cassandraCommandPool,
+                    CassandraState.class);
+
+            if (!success) {
+                failCount++;
+                continue;
+            }
+
+            // Verify events and seed stay in sync
+            if (mutateTestPlan.seed != null
+                    && mutateTestPlan.seed.originalCommandSequence != null) {
+                List<Integer> shellIdxes = mutateTestPlan
+                        .getIdxes(mutateTestPlan.getEvents(),
+                                ShellCommand.class);
+                int seedSize = mutateTestPlan.seed.originalCommandSequence
+                        .getSize();
+                assert shellIdxes.size() == seedSize
+                        : "Desync at round " + round
+                                + ": shellCommandIdxes=" + shellIdxes.size()
+                                + " seed=" + seedSize;
+
+                // Verify validationCommands are refreshed
+                assert mutateTestPlan.validationCommands != null
+                        : "validationCommands null at round " + round;
+            }
+
+            // Use mutated plan as the base for next round (corpus re-use)
+            testPlan = mutateTestPlan;
+            successCount++;
+        }
+
+        System.out.println("Repeated mutation test: " + successCount
+                + " successes, " + failCount + " failures out of 200 rounds");
+        assert successCount > 0 : "No mutations succeeded";
+    }
 }

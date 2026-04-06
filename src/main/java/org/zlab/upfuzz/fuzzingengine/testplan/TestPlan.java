@@ -255,9 +255,14 @@ public class TestPlan implements Serializable {
                 i++;
             }
 
-            // Step3: replace the events
+            // Step3: replace events, seed, and validation state atomically
             events = mergedEvents;
-            // No need to update the index, as it will always be reset
+            this.seed = mutateSeed;
+            this.validationCommands = mutateSeed.validationCommandSequence
+                    .getCommandStringList();
+            // Oracle is stale after mutation; will be re-collected on next
+            // execution
+            this.validationReadResultsOracle = new LinkedList<>();
             return true;
         } else if (mutateType == 5) {
             // Mutate event execution interval
