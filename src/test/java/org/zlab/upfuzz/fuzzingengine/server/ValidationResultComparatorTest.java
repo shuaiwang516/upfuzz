@@ -23,6 +23,10 @@ class ValidationResultComparatorTest {
         return new ValidationResult("cmd", 0, stdout, "", "OK");
     }
 
+    static ValidationResult success(String command, String stdout) {
+        return new ValidationResult(command, 0, stdout, "", "OK");
+    }
+
     static ValidationResult failure(String failureClass) {
         return new ValidationResult("cmd", 1, "", "error", failureClass);
     }
@@ -128,5 +132,36 @@ class ValidationResultComparatorTest {
         assertNotNull(report);
         assertFalse(report.contains("[cmd 0]"));
         assertTrue(report.contains("[cmd 1]"));
+    }
+
+    // --- timestamp masking is scoped to stat commands ---
+
+    @Test
+    void statTimestampSecondsSkewSuppressed() {
+        // dfs -stat "%y" produces full YYYY-MM-DD HH:MM:SS timestamps;
+        // small seconds skew should be masked and not reported
+        String cmd = "dfs -stat \"%y\" /path";
+        List<ValidationResult> a = Arrays
+                .asList(success(cmd, "2026-03-04 23:07:32"));
+        List<ValidationResult> b = Arrays
+                .asList(success(cmd, "2026-03-04 23:07:39"));
+        assertNull(ValidationResultComparator.compare(a, b, "Old", "Rolling"));
+    }
+
+    @Test
+    void nonStatHHMMSSContentPreserved() {
+        // For non-timestamp commands (e.g. dfs -cat), HH:MM:SS-like
+        // patterns in file content must NOT be masked — a real corruption
+        // like 12:34:56 vs 12:34:57 should still be reported
+        String cmd = "dfs -cat /file";
+        List<ValidationResult> a = Arrays
+                .asList(success(cmd, "data 12:34:56 end"));
+        List<ValidationResult> b = Arrays
+                .asList(success(cmd, "data 12:34:57 end"));
+        String report = ValidationResultComparator.compare(
+                a, b, "Old", "Rolling");
+        assertNotNull(report,
+                "seconds divergence in non-stat output must be reported");
+        assertTrue(report.contains("PAYLOAD_DIVERGENCE"));
     }
 }

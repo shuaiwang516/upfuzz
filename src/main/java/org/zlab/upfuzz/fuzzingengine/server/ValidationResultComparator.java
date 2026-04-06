@@ -82,8 +82,8 @@ public class ValidationResultComparator {
 
         if (aSuccess && bSuccess) {
             // success/success → compare normalized payload
-            String normalizedA = normalize(a.stdout);
-            String normalizedB = normalize(b.stdout);
+            String normalizedA = normalize(a.stdout, a.command);
+            String normalizedB = normalize(b.stdout, b.command);
             if (normalizedA.equals(normalizedB)) {
                 return null;
             }
@@ -108,12 +108,21 @@ public class ValidationResultComparator {
                 + (bSuccess ? "SUCCESS" : b.failureClass);
     }
 
-    private static String normalize(String payload) {
+    private static boolean isTimestampCommand(String command) {
+        // dfs -stat "%y" returns a full YYYY-MM-DD HH:MM:SS timestamp
+        return command != null && command.contains("-stat");
+    }
+
+    private static String normalize(String payload, String command) {
         if (payload == null)
             return "";
         String s = payload;
         if (Config.getConf().maskTimestamp) {
-            s = Utilities.maskTimeStampHHSS(s);
+            if (isTimestampCommand(command)) {
+                s = Utilities.maskTimeStampHHMMSS(s);
+            } else {
+                s = Utilities.maskTimeStampHHSS(s);
+            }
             s = Utilities.maskTimeStampYYYYMMDD(s);
             s = Utilities.maskRubyObject(s);
             s = Utilities.maskScanTime(s);

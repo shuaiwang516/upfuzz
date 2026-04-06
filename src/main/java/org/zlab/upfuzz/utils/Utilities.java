@@ -822,8 +822,17 @@ public class Utilities {
     }
 
     public static String maskTimeStampHHSS(String str) {
-        // remove HH:SS
+        // remove HH:MM
         String regex = "([0-1]?[0-9]|2[0-3]):[0-5][0-9]";
+        Pattern pattern = Pattern.compile(regex);
+        Matcher matcher = pattern.matcher(str);
+        return matcher.replaceAll("");
+    }
+
+    public static String maskTimeStampHHMMSS(String str) {
+        // remove HH:MM:SS (includes seconds — use only for known timestamp
+        // outputs)
+        String regex = "([0-1]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?";
         Pattern pattern = Pattern.compile(regex);
         Matcher matcher = pattern.matcher(str);
         return matcher.replaceAll("");
