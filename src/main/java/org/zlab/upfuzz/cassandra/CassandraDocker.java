@@ -72,6 +72,10 @@ public class CassandraDocker extends Docker {
         return networkIP;
     }
 
+    public String getNodeRole() {
+        return "node" + index;
+    }
+
     @Override
     public String formatComposeYaml() {
         Map<String, String> formatMap = new HashMap<>();
@@ -161,7 +165,8 @@ public class CassandraDocker extends Docker {
                         && collectFormatCoverage),
                 "ENABLE_NET_COVERAGE=" + Config.getConf().useTrace,
                 "ENABLE_NETWORK_TRACE=" + Config.getConf().useTrace,
-                "NET_TRACE_NODE_ID=" + executorID + "-N" + index
+                "NET_TRACE_NODE_ID=" + executorID + "-N" + index,
+                "NET_TRACE_NODE_ROLE=" + getNodeRole()
         };
 
         setEnvironment();

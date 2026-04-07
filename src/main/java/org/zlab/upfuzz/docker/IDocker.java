@@ -5,10 +5,21 @@ import org.zlab.ocov.tracker.ObjectGraphCoverage;
 import org.zlab.upfuzz.fuzzingengine.LogInfo;
 import org.zlab.upfuzz.fuzzingengine.packet.ValidationResult;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 
 public interface IDocker {
     String getNetworkIP();
+
+    default String getNodeRole() {
+        return "UNKNOWN";
+    }
+
+    /** Additional hostnames that resolve to this node in the cluster network. */
+    default List<String> getHostnameAliases() {
+        return Collections.emptyList();
+    }
 
     int start() throws Exception;
 

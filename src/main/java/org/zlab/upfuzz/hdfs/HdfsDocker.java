@@ -77,6 +77,23 @@ public class HdfsDocker extends Docker {
         return networkIP;
     }
 
+    public String getNodeRole() {
+        if (index == 0)
+            return "namenode";
+        if (index == 1)
+            return "secondarynamenode";
+        return "datanode" + (index - 2);
+    }
+
+    @Override
+    public java.util.List<String> getHostnameAliases() {
+        if (index == 0) {
+            // NameNode is known as "master" in core-site.xml
+            return java.util.Arrays.asList("master");
+        }
+        return java.util.Collections.emptyList();
+    }
+
     public String formatComposeYaml() {
         Map<String, String> formatMap = new HashMap<>();
         formatMap.put("projectRoot", System.getProperty("user.dir"));
@@ -221,7 +238,8 @@ public class HdfsDocker extends Docker {
                         && collectFormatCoverage),
                 "ENABLE_NET_COVERAGE=" + Config.getConf().useTrace,
                 "ENABLE_NETWORK_TRACE=" + Config.getConf().useTrace,
-                "NET_TRACE_NODE_ID=" + executorID + "-N" + index
+                "NET_TRACE_NODE_ID=" + executorID + "-N" + index,
+                "NET_TRACE_NODE_ROLE=" + getNodeRole()
         };
         setEnvironment();
 
@@ -301,7 +319,8 @@ public class HdfsDocker extends Docker {
                 "ENABLE_FORMAT_COVERAGE=false",
                 "ENABLE_NET_COVERAGE=" + Config.getConf().useTrace,
                 "ENABLE_NETWORK_TRACE=" + Config.getConf().useTrace,
-                "NET_TRACE_NODE_ID=" + executorID + "-N" + index
+                "NET_TRACE_NODE_ID=" + executorID + "-N" + index,
+                "NET_TRACE_NODE_ROLE=" + getNodeRole()
         };
         setEnvironment();
     }
@@ -370,7 +389,8 @@ public class HdfsDocker extends Docker {
                 "ENABLE_FORMAT_COVERAGE=false",
                 "ENABLE_NET_COVERAGE=" + Config.getConf().useTrace,
                 "ENABLE_NETWORK_TRACE=" + Config.getConf().useTrace,
-                "NET_TRACE_NODE_ID=" + executorID + "-N" + index };
+                "NET_TRACE_NODE_ID=" + executorID + "-N" + index,
+                "NET_TRACE_NODE_ROLE=" + getNodeRole() };
         setEnvironment();
         String restartCommand = "/usr/bin/supervisorctl restart upfuzz_hdfs:";
         // Seems the env doesn't really matter...

@@ -12,6 +12,7 @@ import org.zlab.net.tracker.Trace;
 import org.zlab.ocov.tracker.ObjectGraphCoverage;
 import org.zlab.upfuzz.docker.DockerCluster;
 import org.zlab.upfuzz.docker.DockerMeta;
+import org.zlab.upfuzz.docker.IDocker;
 import org.zlab.upfuzz.fuzzingengine.AgentServerHandler;
 import org.zlab.upfuzz.fuzzingengine.AgentServerSocket;
 import org.zlab.upfuzz.fuzzingengine.Config;
@@ -27,6 +28,7 @@ import org.zlab.upfuzz.fuzzingengine.testplan.event.upgradeop.HDFSStopSNN;
 import org.zlab.upfuzz.fuzzingengine.testplan.event.upgradeop.PrepareUpgrade;
 import org.zlab.upfuzz.fuzzingengine.testplan.event.upgradeop.UpgradeOp;
 import org.zlab.upfuzz.fuzzingengine.trace.DisruptiveEventCategory;
+import org.zlab.upfuzz.fuzzingengine.trace.TopologyNormalizer;
 import org.zlab.upfuzz.fuzzingengine.trace.TraceWindow;
 import org.zlab.upfuzz.hdfs.HdfsDockerCluster;
 import org.zlab.upfuzz.utils.Pair;
@@ -64,6 +66,7 @@ public abstract class Executor implements IExecutor {
     private String currentOpenReason = "";
 
     public DockerCluster dockerCluster;
+    public TopologyNormalizer topologyNormalizer;
 
     /**
      * key: String -> agentId value: Codecoverage for this agent
@@ -166,7 +169,15 @@ public abstract class Executor implements IExecutor {
     public Trace[] snapshotTraceAllNodes() {
         if (!Config.getConf().useTrace)
             return new Trace[nodeNum];
-        return dockerCluster.collectTraceAllNodes();
+        Trace[] traces = dockerCluster.collectTraceAllNodes();
+        if (topologyNormalizer != null) {
+            for (int i = 0; i < traces.length; i++) {
+                if (traces[i] != null) {
+                    traces[i] = topologyNormalizer.normalizeTrace(traces[i]);
+                }
+            }
+        }
+        return traces;
     }
 
     /** Clear traces on ALL nodes without collecting. */
@@ -395,6 +406,31 @@ public abstract class Executor implements IExecutor {
             for (int i = 0; i < nodeNum; i++) {
                 currentRawUpgradedNodeSet.add(i);
             }
+        }
+
+        // Build topology normalizer for IP/hostname -> role resolution
+        if (Config.getConf().useTrace) {
+            topologyNormalizer = new TopologyNormalizer();
+            for (int i = 0; i < nodeNum; i++) {
+                IDocker docker = dockerCluster.getDocker(i);
+                String ip = docker.getNetworkIP();
+                String role = docker.getNodeRole();
+                topologyNormalizer.registerMapping(ip, role);
+                // Register Docker service hostname (DC3N<index>)
+                topologyNormalizer.registerMapping("DC3N" + i, role);
+                // Register container name as hostname fallback
+                if (docker instanceof DockerMeta) {
+                    String cname = ((DockerMeta) docker).containerName;
+                    topologyNormalizer.registerMapping(cname, role);
+                }
+                // Register system-specific hostname aliases
+                for (String alias : docker.getHostnameAliases()) {
+                    topologyNormalizer.registerMapping(alias, role);
+                }
+            }
+            logger.info(
+                    "[TRACE] Topology normalizer initialized with {} mappings",
+                    topologyNormalizer.mappingCount());
         }
 
         // Clear startup chatter

@@ -87,6 +87,12 @@ public class HBaseDocker extends Docker {
         return networkIP;
     }
 
+    public String getNodeRole() {
+        if (index == 0)
+            return "master";
+        return "regionserver" + (index - 1);
+    }
+
     @Override
     public String formatComposeYaml() {
         Map<String, String> formatMap = new HashMap<>();
@@ -183,7 +189,8 @@ public class HBaseDocker extends Docker {
                         && collectFormatCoverage),
                 "ENABLE_NET_COVERAGE=" + Config.getConf().useTrace,
                 "ENABLE_NETWORK_TRACE=" + Config.getConf().useTrace,
-                "NET_TRACE_NODE_ID=" + executorID + "-N" + index
+                "NET_TRACE_NODE_ID=" + executorID + "-N" + index,
+                "NET_TRACE_NODE_ROLE=" + getNodeRole()
         };
 
         setEnvironment();
@@ -764,7 +771,8 @@ public class HBaseDocker extends Docker {
                 "ENABLE_FORMAT_COVERAGE=false",
                 "ENABLE_NET_COVERAGE=" + Config.getConf().useTrace,
                 "ENABLE_NETWORK_TRACE=" + Config.getConf().useTrace,
-                "NET_TRACE_NODE_ID=" + executorID + "-N" + index };
+                "NET_TRACE_NODE_ID=" + executorID + "-N" + index,
+                "NET_TRACE_NODE_ROLE=" + getNodeRole() };
         setEnvironment();
     }
 
