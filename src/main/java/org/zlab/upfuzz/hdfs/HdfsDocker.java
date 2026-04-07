@@ -28,6 +28,10 @@ public class HdfsDocker extends Docker {
     int hdfsDaemonPort = 11116;
     public int direction;
 
+    // Un-swapped versions for Docker image/container naming
+    String configOriginalVersion;
+    String configUpgradedVersion;
+
     public String namenodeIP;
 
     public HdfsDocker(HdfsDockerCluster dockerCluster, int index) {
@@ -53,14 +57,19 @@ public class HdfsDocker extends Docker {
         executorID = dockerCluster.executorID;
         serviceName = "DC3N" + index; // Remember update the service name
 
+        // Store un-swapped config versions for image/container naming
+        configOriginalVersion = Config.getConf().originalVersion;
+        configUpgradedVersion = Config.getConf().upgradedVersion;
+
         collectFormatCoverage = dockerCluster.collectFormatCoverage;
         configPath = dockerCluster.configpath;
         if (Config.getConf().testSingleVersion)
-            containerName = "hdfs-" + originalVersion + "_" + executorID + "_N"
-                    + index;
+            containerName = "hdfs-" + configOriginalVersion + "_"
+                    + executorID + "_N" + index;
         else
-            containerName = "hdfs-" + originalVersion + "_" + upgradedVersion +
-                    "_" + executorID + "_N" + index;
+            containerName = "hdfs-" + configOriginalVersion + "_"
+                    + configUpgradedVersion + "_" + executorID + "_N"
+                    + index;
     }
 
     @Override
@@ -74,6 +83,8 @@ public class HdfsDocker extends Docker {
         formatMap.put("system", system);
         formatMap.put("originalVersion", originalVersion);
         formatMap.put("upgradedVersion", upgradedVersion);
+        formatMap.put("configOriginalVersion", configOriginalVersion);
+        formatMap.put("configUpgradedVersion", configUpgradedVersion);
         formatMap.put("index", Integer.toString(index));
         formatMap.put("networkName", networkName);
         formatMap.put("JAVA_TOOL_OPTIONS", javaToolOpts);
@@ -137,19 +148,48 @@ public class HdfsDocker extends Docker {
 
     @Override
     public Trace collectTrace() throws Exception {
+        Trace daemonTrace = null;
+        Trace serverTrace = null;
+
+        // 1. Collect from daemon command channel (SEND events from Client.call)
         if (shell instanceof HDFSShellDaemon) {
             try {
-                return ((HDFSShellDaemon) shell).collectTrace();
+                daemonTrace = ((HDFSShellDaemon) shell).collectTrace();
+                logger.debug(
+                        "[HKLOG] HDFS daemon trace collected on node {}, size={}",
+                        index,
+                        daemonTrace != null ? daemonTrace.size() : 0);
             } catch (Exception e) {
                 logger.warn(
-                        "HDFS shell trace collection failed on node {}: {}. "
-                                + "Fallback to generic trace daemon channel.",
+                        "HDFS shell trace collection failed on node {}: {}",
                         index, e.toString());
             }
         }
-        logger.warn("HDFS shell daemon not ready for collectTrace on node {}. "
-                + "Fallback to generic trace daemon channel.", index);
-        return super.collectTrace();
+
+        // 2. Collect from runtime socket (RECV events from NameNode/DataNode)
+        try {
+            serverTrace = super.collectTrace();
+            logger.debug(
+                    "[HKLOG] HDFS server trace collected on node {}, size={}",
+                    index,
+                    serverTrace != null ? serverTrace.size() : 0);
+        } catch (Exception e) {
+            logger.debug(
+                    "HDFS server trace collection failed on node {} (may be "
+                            + "expected if server Runtime not initialized): {}",
+                    index, e.toString());
+        }
+
+        // 3. Merge both traces by timestamp
+        if (daemonTrace != null && serverTrace != null
+                && daemonTrace.size() > 0 && serverTrace.size() > 0) {
+            return Trace.mergeBasedOnTimestamp(daemonTrace, serverTrace);
+        }
+        if (daemonTrace != null && daemonTrace.size() > 0)
+            return daemonTrace;
+        if (serverTrace != null && serverTrace.size() > 0)
+            return serverTrace;
+        return new Trace();
     }
 
     @Override
@@ -374,8 +414,8 @@ public class HdfsDocker extends Docker {
 
     static String template = ""
             + "    DC3N${index}:\n"
-            + "        container_name: hdfs-${originalVersion}_${upgradedVersion}_${executorID}_N${index}\n"
-            + "        image: upfuzz_${system}:${originalVersion}_${upgradedVersion}\n"
+            + "        container_name: hdfs-${configOriginalVersion}_${configUpgradedVersion}_${executorID}_N${index}\n"
+            + "        image: upfuzz_${system}:${configOriginalVersion}_${configUpgradedVersion}\n"
             + "        command: bash -c 'sleep 0 && /usr/bin/supervisord'\n"
             + "        networks:\n"
             + "            ${networkName}:\n"

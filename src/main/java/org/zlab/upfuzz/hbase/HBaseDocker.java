@@ -37,6 +37,10 @@ public class HBaseDocker extends Docker {
     public int direction;
     private final HBaseDockerCluster hbaseDockerCluster;
 
+    // Un-swapped versions for Docker image/container naming
+    String configOriginalVersion;
+    String configUpgradedVersion;
+
     public String seedIP;
 
     public HBaseDocker(HBaseDockerCluster dockerCluster, int index) {
@@ -62,15 +66,20 @@ public class HBaseDocker extends Docker {
         executorID = dockerCluster.executorID;
         serviceName = "DC3N" + index;
 
+        // Store un-swapped config versions for image/container naming
+        configOriginalVersion = Config.getConf().originalVersion;
+        configUpgradedVersion = Config.getConf().upgradedVersion;
+
         collectFormatCoverage = dockerCluster.collectFormatCoverage;
         configPath = dockerCluster.configpath;
 
         if (Config.getConf().testSingleVersion)
-            containerName = "hbase-" + originalVersion + "_" + executorID
-                    + "_N" + index;
+            containerName = "hbase-" + configOriginalVersion + "_"
+                    + executorID + "_N" + index;
         else
-            containerName = "hbase-" + originalVersion + "_"
-                    + upgradedVersion + "_" + executorID + "_N" + index;
+            containerName = "hbase-" + configOriginalVersion + "_"
+                    + configUpgradedVersion + "_" + executorID + "_N"
+                    + index;
     }
 
     @Override
@@ -82,12 +91,14 @@ public class HBaseDocker extends Docker {
     public String formatComposeYaml() {
         Map<String, String> formatMap = new HashMap<>();
 
-        containerName = "hbase-" + originalVersion + "_" + upgradedVersion +
-                "_" + executorID + "_N" + index;
+        containerName = "hbase-" + configOriginalVersion + "_"
+                + configUpgradedVersion + "_" + executorID + "_N" + index;
         formatMap.put("projectRoot", System.getProperty("user.dir"));
         formatMap.put("system", system);
         formatMap.put("originalVersion", originalVersion);
         formatMap.put("upgradedVersion", upgradedVersion);
+        formatMap.put("configOriginalVersion", configOriginalVersion);
+        formatMap.put("configUpgradedVersion", configUpgradedVersion);
         formatMap.put("index", Integer.toString(index));
         formatMap.put("networkName", networkName);
         formatMap.put("JAVA_TOOL_OPTIONS", javaToolOpts);
@@ -941,8 +952,8 @@ public class HBaseDocker extends Docker {
 
     static String template = "" // TODO
             + "    ${serviceName}:\n"
-            + "        container_name: hbase-${originalVersion}_${upgradedVersion}_${executorID}_N${index}\n"
-            + "        image: upfuzz_${system}:${originalVersion}_${upgradedVersion}\n"
+            + "        container_name: hbase-${configOriginalVersion}_${configUpgradedVersion}_${executorID}_N${index}\n"
+            + "        image: upfuzz_${system}:${configOriginalVersion}_${configUpgradedVersion}\n"
             + "        command: bash -c 'sleep 0 && source /usr/bin/set_env && /usr/bin/supervisord'\n"
             + "        networks:\n"
             + "            ${networkName}:\n"

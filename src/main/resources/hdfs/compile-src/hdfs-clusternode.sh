@@ -8,8 +8,8 @@ if [ $# == 1 ]; then
 else NAMENODE="$IP"; fi
 
 # Change it to the target systems
-ORI_VERSION=hadoop-3.3.6
-UPG_VERSION=hadoop-3.4.2
+ORI_VERSION=hadoop-2.10.2
+UPG_VERSION=hadoop-3.3.6
 
 # create necessary dirs (some version of cassandra cannot create these)
 mkdir -p /var/log/hdfs

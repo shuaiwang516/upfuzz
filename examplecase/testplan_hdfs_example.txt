@@ -1,0 +1,21 @@
+[Command] Execute {dfs -mkdir /scLvsqCf}
+[Command] Execute {dfs -touchz /scLvsqCf/jcmBLyKNGCqCIgTYjvJl.txt}
+[Command] Execute {dfs -put  -p   /tmp/upfuzz/hdfs/scLvsqCf/ztueRXhrYx /scLvsqCf/}
+[PrepareUpgrade] flush/create image before starting upgrade
+[Command] Execute {dfsadmin -setSpaceQuota 3 -storageType SSD /scLvsqCf/}
+[HDFS_Specific] Shutdown secondary namenode
+[Command] Execute {dfsadmin -setSpaceQuota 91 -storageType DISK /scLvsqCf/ztueRXhrYx}
+[UpgradeOp] Upgrade Node[0]
+[UpgradeOp] Upgrade Node[1]
+[UpgradeOp] Upgrade Node[2]
+[Command] Execute {dfs -mv /scLvsqCf/ztueRXhrYx/bb /scLvsqCf/ztueRXhrYx}
+[Command] Execute {dfs -mv /scLvsqCf/ztueRXhrYx /scLvsqCf/}
+[UpgradeOp] Upgrade Node[3]
+[Command] Execute {dfs -mkdir /scLvsqCf/ztueRXhrYx/JxWGVdajE/qDrSi}
+[Fault] NodeFailure: Node[2]
+[Command] Execute {dfs -put  -p   /tmp/upfuzz/hdfs/scLvsqCf/ztueRXhrYx /scLvsqCf//JxWGVdajE}
+[Command] Execute {dfs -mv /scLvsqCf/ztueRXhrYx/JxWGVdajE/qDrSi /scLvsqCf/}
+[Command] Execute {dfs -mv /scLvsqCf/JxWGVdajE/ztueRXhrYx /scLvsqCf/}
+[FaultRecover] NodeFailure Recover: Node[2]
+[Command] Execute {dfs -put     /tmp/upfuzz/hdfs/scLvsqCf/ztueRXhrYx /scLvsqCf//JxWGVdajE}
+[FaultRecover] NodeFailure Recover: Node[2]
