@@ -19,8 +19,7 @@ import org.apache.logging.log4j.Logger;
 import org.jacoco.core.data.ExecutionDataStore;
 import org.zlab.net.tracker.Trace;
 import org.zlab.net.tracker.TraceEntry;
-import org.zlab.net.tracker.diff.DiffComputeEditDistance;
-import org.zlab.net.tracker.diff.DiffComputeJaccardSimilarity;
+import org.zlab.net.tracker.diff.DiffComputeCompressedOrder;
 import org.zlab.net.tracker.diff.DiffComputeMessageTriDiff;
 import org.zlab.net.tracker.diff.DiffComputeSemanticSimilarity;
 import org.zlab.upfuzz.fuzzingengine.trace.TraceWindow;
@@ -1806,10 +1805,10 @@ public class FuzzingServer {
                                 + entryIdx + "] " + entry);
                         entryIdx++;
                     }
-                    // Print hashcode sequence for Jaccard analysis
+                    // Print canonical key sequence
                     logger.info("[" + clusterType
-                            + "] hashcode sequence: "
-                            + serializedTraces[i].getHashCodes());
+                            + "] canonical keys: "
+                            + serializedTraces[i].getCanonicalKeysForDiff());
                 }
             }
         }
@@ -1853,36 +1852,20 @@ public class FuzzingServer {
             }
         }
 
-        // --- Legacy Jaccard similarity (log-only, not used for admission) ---
-        if (Config.getConf().useJaccardSimilarity
-                && Config.getConf().useTrace) {
-            double[] jaccardSim = DiffComputeJaccardSimilarity.compute(
+        // --- Compressed order debug signal (Phase 6) ---
+        if (Config.getConf().useCompressedOrderDebug
+                && Config.getConf().useTrace
+                && serializedTraces[0] != null
+                && serializedTraces[1] != null
+                && serializedTraces[2] != null) {
+            double[] orderSim = DiffComputeCompressedOrder.compute(
                     serializedTraces[0], serializedTraces[1],
                     serializedTraces[2]);
-            logger.info("[TRACE-LEGACY] Jaccard Similarity[0] = "
-                    + jaccardSim[0]
-                    + ", Jaccard Similarity[1] = " + jaccardSim[1]);
-        }
-
-        // --- Legacy message identity tri-diff (log-only) ---
-        if (Config.getConf().useMessageIdentityDiff
-                && Config.getConf().useTrace) {
-            DiffComputeMessageTriDiff.MessageTriDiffResult triDiff = DiffComputeMessageTriDiff
-                    .compute(serializedTraces[0], serializedTraces[1],
-                            serializedTraces[2]);
-            logger.info("[TRACE-LEGACY] Message identity tri-diff: "
-                    + triDiff.toSummaryString());
-            if (Config.getConf().printTrace) {
-                logger.info(triDiff.toDetailedString(20));
-            }
-        }
-
-        // --- Legacy edit distance (log-only) ---
-        if (Config.getConf().useEditDistance && Config.getConf().useTrace) {
-            int[] diff = DiffComputeEditDistance.compute(serializedTraces[0],
-                    serializedTraces[1], serializedTraces[2]);
-            logger.info("[TRACE-LEGACY] Diff[0] = " + diff[0]
-                    + ", Diff[1] = " + diff[1]);
+            logger.info(
+                    "[TRACE-DEBUG] Compressed order: OO-RO={}, RO-NN={}, OO-NN={}",
+                    String.format("%.2f", orderSim[0]),
+                    String.format("%.2f", orderSim[1]),
+                    String.format("%.2f", orderSim[2]));
         }
 
         // === Canonical trace scoring (Phase 4) ===
@@ -3728,8 +3711,8 @@ public class FuzzingServer {
         // Differential Execution Info
         if (Config.getConf().differentialExecution) {
             System.out.format("|%30s|%30s|%30s|\n",
-                    "Jaccard threshold : "
-                            + Config.getConf().jaccardSimilarityThreshold,
+                    "trace : "
+                            + Config.getConf().useTrace,
                     "testPlanCorpus : " + testPlanCorpus.queue.size(),
                     "rollingSeedCorpus : " + rollingSeedCorpus.size());
             System.out.format("|%30s|%30s|%30s|\n",

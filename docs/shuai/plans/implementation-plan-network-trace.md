@@ -264,21 +264,10 @@ traceEntries.add(new TraceEntry(id, name, enrichedHashcode, changedMessage,
         System.currentTimeMillis(), recentExecPathHash, recentExecPath, payloadType));
 ```
 
-### Step 3.2: Verify getHashCodes() uses the enriched hashcode
+### Step 3.2: ~~Verify getHashCodes() uses the enriched hashcode~~ [SUPERSEDED]
 
-**Repo: ssg-runtime**
-**File:** `src/main/java/org/zlab/net/tracker/Trace.java` (lines 112-118)
-
-No change needed — `getHashCodes()` already uses `entry.hashcode`, which will now be the enriched value:
-```java
-public List<String> getHashCodes() {
-    List<String> hashCodes = new LinkedList<>();
-    for (TraceEntry entry : traceEntries) {
-        hashCodes.add(String.valueOf(entry.hashcode));  // Uses enriched hashcode
-    }
-    return hashCodes;
-}
-```
+**[SUPERSEDED]** `getHashCodes()` and `DiffComputeJaccardSimilarity` have been removed.
+Current comparison uses `Trace.getCanonicalMultiset()` with `DiffComputeSemanticSimilarity`.
 
 ### Step 3.3: Impact on Jaccard similarity
 
@@ -343,11 +332,9 @@ private double minJaccardSim1 = 1.0;  // Rolling vs New-New
 After the existing Jaccard similarity logging, add:
 
 ```java
-if (Config.getConf().useJaccardSimilarity) {
-    double[] diff = DiffComputeJaccardSimilarity.compute(
-            serializedTraces[0], serializedTraces[1], serializedTraces[2]);
-    logger.info("Jaccard Similarity[0] = " + diff[0]
-            + ", Jaccard Similarity[1] = " + diff[1]);
+// [SUPERSEDED] Legacy Jaccard removed; see FuzzingServer canonical scoring block (Phase 4).
+if (Config.getConf().useCanonicalTraceSimilarity) {
+    // Windowed canonical multiset Jaccard + tri-diff now gates corpus admission.
 
     // NEW: Feed divergence into corpus
     boolean newDivergence = false;
@@ -470,23 +457,7 @@ public void attachPostExecPath(int[] postPath) {
 **Repo: ssg-runtime**
 **File:** `src/main/java/org/zlab/net/tracker/Trace.java`
 
-Update `getHashCodes()` to incorporate postExecPathHash for RECV entries:
-
-```java
-public List<String> getHashCodes() {
-    List<String> hashCodes = new LinkedList<>();
-    for (TraceEntry entry : traceEntries) {
-        if (entry.postExecPathHash != 0) {
-            // RECV entry with USE data — include it
-            int combined = java.util.Objects.hash(entry.hashcode, entry.postExecPathHash);
-            hashCodes.add(String.valueOf(combined));
-        } else {
-            hashCodes.add(String.valueOf(entry.hashcode));
-        }
-    }
-    return hashCodes;
-}
-```
+**[SUPERSEDED]** `getHashCodes()` has been removed. Current comparison uses `Trace.getCanonicalMultiset()` with `DiffComputeSemanticSimilarity`.
 
 ### Step 5.5: Instrument receiver handlers — Cassandra 3.11.17
 
@@ -562,7 +533,7 @@ Phase 5 (USE tracking)  ──────────────────�
 | File | Phase | Change |
 |------|-------|--------|
 | `src/main/java/org/zlab/net/tracker/Trace.java:32` | 3 | Enrich hashcode with DEF + changedMessage |
-| `src/main/java/org/zlab/net/tracker/Trace.java:112-118` | 5 | Update `getHashCodes()` to include USE |
+| `src/main/java/org/zlab/net/tracker/Trace.java` | 5 | **[SUPERSEDED]** `getHashCodes()` removed; USE tracking via canonical keys |
 | `src/main/java/org/zlab/net/tracker/Trace.java` (new method) | 5 | Add `attachPostExecPath()` |
 | `src/main/java/org/zlab/net/tracker/TraceEntry.java` | 5 | Add `postExecPath`, `postExecPathHash` fields |
 | `src/main/java/org/zlab/net/tracker/Runtime.java` | 5 | Add `recordPost()` method |

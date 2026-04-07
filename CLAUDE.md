@@ -91,8 +91,8 @@ Key parameters in config JSON files:
 - `serverPort`, `clientPort`: Ports for server-client communication
 - `differentialExecution`: true to run 3 clusters (Old-Old, Rolling, New-New) and compare
 - `useTrace`: true to collect network traces from instrumented nodes
-- `useJaccardSimilarity`: true to compute Jaccard similarity between cluster traces
-- `useEditDistance`: alternative similarity metric (edit distance)
+- `useCanonicalTraceSimilarity`: true to use windowed canonical trace similarity for corpus admission
+- `useCompressedOrderDebug`: true to log compressed per-flow order similarity (debug only, no admission effect)
 - `useFormatCoverage`: true to enable format coverage tracking
 - `printTrace`: true to print full trace entries in server log (verbose)
 
@@ -154,14 +154,18 @@ Runtime library packaged as `ssgFatJar.jar`. Contains two independent tracking s
 
 - **`org.zlab.net.tracker.Trace`** — Trace data structure
   - `record()`: Creates TraceEntry with verb name, execution path hash, changedMessage flag, timestamp
-  - `getHashCodes()`: Extracts hashcodes for Jaccard similarity computation
+  - `getCanonicalMultiset()`: Returns multiset of canonical message keys (for similarity)
+  - `getCanonicalKeysForDiff()`: Returns ordered canonical keys (for tri-diff)
   - `mergeBasedOnTimestamp()`: Merges traces from multiple nodes by timestamp
   - `examineChangedMessage()`: Uses ObjectGraphTraverser to check if payload contains modified classes
 
-- **`org.zlab.net.tracker.diff.DiffComputeJaccardSimilarity`** — Similarity metric
-  - Uses Apache DataSketches for approximate Jaccard similarity
-  - Operates on 2-grams of trace hashcodes
-  - `compute(trace0, trace1, trace2)` returns `double[2]`: Sim[0]=Old vs Rolling, Sim[1]=Rolling vs New
+- **`org.zlab.net.tracker.diff.DiffComputeSemanticSimilarity`** — Canonical similarity metric
+  - Weighted multiset Jaccard on canonical message keys
+  - `compute(trace0, trace1, trace2)` returns `double[3]`: [OO-RO, RO-NN, OO-NN]
+
+- **`org.zlab.net.tracker.diff.DiffComputeCompressedOrder`** — Debug order metric
+  - Per-flow compressed sequence similarity via normalized LCS
+  - `compute(trace0, trace1, trace2)` returns `double[3]`: [OO-RO, RO-NN, OO-NN]
 
 Build:
 ```bash
@@ -265,14 +269,20 @@ TraceEntry {
 
 ### Current Similarity Computation
 
+The primary comparison uses windowed canonical trace similarity (Phase 4):
 ```
-TraceEntry.hashcode (= name.hashCode())
-  → Trace.getHashCodes() → List<String> of hashcodes
-  → generateNGrams(hashcodes, 2) → 2-grams: ["h1-h2", "h2-h3", ...]
-  → DataSketches Jaccard similarity → double ∈ [0,1]
+TraceEntry.canonicalMessageKey() → "direction|srcRole->dstRole|semanticType"
+  → Trace.getCanonicalMultiset() → Map<String, Integer>
+  → DiffComputeSemanticSimilarity.compute() → weighted multiset Jaccard
+  → Per-window + aggregate scoring gates corpus admission
 ```
 
-Only message verb ordering affects similarity. DEF, changedMessage, and USE are ignored.
+An optional debug metric (Phase 6, off by default):
+```
+TraceEntry flow partitioning by canonicalEndpointKey()
+  → DiffComputeCompressedOrder → per-flow LCS similarity
+  → [TRACE-DEBUG] log only, no admission effect
+```
 
 ### Verified Experiment Results (Cassandra 3.11.17 → 4.1.4)
 

@@ -113,7 +113,7 @@ USE = the execution path from `consumer.accept(message)` (or equivalent) until t
 | `ssg-runtime/.../net/tracker/Runtime.java` | Ring buffer, hit(), snapshot(), record() |
 | `ssg-runtime/.../net/tracker/Trace.java` | TraceEntry creation, examineChangedMessage() |
 | `ssg-runtime/.../net/tracker/TraceEntry.java` | Data structure: id, methodName, recentExecPath, recentExecPathHash, changedMessage, timestamp |
-| `ssg-runtime/.../net/tracker/diff/DiffComputeJaccardSimilarity.java` | Computes similarity on Trace.getHashCodes() |
+| `ssg-runtime/.../net/tracker/diff/DiffComputeSemanticSimilarity.java` | **[SUPERSEDED]** Computes canonical multiset Jaccard (replaced legacy Jaccard/getHashCodes) |
 
 ---
 
@@ -215,7 +215,7 @@ public int hashCode() {
 }
 ```
 
-This means the Jaccard similarity computation automatically incorporates USE, since it operates on `Trace.getHashCodes()` which calls `TraceEntry.hashCode()`.
+**[SUPERSEDED]** Legacy `Trace.getHashCodes()` and `DiffComputeJaccardSimilarity` have been removed. Current comparison uses canonical message keys via `DiffComputeSemanticSimilarity`.
 
 ---
 

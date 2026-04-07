@@ -48,8 +48,8 @@ The multi-queue corpus (`InterestingTestsCorpus.java`) uses a weighted random se
 | `upfuzz/.../FuzzingServer.java:1445-1521` | `updateStatus(TestPlanDiffFeedbackPacket)` — computes similarity, currently dead-end |
 | `upfuzz/.../FuzzingServer.java:1530-1710` | `updateStatus(StackedFeedbackPacket)` — feeds coverage into corpus |
 | `upfuzz/.../InterestingTestsCorpus.java` | Multi-queue corpus with 6 priority tiers and addSeed/getPacket methods |
-| `upfuzz/.../Config.java:316-326` | `useTrace`, `differentialExecution`, `useJaccardSimilarity` flags |
-| `ssg-runtime/.../diff/DiffComputeJaccardSimilarity.java` | Computes Jaccard using Apache DataSketches on 2-grams of trace hash codes |
+| `upfuzz/.../Config.java` | `useTrace`, `differentialExecution`, `useCanonicalTraceSimilarity` flags |
+| `ssg-runtime/.../diff/DiffComputeSemanticSimilarity.java` | **[SUPERSEDED]** Computes canonical multiset Jaccard (replaced legacy `DiffComputeJaccardSimilarity`) |
 
 ---
 
@@ -106,9 +106,9 @@ private double minJaccardSim1 = 1.0;  // Rolling vs New-New
 After the similarity computation at line 1512-1519, add logic to feed the result into the corpus:
 
 ```java
-if (Config.getConf().useJaccardSimilarity) {
-    double[] diff = DiffComputeJaccardSimilarity.compute(...);
-    logger.info("Jaccard Similarity[0] = " + diff[0] + ", Jaccard Similarity[1] = " + diff[1]);
+// [SUPERSEDED] Legacy Jaccard removed; now uses canonical windowed similarity.
+if (Config.getConf().useCanonicalTraceSimilarity) {
+    // See FuzzingServer canonical scoring block (Phase 4) for current implementation.
 
     // NEW: Check if this test produced more divergent network behavior
     boolean newNetworkDivergence = false;

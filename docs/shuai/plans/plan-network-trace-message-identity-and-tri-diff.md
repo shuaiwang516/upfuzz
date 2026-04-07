@@ -18,9 +18,8 @@ So we cannot reliably answer your target diff questions like:
 
 ### 2.1 Similarity currently ignores message content
 
-- `Trace.getHashCodes()` uses only `entry.hashcode + "_" + entry.recentExecPathHash` (`ssg-runtime-shuai/src/main/java/org/zlab/net/tracker/Trace.java:172`).
-- `entry.hashcode` is method-name hash only (`TraceEntry` constructor input) (`ssg-runtime-shuai/src/main/java/org/zlab/net/tracker/TraceEntry.java:15`).
-- Jaccard uses these hashcodes (+ 2-grams) (`ssg-runtime-shuai/src/main/java/org/zlab/net/tracker/diff/DiffComputeJaccardSimilarity.java:25`).
+- **[SUPERSEDED]** Legacy `Trace.getHashCodes()` and `DiffComputeJaccardSimilarity` have been removed.
+- Current comparison uses `Trace.getCanonicalMultiset()` with `DiffComputeSemanticSimilarity` (canonical message keys).
 
 Result: two events with different real messages can still look identical if method + path hash are similar.
 
@@ -169,7 +168,7 @@ Persist tri-diff report into failure/result directory for later analysis.
 Deliverables:
 
 - unit tests capturing current behavior (for regression safety),
-- config flag to toggle new diff (`useMessageIdentityDiff`).
+- config flag to toggle new diff (**[SUPERSEDED]** `useMessageIdentityDiff` removed; replaced by `useCanonicalMessageIdentityDiff`).
 
 Files:
 

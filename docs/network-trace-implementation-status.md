@@ -171,8 +171,8 @@ public static void hit(int id) {
 | Docker Collection | `upfuzz/.../Docker.java:72-87` | Connects to port 62000 to collect traces from nodes |
 | Executor Integration | `upfuzz/.../Executor.java:140-146` | `updateTrace()` collects traces from all cluster nodes |
 | Timestamp Merging | `ssg-runtime/.../Trace.java` | `mergeBasedOnTimestamp()` combines traces from multiple nodes |
-| Jaccard Similarity | `ssg-runtime/.../diff/DiffComputeJaccardSimilarity.java` | Computes similarity using n-grams (N=2) |
-| Edit Distance | `ssg-runtime/.../diff/DiffComputeEditDistance.java` | Computes Levenshtein distance between traces |
+| Canonical Similarity | `ssg-runtime/.../diff/DiffComputeSemanticSimilarity.java` | Weighted multiset Jaccard on canonical message keys |
+| Compressed Order | `ssg-runtime/.../diff/DiffComputeCompressedOrder.java` | Per-flow LCS similarity (debug metric) |
 
 #### What's Missing
 
@@ -189,9 +189,9 @@ public static void hit(int id) {
 
 | Component | Location | Description |
 |-----------|----------|-------------|
-| Similarity Computation | `FuzzingServer.java:1504-1520` | Computes Jaccard/EditDistance between 3 cluster traces |
-| Logging | `FuzzingServer.java:1518-1519` | Logs similarity values to console |
-| Config Flags | `Config.java:319-326` | `useTrace`, `useJaccardSimilarity`, `useEditDistance` flags |
+| Canonical Similarity | `FuzzingServer.java` | Windowed canonical multiset Jaccard + tri-diff gating corpus admission |
+| Logging | `FuzzingServer.java` | `[TRACE]` per-window + aggregate similarity; `[TRACE-DEBUG]` compressed order |
+| Config Flags | `Config.java` | `useTrace`, `useCanonicalTraceSimilarity`, `useCompressedOrderDebug` flags |
 
 #### What's Missing (CRITICAL)
 
@@ -233,8 +233,8 @@ All trace-related options in `Config.java`:
 public boolean useTrace = false;              // Master switch for trace collection
 public boolean differentialExecution = false; // Enable 3-cluster differential testing
 public boolean printTrace = false;            // Debug: print trace entries
-public boolean useEditDistance = false;       // Use edit distance metric
-public boolean useJaccardSimilarity = true;   // Use Jaccard similarity metric
+public boolean useCanonicalTraceSimilarity = true;  // Windowed canonical trace similarity
+public boolean useCompressedOrderDebug = false;     // Debug: per-flow order similarity
 ```
 
 **Note:** All disabled by default.
@@ -251,8 +251,8 @@ public boolean useJaccardSimilarity = true;   // Use Jaccard similarity metric
 | `src/main/java/org/zlab/net/tracker/Trace.java` | Trace storage, changed message detection |
 | `src/main/java/org/zlab/net/tracker/TraceEntry.java` | Single trace entry data structure |
 | `src/main/java/org/zlab/net/tracker/ObjectGraphTraverser.java` | Object type extraction via reflection |
-| `src/main/java/org/zlab/net/tracker/diff/DiffComputeJaccardSimilarity.java` | Jaccard similarity computation |
-| `src/main/java/org/zlab/net/tracker/diff/DiffComputeEditDistance.java` | Edit distance computation |
+| `src/main/java/org/zlab/net/tracker/diff/DiffComputeSemanticSimilarity.java` | Canonical multiset Jaccard similarity |
+| `src/main/java/org/zlab/net/tracker/diff/DiffComputeCompressedOrder.java` | Per-flow compressed order similarity (debug) |
 
 ### vasco (Static Analysis & Instrumentation)
 

@@ -294,11 +294,12 @@ From actual differential execution with 3 iterations:
 |-----------|------|-----------|
 | Ring buffer (DEF) | `ssg-runtime/.../net/tracker/Runtime.java` | `hit()`:69-74, `snapshot()`:77-86 |
 | Message recording | `ssg-runtime/.../net/tracker/Runtime.java` | `record()`:102-113 |
-| Trace data structure | `ssg-runtime/.../net/tracker/Trace.java` | `record()`:20-40, `getHashCodes()`:112-118 |
-| Trace entry | `ssg-runtime/.../net/tracker/TraceEntry.java` | Fields: id, methodName, hashcode, changedMessage, recentExecPathHash |
-| Changed message detection | `ssg-runtime/.../net/tracker/Trace.java` | `examineChangedMessage()`:42-48, 81-90 |
-| Jaccard similarity | `ssg-runtime/.../net/tracker/diff/DiffComputeJaccardSimilarity.java` | `compute()`:19-38, 2-grams:61-76 |
-| Similarity computation trigger | `upfuzz/.../FuzzingServer.java` | `updateStatus(TestPlanDiffFeedbackPacket)`:1445-1521 |
+| Trace data structure | `ssg-runtime/.../net/tracker/Trace.java` | `record()`, `getCanonicalMultiset()`, `getCanonicalKeysForDiff()` |
+| Trace entry | `ssg-runtime/.../net/tracker/TraceEntry.java` | Fields: id, methodName, eventType, nodeRole, peerRole, messageType, canonicalMessageKey() |
+| Changed message detection | `ssg-runtime/.../net/tracker/Trace.java` | `examineChangedMessage()` |
+| Canonical similarity | `ssg-runtime/.../net/tracker/diff/DiffComputeSemanticSimilarity.java` | Weighted multiset Jaccard on canonical keys |
+| Compressed order (debug) | `ssg-runtime/.../net/tracker/diff/DiffComputeCompressedOrder.java` | Per-flow LCS similarity |
+| Similarity computation trigger | `upfuzz/.../FuzzingServer.java` | Windowed canonical scoring + tri-diff |
 | Corpus (feedback not connected) | `upfuzz/.../InterestingTestsCorpus.java` | 6-tier queue, `addSeed()` |
 | Vasco boundary branches | `allBoundaryBranchLocations.json` | Output of vasco static analysis |
 | dinv-monitor branch instrumenter | `dinv-monitor/.../InstBoundaryBranchPoint.java` | `recurProcess()`:76-113 |

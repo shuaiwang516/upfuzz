@@ -143,6 +143,11 @@ public abstract class Executor implements IExecutor {
         return dockerCluster.getFormatCoverage(formatInfoFolder);
     }
 
+    /**
+     * @deprecated Use {@link #clearTraceAllNodes()} for trace reset.
+     *             This method is only for format-coverage reset.
+     */
+    @Deprecated
     public void clearFormatCoverage() {
         dockerCluster.clearFormatCoverage();
     }

@@ -260,8 +260,8 @@ Used `cass_diff_3.11.17_4.1.4.json`:
   "useTrace": true,
   "differentialExecution": true,
   "printTrace": true,
-  "useJaccardSimilarity": true,
-  "useEditDistance": false,
+  "useCanonicalTraceSimilarity": true,
+  "useCompressedOrderDebug": false,
   "debug": false,
   "drain": true,
   "cassandraEnableTimeoutCheck": true,
@@ -274,7 +274,7 @@ Key settings:
 - `testingMode: 3` — uses example test plan packets
 - `differentialExecution: true` — runs 3 clusters (Old-Old, Rolling, New-New)
 - `useTrace: true` — enables network trace collection
-- `useJaccardSimilarity: true` — computes Jaccard similarity between traces
+- `useCanonicalTraceSimilarity: true` — windowed canonical trace similarity for corpus admission
 - `nodeNum: 2` — 2-node clusters
 
 ### 4b. Required Docker images

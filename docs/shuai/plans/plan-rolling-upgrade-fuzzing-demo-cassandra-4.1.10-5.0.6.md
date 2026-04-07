@@ -90,8 +90,8 @@ cat > cass_demo_4_1_10_to_5_0_6_diff_mode3.json <<'JSON'
 
   "useTrace" : true,
   "printTrace" : false,
-  "useJaccardSimilarity" : true,
-  "jaccardSimilarityThreshold" : 0.3,
+  "useCanonicalTraceSimilarity" : true,
+  "useCompressedOrderDebug" : false,
   "useBranchCoverage" : true,
   "enableLogCheck" : true,
 
@@ -248,7 +248,7 @@ For every pair config:
 "testingMode": 3,
 "differentialExecution": true,
 "useTrace": true,
-"useJaccardSimilarity": true,
+"useCanonicalTraceSimilarity": true,
 "useBranchCoverage": true,
 "enableLogCheck": true
 ```

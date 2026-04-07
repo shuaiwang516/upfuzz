@@ -16,7 +16,7 @@ TESTING_MODE=3
 USE_DIFF=true
 USE_TRACE=true
 PRINT_TRACE=false
-USE_JACCARD=true
+USE_COMPRESSED_ORDER_DEBUG=false
 USE_BRANCH_COVERAGE=true
 ENABLE_LOG_CHECK=true
 REQUIRE_TRACE_SIGNAL=false
@@ -49,7 +49,7 @@ Options:
   --hbase-daemon-retry-times <N>         HBase shell daemon retry attempts (default: ${HBASE_DAEMON_RETRY_TIMES})
   --use-trace <true|false>               Enable network trace collection (default: ${USE_TRACE})
   --print-trace <true|false>             Print detailed trace entries in server log (default: ${PRINT_TRACE})
-  --use-jaccard <true|false>             Enable Jaccard similarity (default: ${USE_JACCARD})
+  --use-compressed-order-debug <true|false>  Enable compressed order debug signal (default: ${USE_COMPRESSED_ORDER_DEBUG})
   --use-branch-coverage <true|false>     Enable branch coverage signals (default: ${USE_BRANCH_COVERAGE})
   --enable-log-check <true|false>        Enable error-log oracle (default: ${ENABLE_LOG_CHECK})
   --require-trace-signal                 Fail if trace signal is missing when --use-trace=true
@@ -229,13 +229,13 @@ write_config_json() {
     local diff_json
     local trace_json
     local print_trace_json
-    local jaccard_json
+    local compressed_order_json
     local branch_json
     local logcheck_json
     diff_json="$(bool_json "${USE_DIFF}")"
     trace_json="$(bool_json "${USE_TRACE}")"
     print_trace_json="$(bool_json "${PRINT_TRACE}")"
-    jaccard_json="$(bool_json "${USE_JACCARD}")"
+    compressed_order_json="$(bool_json "${USE_COMPRESSED_ORDER_DEBUG}")"
     branch_json="$(bool_json "${USE_BRANCH_COVERAGE}")"
     logcheck_json="$(bool_json "${ENABLE_LOG_CHECK}")"
 
@@ -262,8 +262,7 @@ write_config_json() {
   "differentialExecution" : ${diff_json},
   "useTrace" : ${trace_json},
   "printTrace" : ${print_trace_json},
-  "useJaccardSimilarity" : ${jaccard_json},
-  "jaccardSimilarityThreshold" : 0.3,
+  "useCompressedOrderDebug" : ${compressed_order_json},
   "useBranchCoverage" : ${branch_json},
   "enableLogCheck" : ${logcheck_json},
   "useFormatCoverage" : false,
@@ -310,8 +309,7 @@ JSON
   "differentialExecution" : ${diff_json},
   "useTrace" : ${trace_json},
   "printTrace" : ${print_trace_json},
-  "useJaccardSimilarity" : ${jaccard_json},
-  "jaccardSimilarityThreshold" : 0.3,
+  "useCompressedOrderDebug" : ${compressed_order_json},
   "useBranchCoverage" : ${branch_json},
   "enableLogCheck" : ${logcheck_json},
   "useFormatCoverage" : false,
@@ -353,8 +351,7 @@ JSON
   "differentialExecution" : ${diff_json},
   "useTrace" : ${trace_json},
   "printTrace" : ${print_trace_json},
-  "useJaccardSimilarity" : ${jaccard_json},
-  "jaccardSimilarityThreshold" : 0.3,
+  "useCompressedOrderDebug" : ${compressed_order_json},
   "useBranchCoverage" : ${branch_json},
   "enableLogCheck" : ${logcheck_json},
   "useFormatCoverage" : false,
@@ -442,8 +439,8 @@ while [[ $# -gt 0 ]]; do
             PRINT_TRACE="$2"
             shift 2
             ;;
-        --use-jaccard)
-            USE_JACCARD="$2"
+        --use-compressed-order-debug)
+            USE_COMPRESSED_ORDER_DEBUG="$2"
             shift 2
             ;;
         --use-branch-coverage)
@@ -596,7 +593,7 @@ DIFF_LANE_TIMEOUT_SEC=${DIFF_LANE_TIMEOUT_SEC}
 HBASE_DAEMON_RETRY_TIMES=${HBASE_DAEMON_RETRY_TIMES}
 USE_TRACE=${USE_TRACE}
 PRINT_TRACE=${PRINT_TRACE}
-USE_JACCARD=${USE_JACCARD}
+USE_COMPRESSED_ORDER_DEBUG=${USE_COMPRESSED_ORDER_DEBUG}
 USE_BRANCH_COVERAGE=${USE_BRANCH_COVERAGE}
 ENABLE_LOG_CHECK=${ENABLE_LOG_CHECK}
 SERVER_PORT=${SERVER_PORT}
