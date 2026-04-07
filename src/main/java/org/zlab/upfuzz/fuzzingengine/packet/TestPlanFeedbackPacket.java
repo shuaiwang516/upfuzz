@@ -4,6 +4,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.zlab.net.tracker.Trace;
 import org.zlab.upfuzz.fuzzingengine.FeedBack;
+import org.zlab.upfuzz.fuzzingengine.trace.WindowedTrace;
 
 import java.io.DataInputStream;
 import java.io.Serializable;
@@ -11,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class TestPlanFeedbackPacket extends Packet implements Serializable {
+    private static final long serialVersionUID = 20260406L;
     static Logger logger = LogManager.getLogger(TestPlanFeedbackPacket.class);
 
     public enum LaneStatus {
@@ -45,6 +47,9 @@ public class TestPlanFeedbackPacket extends Packet implements Serializable {
     public FeedBack[] feedBacks;
 
     public Trace[] trace;
+
+    // Windowed trace for stage-aware comparison
+    public WindowedTrace windowedTrace;
 
     // Validation read results for cross-cluster comparison
     public List<String> validationReadResults = new ArrayList<>();

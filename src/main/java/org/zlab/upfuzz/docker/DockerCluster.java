@@ -291,6 +291,25 @@ public abstract class DockerCluster implements IDockerCluster {
         return coverageMap;
     }
 
+    public void clearTraceAllNodes() {
+        for (int i = 0; i < dockers.length; i++) {
+            try {
+                dockers[i].clearTrace();
+            } catch (Exception e) {
+                logger.warn("clearTrace failed on node {}: {}", i,
+                        e.toString());
+            }
+        }
+    }
+
+    public Trace[] collectTraceAllNodes() {
+        Trace[] traces = new Trace[dockers.length];
+        for (int i = 0; i < dockers.length; i++) {
+            traces[i] = collectTrace(i);
+        }
+        return traces;
+    }
+
     public void clearFormatCoverage() {
         assert dockers.length > 0;
         for (int i = 0; i < dockers.length; i++) {

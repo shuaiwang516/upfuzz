@@ -12,6 +12,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jacoco.core.data.ExecutionDataStore;
 import org.zlab.upfuzz.fuzzingengine.packet.*;
+import org.zlab.upfuzz.fuzzingengine.trace.TraceWindow;
+import org.zlab.upfuzz.fuzzingengine.trace.WindowedTrace;
 import org.zlab.upfuzz.utils.Utilities;
 import org.zlab.upfuzz.fuzzingengine.executor.Executor;
 
@@ -248,7 +250,17 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
 
         // Collect network traces
         if (Config.getConf().useTrace) {
-            executor.updateTrace();
+            // Build WindowedTrace from executor's collected windows
+            WindowedTrace wt = new WindowedTrace();
+            for (TraceWindow w : executor.getTraceWindows()) {
+                wt.addWindow(w);
+            }
+            testPlanFeedbackPacket.windowedTrace = wt;
+
+            // Rebuild legacy flat trace from collected windows
+            // (cannot use updateTrace() because runtime buffers were already
+            // snapshot-cleared during windowed collection)
+            executor.rebuildLegacyTraceFromWindows();
             testPlanFeedbackPacket.trace = executor.trace;
         }
 

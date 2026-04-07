@@ -172,6 +172,10 @@ public class HDFSShellDaemon extends ShellDaemon {
         return "UNKNOWN";
     }
 
+    public void clearTrace() throws Exception {
+        execute("cleartrace");
+    }
+
     public Trace collectTrace() throws Exception {
         HdfsPacket cp = execute("collecttrace");
         if (cp == null) {

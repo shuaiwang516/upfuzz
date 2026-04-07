@@ -116,6 +116,26 @@ public class HdfsDocker extends Docker {
     }
 
     @Override
+    public void clearTrace() throws Exception {
+        // Clear daemon-channel trace
+        if (shell instanceof HDFSShellDaemon) {
+            try {
+                ((HDFSShellDaemon) shell).clearTrace();
+            } catch (Exception e) {
+                logger.warn("HDFS shell clearTrace failed on node {}: {}",
+                        index, e.toString());
+            }
+        }
+        // Also clear server-side trace (port 62000)
+        try {
+            super.clearTrace();
+        } catch (Exception e) {
+            logger.warn("HDFS server clearTrace failed on node {}: {}",
+                    index, e.toString());
+        }
+    }
+
+    @Override
     public Trace collectTrace() throws Exception {
         if (shell instanceof HDFSShellDaemon) {
             try {

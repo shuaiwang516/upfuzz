@@ -26,6 +26,8 @@ import org.zlab.upfuzz.fuzzingengine.testplan.event.upgradeop.FinalizeUpgrade;
 import org.zlab.upfuzz.fuzzingengine.testplan.event.upgradeop.HDFSStopSNN;
 import org.zlab.upfuzz.fuzzingengine.testplan.event.upgradeop.PrepareUpgrade;
 import org.zlab.upfuzz.fuzzingengine.testplan.event.upgradeop.UpgradeOp;
+import org.zlab.upfuzz.fuzzingengine.trace.DisruptiveEventCategory;
+import org.zlab.upfuzz.fuzzingengine.trace.TraceWindow;
 import org.zlab.upfuzz.hdfs.HdfsDockerCluster;
 import org.zlab.upfuzz.utils.Pair;
 
@@ -49,6 +51,17 @@ public abstract class Executor implements IExecutor {
 
     // Test plan trace
     public Trace[] trace;
+
+    // Windowed trace state
+    private List<TraceWindow> traceWindows = new ArrayList<>();
+    private int windowOrdinal = 0;
+    private boolean windowOpen = false;
+    private String currentComparisonStageId = "PRE_UPGRADE";
+    private TraceWindow.StageKind currentStageKind = TraceWindow.StageKind.PRE_UPGRADE;
+    private Set<Integer> currentNormalizedTransitionNodeSet = new HashSet<>();
+    private Set<Integer> currentRawUpgradedNodeSet = new HashSet<>();
+    private int stageCounter = 0;
+    private String currentOpenReason = "";
 
     public DockerCluster dockerCluster;
 
@@ -147,6 +160,123 @@ public abstract class Executor implements IExecutor {
         for (int i = 0; i < nodeNum; i++) {
             trace[i].append(collectTrace(i));
         }
+    }
+
+    /** Collect traces from ALL nodes (snapshot-and-clear). Returns Trace[nodeNum]. */
+    public Trace[] snapshotTraceAllNodes() {
+        if (!Config.getConf().useTrace)
+            return new Trace[nodeNum];
+        return dockerCluster.collectTraceAllNodes();
+    }
+
+    /** Clear traces on ALL nodes without collecting. */
+    public void clearTraceAllNodes() {
+        if (!Config.getConf().useTrace)
+            return;
+        dockerCluster.clearTraceAllNodes();
+    }
+
+    /** Get the windowed trace collected during the last execute() call. */
+    public List<TraceWindow> getTraceWindows() {
+        return traceWindows;
+    }
+
+    /**
+     * Rebuild the legacy flat trace[] from collected windows.
+     * This should be used instead of updateTrace() after windowed execute(),
+     * because the runtime buffers have already been snapshot-cleared.
+     */
+    public void rebuildLegacyTraceFromWindows() {
+        if (!Config.getConf().useTrace)
+            return;
+        for (int i = 0; i < nodeNum; i++) {
+            trace[i] = new Trace();
+        }
+        for (TraceWindow window : traceWindows) {
+            for (int i = 0; i < nodeNum; i++) {
+                if (window.nodeTraces != null && i < window.nodeTraces.length
+                        && window.nodeTraces[i] != null) {
+                    trace[i].append(window.nodeTraces[i]);
+                }
+            }
+        }
+    }
+
+    // --- Windowed trace helpers ---
+
+    private String computeVersionLayout() {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < nodeNum; i++) {
+            if (i > 0)
+                sb.append("-");
+            sb.append(currentRawUpgradedNodeSet.contains(i) ? "new" : "old");
+        }
+        return sb.toString();
+    }
+
+    private void openWindow(Event triggerEvent) {
+        windowOpen = true;
+        currentOpenReason = currentComparisonStageId + "_WORKLOAD";
+        logger.info("[TRACE] Window {} opened: stage={}, reason={}",
+                windowOrdinal, currentComparisonStageId, currentOpenReason);
+    }
+
+    private void closeWindow(Trace[] nodeTraces, String closeReason,
+            int closeEventIdx) {
+        boolean comparable = (currentStageKind != TraceWindow.StageKind.LIFECYCLE_ONLY
+                && currentStageKind != TraceWindow.StageKind.FAULT_RECOVERY);
+
+        TraceWindow window = new TraceWindow(
+                windowOrdinal,
+                currentOpenReason,
+                closeReason,
+                closeEventIdx,
+                currentComparisonStageId,
+                currentStageKind,
+                new HashSet<>(currentNormalizedTransitionNodeSet),
+                new HashSet<>(currentRawUpgradedNodeSet),
+                computeVersionLayout(),
+                comparable,
+                nodeTraces);
+
+        traceWindows.add(window);
+        logger.info("[TRACE] Window {} closed: {}", windowOrdinal, window);
+        windowOrdinal++;
+        windowOpen = false;
+    }
+
+    private void updateStageAfterAdvancingEvent(Event event) {
+        stageCounter++;
+        int affectedNode = getAffectedNodeIndex(event);
+
+        currentNormalizedTransitionNodeSet.add(affectedNode);
+
+        if (event instanceof UpgradeOp) {
+            currentRawUpgradedNodeSet.add(affectedNode);
+        }
+        // For RestartFailure in baselines, rawUpgradedNodeSet stays unchanged
+        // (node restarts same version), but normalizedTransitionNodeSet
+        // advances
+
+        boolean isFinal = (currentNormalizedTransitionNodeSet
+                .size() >= nodeNum);
+        currentComparisonStageId = isFinal ? "POST_FINAL_STAGE"
+                : ("POST_STAGE_" + stageCounter);
+        currentStageKind = isFinal
+                ? TraceWindow.StageKind.POST_FINAL_STAGE
+                : TraceWindow.StageKind.POST_STAGE;
+    }
+
+    private int getAffectedNodeIndex(Event event) {
+        if (event instanceof UpgradeOp)
+            return ((UpgradeOp) event).nodeIndex;
+        if (event instanceof RestartFailure)
+            return ((RestartFailure) event).nodeIndex;
+        if (event instanceof DowngradeOp)
+            return ((DowngradeOp) event).nodeIndex;
+        if (event instanceof NodeFailure)
+            return ((NodeFailure) event).nodeIndex;
+        return -1;
     }
 
     public boolean fullStopUpgrade() {
@@ -248,14 +378,36 @@ public abstract class Executor implements IExecutor {
     }
 
     public boolean execute(TestPlan testPlan) {
-        // Any exception happen during this process, we will report it.
         boolean status = true;
+
+        // Initialize windowed trace state
+        traceWindows.clear();
+        windowOrdinal = 0;
+        windowOpen = false;
+        stageCounter = 0;
+        currentComparisonStageId = "PRE_UPGRADE";
+        currentStageKind = TraceWindow.StageKind.PRE_UPGRADE;
+        currentNormalizedTransitionNodeSet = new HashSet<>();
+        currentRawUpgradedNodeSet = new HashSet<>();
+
+        // direction=1 means new-new lane: all nodes start upgraded
+        if (direction == 1) {
+            for (int i = 0; i < nodeNum; i++) {
+                currentRawUpgradedNodeSet.add(i);
+            }
+        }
+
+        // Clear startup chatter
+        if (Config.getConf().useTrace) {
+            clearTraceAllNodes();
+            logger.info("[TRACE] Cleared startup traces on all nodes");
+        }
+
         for (eventIdx = 0; eventIdx < testPlan.getEvents().size(); eventIdx++) {
             Event event = testPlan.getEvents().get(eventIdx);
             logger.info(String.format("\nhandle %s\n", event));
 
             if (eventIdx != 0) {
-                // sleep for the interval
                 try {
                     if (Config.getConf().debug)
                         logger.info(
@@ -270,144 +422,222 @@ public abstract class Executor implements IExecutor {
                     }
                 }
             }
+
             long initTime = System.currentTimeMillis();
-            if (event instanceof Fault) {
-                if (!handleFault((Fault) event)) {
-                    // If fault injection fails, keep executing
-                    logger.error(
-                            String.format("Cannot Inject {%s} here", event));
-                    status = false;
-                    if (Config.getConf().debug) {
-                        testPlanExecutionLog += "(Fault) injection failed in "
-                                + (System.currentTimeMillis() - initTime)
-                                + " ms, ";
-                    }
-                    break;
-                }
-                if (Config.getConf().debug) {
-                    testPlanExecutionLog += "(Fault) injection in "
-                            + (System.currentTimeMillis() - initTime) + " ms, ";
-                }
-            } else if (event instanceof FaultRecover) {
-                if (!handleFaultRecover((FaultRecover) event)) {
-                    logger.error("FaultRecover execution problem");
-                    status = false;
-                    if (Config.getConf().debug) {
-                        testPlanExecutionLog += "(Recover) recovery failed in "
-                                + (System.currentTimeMillis() - initTime)
-                                + " ms, ";
-                    }
-                    break;
-                }
-                if (Config.getConf().debug) {
-                    testPlanExecutionLog += "(Recover) fault recover in "
-                            + (System.currentTimeMillis() - initTime) + " ms, ";
-                }
-            } else if (event instanceof ShellCommand) {
-                if (!handleCommand((ShellCommand) event)) {
-                    logger.error("ShellCommand problem");
-                    status = false;
-                    if (Config.getConf().debug) {
-                        testPlanExecutionLog += "(Shell) execution failed in "
-                                + (System.currentTimeMillis() - initTime)
-                                + " ms, ";
-                    }
-                    break;
-                }
-                if (Config.getConf().debug) {
-                    testPlanExecutionLog += "(Shell) command execution in "
-                            + (System.currentTimeMillis() - initTime) + " ms, ";
-                }
-            } else if (event instanceof UpgradeOp) {
-                UpgradeOp upgradeOp = (UpgradeOp) event;
-                int nodeIdx = upgradeOp.nodeIndex;
-                oriCoverage[nodeIdx] = collectSingleNodeCoverage(nodeIdx,
-                        "original");
-                updateTrace(nodeIdx);
+            DisruptiveEventCategory category = DisruptiveEventCategory
+                    .classify(event);
 
-                if (Config.getConf().debug) {
-                    testPlanExecutionLog += "(Upgrade) Single node coverage collection in "
-                            + (System.currentTimeMillis() - initTime) + " ms, ";
+            if (category.isDisruptive()) {
+                // === CLOSE current window (if open) ===
+                if (windowOpen && Config.getConf().useTrace) {
+                    Trace[] snapshot = snapshotTraceAllNodes();
+                    closeWindow(snapshot, event.toString(), eventIdx);
                 }
-                initTime = System.currentTimeMillis();
 
-                if (!handleUpgradeOp((UpgradeOp) event)) {
-                    logger.error("UpgradeOp problem");
+                // === EXECUTE the disruptive event ===
+                boolean eventOk = executeDisruptiveEvent(event, initTime);
+                if (!eventOk) {
                     status = false;
-                    if (Config.getConf().debug) {
-                        testPlanExecutionLog += "(Upgrade) operation failed in "
-                                + (System.currentTimeMillis() - initTime)
-                                + " ms, ";
-                    }
                     break;
                 }
-                if (Config.getConf().debug) {
-                    testPlanExecutionLog += "(Upgrade) operation in "
-                            + (System.currentTimeMillis() - initTime) + " ms, ";
+
+                // === POST-BOUNDARY: clear traces, update stage ===
+                if (Config.getConf().useTrace) {
+                    clearTraceAllNodes();
                 }
-            } else if (event instanceof DowngradeOp) {
-                if (!handleDowngradeOp((DowngradeOp) event)) {
-                    logger.error("DowngradeOp problem");
+
+                if (category.advancesComparisonStage()) {
+                    updateStageAfterAdvancingEvent(event);
+                } else if (category == DisruptiveEventCategory.LIFECYCLE_ONLY) {
+                    // Mark next window as lifecycle-only (non-comparable)
+                    currentStageKind = TraceWindow.StageKind.LIFECYCLE_ONLY;
+                } else if (category == DisruptiveEventCategory.FAULT
+                        || category == DisruptiveEventCategory.FAULT_RECOVERY) {
+                    // Mark next window as fault-affected (non-comparable)
+                    currentStageKind = TraceWindow.StageKind.FAULT_RECOVERY;
+                }
+                // Window stays closed until next workload event
+            } else {
+                // === WORKLOAD event ===
+                if (!windowOpen && Config.getConf().useTrace) {
+                    openWindow(event);
+                }
+
+                boolean eventOk = executeWorkloadEvent(event, initTime);
+                if (!eventOk) {
                     status = false;
-                    if (Config.getConf().debug) {
-                        testPlanExecutionLog += "(Downgrade) operation failed in "
-                                + (System.currentTimeMillis() - initTime)
-                                + " ms, ";
-                    }
                     break;
-                }
-                if (Config.getConf().debug) {
-                    testPlanExecutionLog += "(Downgrade) operation in "
-                            + (System.currentTimeMillis() - initTime) + " ms, ";
-                }
-            } else if (event instanceof PrepareUpgrade) {
-                if (!handlePrepareUpgrade((PrepareUpgrade) event)) {
-                    logger.error("UpgradeOp problem");
-                    status = false;
-                    if (Config.getConf().debug) {
-                        testPlanExecutionLog += "(Prepare) upgrade failed in "
-                                + (System.currentTimeMillis() - initTime)
-                                + " ms, ";
-                    }
-                    break;
-                }
-                if (Config.getConf().debug) {
-                    testPlanExecutionLog += "(Prepare) upgrade event in "
-                            + (System.currentTimeMillis() - initTime) + " ms, ";
-                }
-            } else if (event instanceof HDFSStopSNN) {
-                if (!handleHDFSStopSNN((HDFSStopSNN) event)) {
-                    logger.error("HDFS stop SNN problem");
-                    status = false;
-                    if (Config.getConf().debug) {
-                        testPlanExecutionLog += "(HDFSStopSNN) event failed in "
-                                + (System.currentTimeMillis() - initTime)
-                                + " ms, ";
-                    }
-                    break;
-                }
-                if (Config.getConf().debug) {
-                    testPlanExecutionLog += "(HDFSStopSNN) HDFS event in "
-                            + (System.currentTimeMillis() - initTime) + " ms, ";
-                }
-            } else if (event instanceof FinalizeUpgrade) {
-                if (!handleFinalizeUpgrade((FinalizeUpgrade) event)) {
-                    logger.error("FinalizeUpgrade problem");
-                    status = false;
-                    if (Config.getConf().debug) {
-                        testPlanExecutionLog += "(Finalize) upgrade failed in "
-                                + (System.currentTimeMillis() - initTime)
-                                + " ms, ";
-                    }
-                    break;
-                }
-                if (Config.getConf().debug) {
-                    testPlanExecutionLog += "(Finalize) upgrade event in "
-                            + (System.currentTimeMillis() - initTime) + " ms, ";
                 }
             }
         }
+
+        // === CLOSE final window ===
+        if (windowOpen && Config.getConf().useTrace) {
+            Trace[] snapshot = snapshotTraceAllNodes();
+            closeWindow(snapshot, "ROUND_END", -1);
+        }
+
         return status;
+    }
+
+    private boolean executeDisruptiveEvent(Event event, long initTime) {
+        if (event instanceof UpgradeOp) {
+            UpgradeOp upgradeOp = (UpgradeOp) event;
+            int nodeIdx = upgradeOp.nodeIndex;
+            oriCoverage[nodeIdx] = collectSingleNodeCoverage(nodeIdx,
+                    "original");
+
+            if (Config.getConf().debug) {
+                testPlanExecutionLog += "(Upgrade) Single node coverage collection in "
+                        + (System.currentTimeMillis() - initTime) + " ms, ";
+            }
+            initTime = System.currentTimeMillis();
+
+            if (!handleUpgradeOp(upgradeOp)) {
+                logger.error("UpgradeOp problem");
+                if (Config.getConf().debug) {
+                    testPlanExecutionLog += "(Upgrade) operation failed in "
+                            + (System.currentTimeMillis() - initTime)
+                            + " ms, ";
+                }
+                return false;
+            }
+            if (Config.getConf().debug) {
+                testPlanExecutionLog += "(Upgrade) operation in "
+                        + (System.currentTimeMillis() - initTime) + " ms, ";
+            }
+            return true;
+        } else if (event instanceof RestartFailure) {
+            boolean ok = dockerCluster
+                    .restartContainer(((RestartFailure) event).nodeIndex);
+            if (!ok) {
+                logger.error("RestartFailure execution problem");
+                if (Config.getConf().debug) {
+                    testPlanExecutionLog += "(Fault) injection failed in "
+                            + (System.currentTimeMillis() - initTime)
+                            + " ms, ";
+                }
+                return false;
+            }
+            if (Config.getConf().debug) {
+                testPlanExecutionLog += "(Fault) injection in "
+                        + (System.currentTimeMillis() - initTime) + " ms, ";
+            }
+            return true;
+        } else if (event instanceof Fault) {
+            if (!handleFault((Fault) event)) {
+                logger.error(
+                        String.format("Cannot Inject {%s} here", event));
+                if (Config.getConf().debug) {
+                    testPlanExecutionLog += "(Fault) injection failed in "
+                            + (System.currentTimeMillis() - initTime)
+                            + " ms, ";
+                }
+                return false;
+            }
+            if (Config.getConf().debug) {
+                testPlanExecutionLog += "(Fault) injection in "
+                        + (System.currentTimeMillis() - initTime) + " ms, ";
+            }
+            return true;
+        } else if (event instanceof FaultRecover) {
+            if (!handleFaultRecover((FaultRecover) event)) {
+                logger.error("FaultRecover execution problem");
+                if (Config.getConf().debug) {
+                    testPlanExecutionLog += "(Recover) recovery failed in "
+                            + (System.currentTimeMillis() - initTime)
+                            + " ms, ";
+                }
+                return false;
+            }
+            if (Config.getConf().debug) {
+                testPlanExecutionLog += "(Recover) fault recover in "
+                        + (System.currentTimeMillis() - initTime) + " ms, ";
+            }
+            return true;
+        } else if (event instanceof PrepareUpgrade) {
+            if (!handlePrepareUpgrade((PrepareUpgrade) event)) {
+                logger.error("PrepareUpgrade problem");
+                if (Config.getConf().debug) {
+                    testPlanExecutionLog += "(Prepare) upgrade failed in "
+                            + (System.currentTimeMillis() - initTime)
+                            + " ms, ";
+                }
+                return false;
+            }
+            if (Config.getConf().debug) {
+                testPlanExecutionLog += "(Prepare) upgrade event in "
+                        + (System.currentTimeMillis() - initTime) + " ms, ";
+            }
+            return true;
+        } else if (event instanceof FinalizeUpgrade) {
+            if (!handleFinalizeUpgrade((FinalizeUpgrade) event)) {
+                logger.error("FinalizeUpgrade problem");
+                if (Config.getConf().debug) {
+                    testPlanExecutionLog += "(Finalize) upgrade failed in "
+                            + (System.currentTimeMillis() - initTime)
+                            + " ms, ";
+                }
+                return false;
+            }
+            if (Config.getConf().debug) {
+                testPlanExecutionLog += "(Finalize) upgrade event in "
+                        + (System.currentTimeMillis() - initTime) + " ms, ";
+            }
+            return true;
+        } else if (event instanceof HDFSStopSNN) {
+            if (!handleHDFSStopSNN((HDFSStopSNN) event)) {
+                logger.error("HDFS stop SNN problem");
+                if (Config.getConf().debug) {
+                    testPlanExecutionLog += "(HDFSStopSNN) event failed in "
+                            + (System.currentTimeMillis() - initTime)
+                            + " ms, ";
+                }
+                return false;
+            }
+            if (Config.getConf().debug) {
+                testPlanExecutionLog += "(HDFSStopSNN) HDFS event in "
+                        + (System.currentTimeMillis() - initTime) + " ms, ";
+            }
+            return true;
+        } else if (event instanceof DowngradeOp) {
+            if (!handleDowngradeOp((DowngradeOp) event)) {
+                logger.error("DowngradeOp problem");
+                if (Config.getConf().debug) {
+                    testPlanExecutionLog += "(Downgrade) operation failed in "
+                            + (System.currentTimeMillis() - initTime)
+                            + " ms, ";
+                }
+                return false;
+            }
+            if (Config.getConf().debug) {
+                testPlanExecutionLog += "(Downgrade) operation in "
+                        + (System.currentTimeMillis() - initTime) + " ms, ";
+            }
+            return true;
+        }
+        logger.error("Unknown disruptive event type: {}", event);
+        return false;
+    }
+
+    private boolean executeWorkloadEvent(Event event, long initTime) {
+        if (event instanceof ShellCommand) {
+            if (!handleCommand((ShellCommand) event)) {
+                logger.error("ShellCommand problem");
+                if (Config.getConf().debug) {
+                    testPlanExecutionLog += "(Shell) execution failed in "
+                            + (System.currentTimeMillis() - initTime)
+                            + " ms, ";
+                }
+                return false;
+            }
+            if (Config.getConf().debug) {
+                testPlanExecutionLog += "(Shell) command execution in "
+                        + (System.currentTimeMillis() - initTime) + " ms, ";
+            }
+            return true;
+        }
+        return true;
     }
 
     public String execShellCommand(ShellCommand command) {
@@ -587,8 +817,7 @@ public abstract class Executor implements IExecutor {
         } else if (fault instanceof NodeFailure) {
             // Crash a node
             NodeFailure nodeFailure = (NodeFailure) fault;
-            // Update trace
-            updateTrace(nodeFailure.nodeIndex);
+            // Trace collection is now handled by windowed execute()
             return dockerCluster.stopContainer(nodeFailure.nodeIndex);
         } else if (fault instanceof IsolateFailure) {
             // Isolate a single node from the rest nodes
@@ -600,12 +829,11 @@ public abstract class Executor implements IExecutor {
             return dockerCluster.partition(partitionFailure.nodeSet1,
                     partitionFailure.nodeSet2);
         } else if (fault instanceof RestartFailure) {
-            // Crash a node
+            // RestartFailure is now dispatched directly by
+            // executeDisruptiveEvent
+            // as a STAGE_ADVANCING event; this path is kept for safety
             RestartFailure nodeFailure = (RestartFailure) fault;
-            // Update trace
-            updateTrace(nodeFailure.nodeIndex);
             return dockerCluster.restartContainer(nodeFailure.nodeIndex);
-
         }
         return false;
     }

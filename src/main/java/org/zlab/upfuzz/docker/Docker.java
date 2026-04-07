@@ -54,6 +54,16 @@ public abstract class Docker extends DockerMeta implements IDocker {
     }
 
     @Override
+    public void clearTrace() throws Exception {
+        try (Socket socket = new Socket(networkIP,
+                Config.instance.formatCoveragePort)) {
+            PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+            out.println("clear");
+            logger.debug("clearTrace on node {}", networkIP);
+        }
+    }
+
+    @Override
     public void clearFormatCoverage() throws Exception {
         // execute check inv command
         Socket socket = new Socket(networkIP,

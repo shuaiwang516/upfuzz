@@ -15,6 +15,7 @@ import org.apache.logging.log4j.Logger;
 import org.jacoco.core.data.ExecutionDataStore;
 import org.zlab.ocov.tracker.ObjectGraphCoverage;
 import org.zlab.net.tracker.Trace;
+import org.zlab.upfuzz.fuzzingengine.trace.WindowedTrace;
 import org.zlab.upfuzz.cassandra.CassandraExecutor;
 import org.zlab.upfuzz.fuzzingengine.packet.*;
 import org.zlab.upfuzz.fuzzingengine.packet.Packet.PacketType;
@@ -1625,6 +1626,7 @@ public class FuzzingClient {
             for (int i = 0; i < nodeNum; i++) {
                 packet.trace[i] = new Trace();
             }
+            packet.windowedTrace = new WindowedTrace();
         }
         return packet;
     }
