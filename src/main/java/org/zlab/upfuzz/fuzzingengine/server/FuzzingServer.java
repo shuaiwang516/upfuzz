@@ -22,6 +22,9 @@ import org.zlab.net.tracker.TraceEntry;
 import org.zlab.net.tracker.diff.DiffComputeEditDistance;
 import org.zlab.net.tracker.diff.DiffComputeJaccardSimilarity;
 import org.zlab.net.tracker.diff.DiffComputeMessageTriDiff;
+import org.zlab.net.tracker.diff.DiffComputeSemanticSimilarity;
+import org.zlab.upfuzz.fuzzingengine.trace.TraceWindow;
+import org.zlab.upfuzz.fuzzingengine.trace.WindowedTrace;
 import org.zlab.ocov.Utils;
 import org.zlab.ocov.tracker.FormatCoverageStatus;
 import org.zlab.ocov.tracker.ObjectGraphCoverage;
@@ -1850,49 +1853,257 @@ public class FuzzingServer {
             }
         }
 
-        // --- Jaccard similarity "interesting" check ---
-        boolean lowSimilarity = false;
+        // --- Legacy Jaccard similarity (log-only, not used for admission) ---
         if (Config.getConf().useJaccardSimilarity
                 && Config.getConf().useTrace) {
             double[] jaccardSim = DiffComputeJaccardSimilarity.compute(
                     serializedTraces[0], serializedTraces[1],
                     serializedTraces[2]);
-            logger.info("Jaccard Similarity[0] = " + jaccardSim[0]
+            logger.info("[TRACE-LEGACY] Jaccard Similarity[0] = "
+                    + jaccardSim[0]
                     + ", Jaccard Similarity[1] = " + jaccardSim[1]);
-
-            if (jaccardSim[0] < Config.getConf().jaccardSimilarityThreshold
-                    || jaccardSim[1] < Config
-                            .getConf().jaccardSimilarityThreshold) {
-                lowSimilarity = true;
-                logger.info(
-                        "Low Jaccard similarity detected — test is interesting");
-            }
         }
 
-        boolean messageIdentityInteresting = false;
+        // --- Legacy message identity tri-diff (log-only) ---
         if (Config.getConf().useMessageIdentityDiff
                 && Config.getConf().useTrace) {
             DiffComputeMessageTriDiff.MessageTriDiffResult triDiff = DiffComputeMessageTriDiff
                     .compute(serializedTraces[0], serializedTraces[1],
                             serializedTraces[2]);
-            logger.info(
-                    "Message identity tri-diff: " + triDiff.toSummaryString());
+            logger.info("[TRACE-LEGACY] Message identity tri-diff: "
+                    + triDiff.toSummaryString());
             if (Config.getConf().printTrace) {
                 logger.info(triDiff.toDetailedString(20));
             }
-            if (triDiff.isInteresting(
-                    Config.getConf().messageIdentityMinExclusiveCount,
-                    Config.getConf().messageIdentityMinOrderedCommonRatio)) {
-                messageIdentityInteresting = true;
-                logger.info(
-                        "Message identity tri-diff detected interesting divergence");
-            }
         }
 
+        // --- Legacy edit distance (log-only) ---
         if (Config.getConf().useEditDistance && Config.getConf().useTrace) {
             int[] diff = DiffComputeEditDistance.compute(serializedTraces[0],
                     serializedTraces[1], serializedTraces[2]);
-            logger.info("Diff[0] = " + diff[0] + ", Diff[1] = " + diff[1]);
+            logger.info("[TRACE-LEGACY] Diff[0] = " + diff[0]
+                    + ", Diff[1] = " + diff[1]);
+        }
+
+        // === Canonical trace scoring (Phase 4) ===
+        boolean traceInteresting = false;
+
+        boolean allLanesOk = normalizeLaneStatus(
+                testPlanFeedbackPackets[0]) == TestPlanFeedbackPacket.LaneStatus.OK
+                && normalizeLaneStatus(
+                        testPlanFeedbackPackets[1]) == TestPlanFeedbackPacket.LaneStatus.OK
+                && normalizeLaneStatus(
+                        testPlanFeedbackPackets[2]) == TestPlanFeedbackPacket.LaneStatus.OK;
+
+        boolean windowedTracesAvailable = Config.getConf().useTrace
+                && allLanesOk
+                && testPlanFeedbackPackets[0].windowedTrace != null
+                && testPlanFeedbackPackets[1].windowedTrace != null
+                && testPlanFeedbackPackets[2].windowedTrace != null;
+
+        if (Config.getConf().useCanonicalTraceSimilarity
+                && windowedTracesAvailable) {
+
+            List<AlignedWindow> aligned = alignWindows(
+                    testPlanFeedbackPackets[0].windowedTrace,
+                    testPlanFeedbackPackets[1].windowedTrace,
+                    testPlanFeedbackPackets[2].windowedTrace);
+
+            if (aligned.isEmpty()) {
+                logger.info(
+                        "[TRACE] Window alignment failed or abstained — trace scoring skipped");
+            } else {
+                logger.info("[TRACE] Aligned {} comparable windows",
+                        aligned.size());
+
+                // Accumulators for aggregate similarity
+                long aggIntersectionOO_RO = 0, aggUnionOO_RO = 0;
+                long aggIntersectionRO_NN = 0, aggUnionRO_NN = 0;
+                long aggIntersectionOO_NN = 0, aggUnionOO_NN = 0;
+
+                for (AlignedWindow aw : aligned) {
+                    Trace mergedOO = aw.oldOld.mergedTrace();
+                    Trace mergedRO = aw.rolling.mergedTrace();
+                    Trace mergedNN = aw.newNew.mergedTrace();
+
+                    // --- Per-window similarity ---
+                    double[] sims = DiffComputeSemanticSimilarity.compute(
+                            mergedOO, mergedRO, mergedNN);
+                    double rollingMinSimilarity = Math.min(sims[0], sims[1]);
+                    double baselineSimilarity = sims[2];
+                    double rollingDivergenceMargin = Math.min(
+                            baselineSimilarity - sims[0],
+                            baselineSimilarity - sims[1]);
+
+                    logger.info(
+                            "[TRACE] Window {} ({}): simOO_RO={}, simRO_NN={}, baseline={}, margin={}",
+                            aw.rolling.ordinal,
+                            aw.rolling.comparisonStageId,
+                            String.format("%.4f", sims[0]),
+                            String.format("%.4f", sims[1]),
+                            String.format("%.4f", baselineSimilarity),
+                            String.format("%.4f", rollingDivergenceMargin));
+
+                    // --- Min-event gate (applies to similarity, tri-diff,
+                    // AND aggregate accumulation) ---
+                    boolean windowHasEnoughEvents = aw.rolling
+                            .totalEventCount() >= Config
+                                    .getConf().canonicalMinWindowEventCount;
+
+                    // --- Per-window interestingness ---
+                    boolean windowInteresting = windowHasEnoughEvents
+                            && rollingMinSimilarity < Config
+                                    .getConf().canonicalRollingMinWindowSimilarityThreshold
+                            && rollingDivergenceMargin > Config
+                                    .getConf().canonicalWindowDivergenceMarginThreshold;
+
+                    // --- Per-window tri-diff ---
+                    boolean triDiffInteresting = false;
+                    if (windowHasEnoughEvents
+                            && Config
+                                    .getConf().useCanonicalMessageIdentityDiff) {
+                        DiffComputeMessageTriDiff.MessageTriDiffResult triDiff = DiffComputeMessageTriDiff
+                                .computeSemantic(mergedOO, mergedRO,
+                                        mergedNN);
+
+                        int rollingExclusive = totalMapCount(
+                                triDiff.only1);
+                        int totalMessages = triDiff.sequence1.size();
+                        double rollingExclusiveFraction = totalMessages > 0
+                                ? (double) rollingExclusive / totalMessages
+                                : 0;
+
+                        int rollingMissing = totalMapCount(
+                                triDiff.in02Only);
+                        double rollingMissingFraction = totalMessages > 0
+                                ? (double) rollingMissing / totalMessages
+                                : 0;
+
+                        logger.info(
+                                "[TRACE] TriDiff Window {} ({}): rollingExclusive={} ({}), "
+                                        + "rollingMissing={} ({}), all3={}, total={}",
+                                aw.rolling.ordinal,
+                                aw.rolling.comparisonStageId,
+                                rollingExclusive,
+                                String.format("%.4f",
+                                        rollingExclusiveFraction),
+                                rollingMissing,
+                                String.format("%.4f",
+                                        rollingMissingFraction),
+                                triDiff.totalAllThreeCount(),
+                                totalMessages);
+
+                        triDiffInteresting = (rollingExclusive >= Config
+                                .getConf().rollingExclusiveMinCount
+                                && rollingExclusiveFraction >= Config
+                                        .getConf().rollingExclusiveFractionThreshold)
+                                || (rollingMissing >= Config
+                                        .getConf().rollingMissingMinCount
+                                        && rollingMissingFraction >= Config
+                                                .getConf().rollingMissingFractionThreshold);
+                    }
+
+                    // Accumulate for aggregate (only windows above
+                    // min-event threshold)
+                    if (windowHasEnoughEvents) {
+                        Map<String, Integer> msOO = mergedOO != null
+                                ? mergedOO.getCanonicalMultiset()
+                                : Collections.emptyMap();
+                        Map<String, Integer> msRO = mergedRO != null
+                                ? mergedRO.getCanonicalMultiset()
+                                : Collections.emptyMap();
+                        Map<String, Integer> msNN = mergedNN != null
+                                ? mergedNN.getCanonicalMultiset()
+                                : Collections.emptyMap();
+
+                        if (Config.getConf().printTrace) {
+                            logger.info(
+                                    "[TRACE] Window {} multisets: OO={}, RO={}, NN={}",
+                                    aw.rolling.ordinal, msOO, msRO,
+                                    msNN);
+                        }
+
+                        Set<String> allKeysOO_RO = new HashSet<>(
+                                msOO.keySet());
+                        allKeysOO_RO.addAll(msRO.keySet());
+                        for (String key : allKeysOO_RO) {
+                            int cOO = msOO.getOrDefault(key, 0);
+                            int cRO = msRO.getOrDefault(key, 0);
+                            aggIntersectionOO_RO += Math.min(cOO, cRO);
+                            aggUnionOO_RO += Math.max(cOO, cRO);
+                        }
+                        Set<String> allKeysRO_NN = new HashSet<>(
+                                msRO.keySet());
+                        allKeysRO_NN.addAll(msNN.keySet());
+                        for (String key : allKeysRO_NN) {
+                            int cRO = msRO.getOrDefault(key, 0);
+                            int cNN = msNN.getOrDefault(key, 0);
+                            aggIntersectionRO_NN += Math.min(cRO, cNN);
+                            aggUnionRO_NN += Math.max(cRO, cNN);
+                        }
+                        Set<String> allKeysOO_NN = new HashSet<>(
+                                msOO.keySet());
+                        allKeysOO_NN.addAll(msNN.keySet());
+                        for (String key : allKeysOO_NN) {
+                            int cOO = msOO.getOrDefault(key, 0);
+                            int cNN = msNN.getOrDefault(key, 0);
+                            aggIntersectionOO_NN += Math.min(cOO, cNN);
+                            aggUnionOO_NN += Math.max(cOO, cNN);
+                        }
+                    }
+
+                    if (windowInteresting || triDiffInteresting) {
+                        traceInteresting = true;
+                        logger.info(
+                                "[TRACE] Window {} interesting: windowSim={}, triDiff={}",
+                                aw.rolling.ordinal, windowInteresting,
+                                triDiffInteresting);
+                    }
+                }
+
+                // --- Aggregate similarity (always computed and logged) ---
+                double aggSimOO_RO = aggUnionOO_RO == 0 ? 1.0
+                        : (double) aggIntersectionOO_RO / aggUnionOO_RO;
+                double aggSimRO_NN = aggUnionRO_NN == 0 ? 1.0
+                        : (double) aggIntersectionRO_NN / aggUnionRO_NN;
+                double aggSimOO_NN = aggUnionOO_NN == 0 ? 1.0
+                        : (double) aggIntersectionOO_NN / aggUnionOO_NN;
+
+                double aggRollingMinSim = Math.min(aggSimOO_RO,
+                        aggSimRO_NN);
+                double aggBaselineSim = aggSimOO_NN;
+                double aggDivergenceMargin = Math.min(
+                        aggBaselineSim - aggSimOO_RO,
+                        aggBaselineSim - aggSimRO_NN);
+
+                logger.info(
+                        "[TRACE] Aggregate: simOO_RO={}, simRO_NN={}, baseline={}, margin={}",
+                        String.format("%.4f", aggSimOO_RO),
+                        String.format("%.4f", aggSimRO_NN),
+                        String.format("%.4f", aggBaselineSim),
+                        String.format("%.4f", aggDivergenceMargin));
+
+                // Aggregate admission check (only if no per-window hit)
+                if (!traceInteresting) {
+                    boolean aggregateInteresting = aggRollingMinSim < Config
+                            .getConf().canonicalRollingMinAggregateSimilarityThreshold
+                            && aggDivergenceMargin > Config
+                                    .getConf().canonicalAggregateDivergenceMarginThreshold;
+
+                    if (aggregateInteresting) {
+                        traceInteresting = true;
+                        logger.info(
+                                "[TRACE] Aggregate interesting: sim={}, margin={}",
+                                String.format("%.4f", aggRollingMinSim),
+                                String.format("%.4f",
+                                        aggDivergenceMargin));
+                    }
+                }
+            }
+        } else if (Config.getConf().useCanonicalTraceSimilarity
+                && Config.getConf().useTrace) {
+            logger.info(
+                    "[TRACE] Windowed traces not available — canonical scoring skipped");
         }
 
         // === Verdict classification (WS0) — runs BEFORE corpus update ===
@@ -1960,8 +2171,7 @@ public class FuzzingServer {
                 + " errorLog=" + errorLogVerdict);
 
         // === Corpus update (gated by verdict) ===
-        boolean addToCorpus = newOriBC || newUpgradeBC || lowSimilarity
-                || messageIdentityInteresting;
+        boolean addToCorpus = newOriBC || newUpgradeBC || traceInteresting;
         // WS0: exclude same-version bugs from corpus to avoid FP-prone
         // descendants
         if (overallVerdict == DiffVerdict.SAME_VERSION_BUG) {
@@ -1990,9 +2200,8 @@ public class FuzzingServer {
                 logger.info(
                         "Added test plan to corpus (newOriBC=" + newOriBC
                                 + ", newUpgradeBC=" + newUpgradeBC
-                                + ", lowSimilarity=" + lowSimilarity
-                                + ", messageIdentityInteresting="
-                                + messageIdentityInteresting + ")");
+                                + ", traceInteresting="
+                                + traceInteresting + ")");
             }
         }
 
@@ -3721,5 +3930,82 @@ public class FuzzingServer {
             newEvents.add(new DowngradeOp(nodeIdx));
         }
         return newEvents;
+    }
+
+    // === Phase 4: Canonical trace scoring helpers ===
+
+    /**
+     * Aligned comparable windows across three lanes for one stage.
+     */
+    static class AlignedWindow {
+        final TraceWindow oldOld;
+        final TraceWindow rolling;
+        final TraceWindow newNew;
+
+        AlignedWindow(TraceWindow oo, TraceWindow ro, TraceWindow nn) {
+            this.oldOld = oo;
+            this.rolling = ro;
+            this.newNew = nn;
+        }
+    }
+
+    /**
+     * Align comparable windows across three lanes by
+     * (comparisonStageId, normalizedTransitionNodeSet).
+     * Returns list of aligned window triples. On mismatch, abstains.
+     */
+    private List<AlignedWindow> alignWindows(
+            WindowedTrace oldOldTrace,
+            WindowedTrace rollingTrace,
+            WindowedTrace newNewTrace) {
+
+        List<TraceWindow> oo = oldOldTrace.getComparableWindows();
+        List<TraceWindow> ro = rollingTrace.getComparableWindows();
+        List<TraceWindow> nn = newNewTrace.getComparableWindows();
+
+        // All three lanes must have the same number of comparable windows
+        if (oo.size() != ro.size() || ro.size() != nn.size()) {
+            logger.warn(
+                    "[TRACE] Window count mismatch: OO={}, RO={}, NN={} — abstaining",
+                    oo.size(), ro.size(), nn.size());
+            return Collections.emptyList();
+        }
+
+        List<AlignedWindow> aligned = new ArrayList<>();
+
+        for (int i = 0; i < oo.size(); i++) {
+            TraceWindow wOO = oo.get(i);
+            TraceWindow wRO = ro.get(i);
+            TraceWindow wNN = nn.get(i);
+
+            if (stageMatches(wOO, wRO) && stageMatches(wRO, wNN)) {
+                aligned.add(new AlignedWindow(wOO, wRO, wNN));
+            } else {
+                logger.warn(
+                        "[TRACE] Window alignment mismatch at [{}]: OO={}/{}, RO={}/{}, NN={}/{} — abstaining",
+                        i, wOO.comparisonStageId,
+                        wOO.normalizedTransitionNodeSet,
+                        wRO.comparisonStageId,
+                        wRO.normalizedTransitionNodeSet,
+                        wNN.comparisonStageId,
+                        wNN.normalizedTransitionNodeSet);
+                return Collections.emptyList(); // Full abstain
+            }
+        }
+        return aligned;
+    }
+
+    private static boolean stageMatches(TraceWindow a, TraceWindow b) {
+        return a.comparisonStageId.equals(b.comparisonStageId)
+                && a.normalizedTransitionNodeSet
+                        .equals(b.normalizedTransitionNodeSet);
+    }
+
+    private static int totalMapCount(Map<String, Integer> counts) {
+        int total = 0;
+        for (Integer value : counts.values()) {
+            total += value;
+        }
+        return total;
     }
 }

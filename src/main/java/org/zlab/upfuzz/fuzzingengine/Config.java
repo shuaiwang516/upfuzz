@@ -344,6 +344,28 @@ public class Config {
         // similarity drops below this value
         public double jaccardSimilarityThreshold = 0.3;
 
+        // --- Canonical trace similarity (Phase 4) ---
+        public boolean useCanonicalTraceSimilarity = true;
+
+        // Window-level thresholds
+        public double canonicalRollingMinWindowSimilarityThreshold = 0.75;
+        public double canonicalWindowDivergenceMarginThreshold = 0.08;
+        public int canonicalMinWindowEventCount = 5;
+
+        // Aggregate thresholds
+        public double canonicalRollingMinAggregateSimilarityThreshold = 0.85;
+        public double canonicalAggregateDivergenceMarginThreshold = 0.05;
+
+        // Tri-diff thresholds (canonical keys)
+        public boolean useCanonicalMessageIdentityDiff = true;
+        public int rollingExclusiveMinCount = 3;
+        public int rollingMissingMinCount = 3;
+        public double rollingExclusiveFractionThreshold = 0.05;
+        public double rollingMissingFractionThreshold = 0.05;
+
+        // Debug
+        public boolean useCompressedOrderDebug = false;
+
         /**
          * ---------------Version Specific-----------------
          * To avoid FPs
