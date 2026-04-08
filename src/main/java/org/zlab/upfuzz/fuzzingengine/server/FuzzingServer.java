@@ -611,7 +611,8 @@ public class FuzzingServer {
             }
             isFullStopUpgrade = !isFullStopUpgrade;
             return packet;
-        } else if (Config.getConf().testingMode == 5) {
+        } else if (Config.getConf().testingMode == 5
+                || Config.getConf().testingMode == 6) {
             // Only test rolling upgrade using test plans
             if (testPlanPackets.isEmpty()) {
                 if (!fuzzRollingTestPlan()) {
@@ -2193,7 +2194,8 @@ public class FuzzingServer {
                     .get(testPlanDiffFeedbackPacket.testPacketID);
             if (testPlan != null) {
                 testPlanCorpus.addTestPlan(testPlan);
-                if (Config.getConf().testingMode == 5
+                if ((Config.getConf().testingMode == 5
+                        || Config.getConf().testingMode == 6)
                         && testPlan.seed != null) {
                     rollingSeedCorpus.addSeed(new RollingSeed(
                             SerializationUtils.clone(testPlan.seed),

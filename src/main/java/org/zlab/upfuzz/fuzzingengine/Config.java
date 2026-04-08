@@ -215,6 +215,8 @@ public class Config {
         // 4: full-stop upgrade + rolling upgrade iteratively (Final Version)
         // 5: Only test rolling upgrade using test plans
         // (differential or regular)
+        // 6: Rolling-only differential fuzzing with branch-only guidance
+        // (same as mode 5 but forces useTrace=false)
         public int testingMode = 0;
         public boolean testSingleVersion = false;
         // This make the test plan interleave with
@@ -478,6 +480,22 @@ public class Config {
                     .toJson(this, Configuration.class);
         }
 
+        public void normalizeModeFlags() {
+            if (testingMode == 6) {
+                differentialExecution = true;
+                useBranchCoverage = true;
+                useTrace = false;
+                useCanonicalTraceSimilarity = false;
+                useCanonicalMessageIdentityDiff = false;
+                useCompressedOrderDebug = false;
+                printTrace = false;
+                useFormatCoverage = false;
+                useVersionDelta = false;
+                // Preserve mode-5 oracle semantics:
+                // do not force enableLogCheck on or off here.
+            }
+        }
+
         public Boolean checkNull() {
             Field[] fields = this.getClass().getDeclaredFields();
             for (Field field : fields) {
@@ -501,6 +519,7 @@ public class Config {
     }
 
     public static void setInstance(Configuration config) {
+        config.normalizeModeFlags();
         instance = config;
     }
 }

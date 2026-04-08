@@ -54,7 +54,7 @@ Options:
   --rounds <N>                           Stop after N completed rounds (default: ${TARGET_ROUNDS})
   --timeout-sec <N>                      Max runtime in seconds (default: ${TIMEOUT_SEC})
   --clients <N>                          Number of clients to launch (default: ${CLIENTS})
-  --testing-mode <3|5>                   3=example testplan, 5=rolling-only (default: ${TESTING_MODE})
+  --testing-mode <3|5|6>                 3=example testplan, 5=rolling-only, 6=rolling-only branch-only (default: ${TESTING_MODE})
   --diff-lane-timeout-sec <sec>          Differential lane timeout for all systems (default: ${DIFF_LANE_TIMEOUT_SEC})
   --cassandra-retry-timeout <sec>        Cassandra cqlsh retry timeout (default: ${CASSANDRA_RETRY_TIMEOUT})
   --hbase-daemon-retry-times <N>         HBase shell daemon retry attempts (default: ${HBASE_DAEMON_RETRY_TIMES})
@@ -593,6 +593,18 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Mode 6: force branch-only (no trace)
+if [[ "${TESTING_MODE}" == "6" ]]; then
+    USE_DIFF=true
+    USE_BRANCH_COVERAGE=true
+    USE_TRACE=false
+    USE_CANONICAL_TRACE=false
+    USE_CANONICAL_MESSAGE_IDENTITY=false
+    PRINT_TRACE=false
+    USE_COMPRESSED_ORDER_DEBUG=false
+    REQUIRE_TRACE_SIGNAL=false
+fi
 
 require_cmd docker
 require_cmd rg

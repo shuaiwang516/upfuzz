@@ -414,11 +414,14 @@ RUNNER_CMD=(
     --clients "${CLIENTS}"
     --testing-mode "${TESTING_MODE}"
     --diff-lane-timeout-sec "${DIFF_LANE_TIMEOUT_SEC}"
-    --use-trace true
-    --print-trace true
-    --require-trace-signal
     --run-name "${RUN_NAME}"
 )
+# Mode-dependent trace arguments
+if [[ "${TESTING_MODE}" == "6" ]]; then
+    RUNNER_CMD+=(--use-trace false --print-trace false)
+else
+    RUNNER_CMD+=(--use-trace true --print-trace true --require-trace-signal)
+fi
 if [[ -n "${NODE_NUM}" ]]; then
     RUNNER_CMD+=(--node-num "${NODE_NUM}")
 fi
@@ -452,8 +455,12 @@ if [[ -f "${SUMMARY_FILE}" ]]; then
         die "Runner exited with code ${RUNNER_RC}. See ${SUMMARY_FILE} and ${LAUNCH_LOG}."
     fi
 
-    validate_required_trace_signal "${SUMMARY_FILE}"
-    log "Trace signal requirement satisfied." | tee -a "${LAUNCH_LOG}"
+    if [[ "${TESTING_MODE}" == "6" ]]; then
+        log "Mode 6: skipping trace signal validation (branch-only)." | tee -a "${LAUNCH_LOG}"
+    else
+        validate_required_trace_signal "${SUMMARY_FILE}"
+        log "Trace signal requirement satisfied." | tee -a "${LAUNCH_LOG}"
+    fi
 else
     die "Runner finished without summary file: ${SUMMARY_FILE} (runner_rc=${RUNNER_RC})"
 fi
