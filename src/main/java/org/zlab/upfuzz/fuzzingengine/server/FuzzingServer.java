@@ -3957,9 +3957,21 @@ public class FuzzingServer {
     /**
      * Align comparable windows across three lanes by
      * (comparisonStageId, normalizedTransitionNodeSet).
-     * Returns list of aligned window triples. On mismatch, abstains.
+     * Returns list of aligned window triples.
+     *
+     * <p>Fast path: when all three lanes have equal window counts, aligns
+     * positionally and validates stage-key consistency.
+     *
+     * <p>Partial alignment: when the rolling lane has exactly 1 fewer
+     * comparable window than both baselines (OO=N, RO=N-1, NN=N), attempts
+     * order-preserving key-based matching. For each rolling window, searches
+     * forward from the last matched position in OO and NN to find matching
+     * stage keys. If a unique monotonic match cannot be found, abstains.
+     *
+     * <p>All other mismatches (counts differ by 2+, rolling has more than
+     * baselines, baselines disagree, ambiguous keys) produce full abstain.
      */
-    private List<AlignedWindow> alignWindows(
+    static List<AlignedWindow> alignWindows(
             WindowedTrace oldOldTrace,
             WindowedTrace rollingTrace,
             WindowedTrace newNewTrace) {
@@ -3968,36 +3980,156 @@ public class FuzzingServer {
         List<TraceWindow> ro = rollingTrace.getComparableWindows();
         List<TraceWindow> nn = newNewTrace.getComparableWindows();
 
-        // All three lanes must have the same number of comparable windows
-        if (oo.size() != ro.size() || ro.size() != nn.size()) {
-            logger.warn(
-                    "[TRACE] Window count mismatch: OO={}, RO={}, NN={} — abstaining",
-                    oo.size(), ro.size(), nn.size());
-            return Collections.emptyList();
+        // Fast path: all same size → positional alignment
+        if (oo.size() == ro.size() && ro.size() == nn.size()) {
+            List<AlignedWindow> aligned = new ArrayList<>();
+            for (int i = 0; i < oo.size(); i++) {
+                TraceWindow wOO = oo.get(i);
+                TraceWindow wRO = ro.get(i);
+                TraceWindow wNN = nn.get(i);
+
+                if (stageMatches(wOO, wRO) && stageMatches(wRO, wNN)) {
+                    aligned.add(new AlignedWindow(wOO, wRO, wNN));
+                } else {
+                    logger.warn(
+                            "[TRACE] Window alignment mismatch at [{}]: OO={}/{}, RO={}/{}, NN={}/{} — abstaining",
+                            i, wOO.comparisonStageId,
+                            wOO.normalizedTransitionNodeSet,
+                            wRO.comparisonStageId,
+                            wRO.normalizedTransitionNodeSet,
+                            wNN.comparisonStageId,
+                            wNN.normalizedTransitionNodeSet);
+                    logStageKeysOnFailure(oo, ro, nn);
+                    return Collections.emptyList();
+                }
+            }
+            return aligned;
         }
 
-        List<AlignedWindow> aligned = new ArrayList<>();
-
-        for (int i = 0; i < oo.size(); i++) {
-            TraceWindow wOO = oo.get(i);
-            TraceWindow wRO = ro.get(i);
-            TraceWindow wNN = nn.get(i);
-
-            if (stageMatches(wOO, wRO) && stageMatches(wRO, wNN)) {
-                aligned.add(new AlignedWindow(wOO, wRO, wNN));
-            } else {
+        // Partial alignment: rolling has exactly 1 fewer window than both
+        // baselines (e.g. OO=3, RO=2, NN=3). Match by stage key with
+        // monotonic forward search to preserve lane order.
+        if (oo.size() == nn.size() && ro.size() == oo.size() - 1) {
+            // Guard: if any lane has duplicate stage keys, the forward
+            // search could silently bind to the wrong window. Abstain
+            // instead. (Executor can emit repeated POST_FINAL_STAGE when
+            // the normalized node set is already complete.)
+            if (hasDuplicateStageKeys(oo) || hasDuplicateStageKeys(ro)
+                    || hasDuplicateStageKeys(nn)) {
                 logger.warn(
-                        "[TRACE] Window alignment mismatch at [{}]: OO={}/{}, RO={}/{}, NN={}/{} — abstaining",
-                        i, wOO.comparisonStageId,
-                        wOO.normalizedTransitionNodeSet,
-                        wRO.comparisonStageId,
-                        wRO.normalizedTransitionNodeSet,
-                        wNN.comparisonStageId,
-                        wNN.normalizedTransitionNodeSet);
-                return Collections.emptyList(); // Full abstain
+                        "[TRACE] Partial alignment: duplicate stage keys detected — abstaining (OO={}, RO={}, NN={})",
+                        oo.size(), ro.size(), nn.size());
+                logStageKeysOnFailure(oo, ro, nn);
+                return Collections.emptyList();
+            }
+
+            logger.info(
+                    "[TRACE] Window count mismatch (partial alignment): OO={}, RO={}, NN={}",
+                    oo.size(), ro.size(), nn.size());
+            List<AlignedWindow> aligned = new ArrayList<>();
+            int ooCursor = 0;
+            int nnCursor = 0;
+
+            for (int ri = 0; ri < ro.size(); ri++) {
+                TraceWindow roWin = ro.get(ri);
+
+                // Search forward in OO from ooCursor for a stage-key match
+                int ooIdx = findForwardMatch(oo, ooCursor, roWin);
+                if (ooIdx < 0) {
+                    logger.warn(
+                            "[TRACE] Partial alignment: no OO match for RO window {} (stage={}/{})",
+                            ri, roWin.comparisonStageId,
+                            roWin.normalizedTransitionNodeSet);
+                    logStageKeysOnFailure(oo, ro, nn);
+                    return Collections.emptyList();
+                }
+
+                // Search forward in NN from nnCursor for a stage-key match
+                int nnIdx = findForwardMatch(nn, nnCursor, roWin);
+                if (nnIdx < 0) {
+                    logger.warn(
+                            "[TRACE] Partial alignment: no NN match for RO window {} (stage={}/{})",
+                            ri, roWin.comparisonStageId,
+                            roWin.normalizedTransitionNodeSet);
+                    logStageKeysOnFailure(oo, ro, nn);
+                    return Collections.emptyList();
+                }
+
+                aligned.add(
+                        new AlignedWindow(oo.get(ooIdx), roWin,
+                                nn.get(nnIdx)));
+                ooCursor = ooIdx + 1;
+                nnCursor = nnIdx + 1;
+            }
+            logger.info(
+                    "[TRACE] Partial alignment matched {} of {} rolling windows",
+                    aligned.size(), ro.size());
+            return aligned;
+        }
+
+        // Other mismatches: full abstain
+        logger.warn(
+                "[TRACE] Window count mismatch: OO={}, RO={}, NN={} — abstaining",
+                oo.size(), ro.size(), nn.size());
+        logStageKeysOnFailure(oo, ro, nn);
+        return Collections.emptyList();
+    }
+
+    /**
+     * Search forward from {@code startIdx} in {@code windows} for the first
+     * window whose stage key matches {@code target}. Returns the index, or
+     * -1 if no match is found.
+     */
+    private static int findForwardMatch(List<TraceWindow> windows,
+            int startIdx, TraceWindow target) {
+        for (int i = startIdx; i < windows.size(); i++) {
+            if (stageMatches(windows.get(i), target)) {
+                return i;
             }
         }
-        return aligned;
+        return -1;
+    }
+
+    /**
+     * Returns true if any two windows in the list share the same
+     * (comparisonStageId, normalizedTransitionNodeSet) key. Used to
+     * detect ambiguity before attempting key-based partial alignment.
+     */
+    private static boolean hasDuplicateStageKeys(List<TraceWindow> windows) {
+        for (int i = 0; i < windows.size(); i++) {
+            for (int j = i + 1; j < windows.size(); j++) {
+                if (stageMatches(windows.get(i), windows.get(j))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Emit DEBUG-level diagnostics showing stage keys for each lane when
+     * alignment fails. Avoids log spam on successful alignment.
+     */
+    private static void logStageKeysOnFailure(List<TraceWindow> oo,
+            List<TraceWindow> ro, List<TraceWindow> nn) {
+        if (!logger.isDebugEnabled())
+            return;
+        logger.debug("[TRACE] OO stages: {}", formatStageKeys(oo));
+        logger.debug("[TRACE] RO stages: {}", formatStageKeys(ro));
+        logger.debug("[TRACE] NN stages: {}", formatStageKeys(nn));
+    }
+
+    private static String formatStageKeys(List<TraceWindow> windows) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < windows.size(); i++) {
+            if (i > 0)
+                sb.append(", ");
+            TraceWindow w = windows.get(i);
+            sb.append(w.comparisonStageId).append("/")
+                    .append(w.normalizedTransitionNodeSet);
+        }
+        sb.append("]");
+        return sb.toString();
     }
 
     private static boolean stageMatches(TraceWindow a, TraceWindow b) {

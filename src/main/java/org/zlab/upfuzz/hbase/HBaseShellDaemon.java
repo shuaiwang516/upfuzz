@@ -20,9 +20,13 @@ public class HBaseShellDaemon extends ShellDaemon {
     static Logger logger = LogManager.getLogger(HBaseShellDaemon.class);
 
     private Socket socket;
+    private final String ipAddress;
+    private final int port;
 
     public HBaseShellDaemon(String ipAddress, int port, String executorID,
             Docker docker) {
+        this.ipAddress = ipAddress;
+        this.port = port;
         logger.info("[HKLOG] executor ID = " + executorID + "  "
                 + "Connect to hbase shell daemon:" + ipAddress + "...");
         for (int i = 0; i < Config.getConf().hbaseDaemonRetryTimes; ++i) {
@@ -51,8 +55,19 @@ public class HBaseShellDaemon extends ShellDaemon {
 
     public HBasePacket execute(String cmd)
             throws IOException, ClusterStuckException {
-        // Set the socket read timeout to 2 minutes (120,000 milliseconds)
-        socket.setSoTimeout(240_000); // 4 minutes in milliseconds
+        // If socket is null (e.g. a prior timeout's reconnect failed),
+        // attempt to re-establish before giving up. This prevents one
+        // transient reconnect miss from permanently poisoning the session
+        // for the rest of the readiness-probe loop.
+        if (socket == null) {
+            logger.warn(
+                    "HBase shell daemon socket is null before execute(); "
+                            + "attempting reconnect for command [{}]",
+                    cmd);
+            reconnect(); // throws IOException if it fails — caller sees it
+        }
+
+        socket.setSoTimeout(240_000); // 4 minutes
 
         try {
             Utilities.serializeSingleCommand(cmd, socket.getOutputStream());
@@ -83,9 +98,65 @@ public class HBaseShellDaemon extends ShellDaemon {
             return hbasePacket;
 
         } catch (SocketTimeoutException e) {
+            // The command was already sent over TCP, but the read timed out.
+            // The daemon-side shell process may still complete the command
+            // later, so any future bytes on this socket are ambiguous — they
+            // could belong to the timed-out response or to a later command.
+            //
+            // Reconnect the client socket so the caller never retries on an
+            // ambiguous stream. This is best-effort client-side stream
+            // resynchronization, NOT a guaranteed daemon reset. The shared
+            // HBase shell process is stateful and may still be executing the
+            // timed-out command. For read-only readiness probes (status,
+            // list_namespace) this is an acceptable trade-off; for mutating
+            // commands the caller should still treat the outcome as unknown.
+            logger.warn(
+                    "HBase shell daemon timed out on command [{}]; "
+                            + "closing and reconnecting socket",
+                    cmd, e);
+            try {
+                socket.close();
+            } catch (IOException ignored) {
+            }
+            boolean reconnected = false;
+            try {
+                reconnect();
+                reconnected = true;
+            } catch (IOException reconnectEx) {
+                // reconnect() assigns a new Socket before connect(), so on
+                // failure the field points to an unconnected socket. Null it
+                // out so the next execute() call fails fast with a clear NPE
+                // / IOException rather than silently reusing a broken socket.
+                socket = null;
+                logger.error(
+                        "HBase shell daemon reconnect failed after timeout; "
+                                + "socket is now null — subsequent calls will fail",
+                        reconnectEx);
+            }
             throw new ClusterStuckException(
-                    "Command execution timed out.", e);
+                    reconnected
+                            ? "Command execution timed out; socket reconnected before retry."
+                            : "Command execution timed out; reconnect also failed.",
+                    e);
         }
+    }
+
+    /**
+     * Re-establish the TCP connection to the HBase shell daemon at the same
+     * host:port.  This resets the client-side byte stream so future commands
+     * are not polluted by leftover bytes from a timed-out response.
+     *
+     * <p><b>Important</b>: this does NOT reset the daemon-side HBase shell
+     * process.  If a prior command is still executing asynchronously in the
+     * daemon, reconnecting only ensures the client reads fresh responses on
+     * the new socket.
+     */
+    private void reconnect() throws IOException {
+        socket = new Socket();
+        socket.connect(new InetSocketAddress(ipAddress, port), 30_000);
+        socket.setSoTimeout(240_000);
+        logger.info("HBase shell daemon reconnected to {}:{}", ipAddress,
+                port);
     }
 
     @Override
