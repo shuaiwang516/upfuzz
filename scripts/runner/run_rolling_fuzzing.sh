@@ -17,6 +17,17 @@ USE_DIFF=true
 USE_TRACE=true
 PRINT_TRACE=false
 USE_COMPRESSED_ORDER_DEBUG=false
+USE_CANONICAL_TRACE=true
+CANONICAL_WINDOW_SIM_THRESHOLD=0.75
+CANONICAL_AGGREGATE_SIM_THRESHOLD=0.85
+CANONICAL_WINDOW_DIVERGENCE_MARGIN=0.08
+CANONICAL_AGGREGATE_DIVERGENCE_MARGIN=0.05
+CANONICAL_MIN_WINDOW_EVENTS=5
+USE_CANONICAL_MESSAGE_IDENTITY=true
+ROLLING_EXCLUSIVE_MIN_COUNT=3
+ROLLING_MISSING_MIN_COUNT=3
+ROLLING_EXCLUSIVE_FRACTION_THRESHOLD=0.05
+ROLLING_MISSING_FRACTION_THRESHOLD=0.05
 USE_BRANCH_COVERAGE=true
 ENABLE_LOG_CHECK=true
 REQUIRE_TRACE_SIGNAL=false
@@ -50,6 +61,17 @@ Options:
   --use-trace <true|false>               Enable network trace collection (default: ${USE_TRACE})
   --print-trace <true|false>             Print detailed trace entries in server log (default: ${PRINT_TRACE})
   --use-compressed-order-debug <true|false>  Enable compressed order debug signal (default: ${USE_COMPRESSED_ORDER_DEBUG})
+  --use-canonical-trace <true|false>     Enable canonical trace similarity (default: ${USE_CANONICAL_TRACE})
+  --canonical-window-sim-threshold <N>   Window-level similarity threshold (default: ${CANONICAL_WINDOW_SIM_THRESHOLD})
+  --canonical-aggregate-sim-threshold <N> Aggregate similarity threshold (default: ${CANONICAL_AGGREGATE_SIM_THRESHOLD})
+  --canonical-window-divergence-margin <N> Window divergence margin (default: ${CANONICAL_WINDOW_DIVERGENCE_MARGIN})
+  --canonical-aggregate-divergence-margin <N> Aggregate divergence margin (default: ${CANONICAL_AGGREGATE_DIVERGENCE_MARGIN})
+  --canonical-min-window-events <N>      Min events per window (default: ${CANONICAL_MIN_WINDOW_EVENTS})
+  --use-canonical-message-identity <true|false> Enable canonical tri-diff (default: ${USE_CANONICAL_MESSAGE_IDENTITY})
+  --rolling-exclusive-min-count <N>      Tri-diff exclusive min count (default: ${ROLLING_EXCLUSIVE_MIN_COUNT})
+  --rolling-missing-min-count <N>        Tri-diff missing min count (default: ${ROLLING_MISSING_MIN_COUNT})
+  --rolling-exclusive-fraction-threshold <N> Tri-diff exclusive fraction (default: ${ROLLING_EXCLUSIVE_FRACTION_THRESHOLD})
+  --rolling-missing-fraction-threshold <N> Tri-diff missing fraction (default: ${ROLLING_MISSING_FRACTION_THRESHOLD})
   --use-branch-coverage <true|false>     Enable branch coverage signals (default: ${USE_BRANCH_COVERAGE})
   --enable-log-check <true|false>        Enable error-log oracle (default: ${ENABLE_LOG_CHECK})
   --require-trace-signal                 Fail if trace signal is missing when --use-trace=true
@@ -236,6 +258,8 @@ write_config_json() {
     trace_json="$(bool_json "${USE_TRACE}")"
     print_trace_json="$(bool_json "${PRINT_TRACE}")"
     compressed_order_json="$(bool_json "${USE_COMPRESSED_ORDER_DEBUG}")"
+    canonical_trace_json="$(bool_json "${USE_CANONICAL_TRACE}")"
+    canonical_msg_identity_json="$(bool_json "${USE_CANONICAL_MESSAGE_IDENTITY}")"
     branch_json="$(bool_json "${USE_BRANCH_COVERAGE}")"
     logcheck_json="$(bool_json "${ENABLE_LOG_CHECK}")"
 
@@ -263,6 +287,17 @@ write_config_json() {
   "useTrace" : ${trace_json},
   "printTrace" : ${print_trace_json},
   "useCompressedOrderDebug" : ${compressed_order_json},
+  "useCanonicalTraceSimilarity" : ${canonical_trace_json},
+  "canonicalRollingMinWindowSimilarityThreshold" : ${CANONICAL_WINDOW_SIM_THRESHOLD},
+  "canonicalWindowDivergenceMarginThreshold" : ${CANONICAL_WINDOW_DIVERGENCE_MARGIN},
+  "canonicalMinWindowEventCount" : ${CANONICAL_MIN_WINDOW_EVENTS},
+  "canonicalRollingMinAggregateSimilarityThreshold" : ${CANONICAL_AGGREGATE_SIM_THRESHOLD},
+  "canonicalAggregateDivergenceMarginThreshold" : ${CANONICAL_AGGREGATE_DIVERGENCE_MARGIN},
+  "useCanonicalMessageIdentityDiff" : ${canonical_msg_identity_json},
+  "rollingExclusiveMinCount" : ${ROLLING_EXCLUSIVE_MIN_COUNT},
+  "rollingMissingMinCount" : ${ROLLING_MISSING_MIN_COUNT},
+  "rollingExclusiveFractionThreshold" : ${ROLLING_EXCLUSIVE_FRACTION_THRESHOLD},
+  "rollingMissingFractionThreshold" : ${ROLLING_MISSING_FRACTION_THRESHOLD},
   "useBranchCoverage" : ${branch_json},
   "enableLogCheck" : ${logcheck_json},
   "useFormatCoverage" : false,
@@ -310,6 +345,17 @@ JSON
   "useTrace" : ${trace_json},
   "printTrace" : ${print_trace_json},
   "useCompressedOrderDebug" : ${compressed_order_json},
+  "useCanonicalTraceSimilarity" : ${canonical_trace_json},
+  "canonicalRollingMinWindowSimilarityThreshold" : ${CANONICAL_WINDOW_SIM_THRESHOLD},
+  "canonicalWindowDivergenceMarginThreshold" : ${CANONICAL_WINDOW_DIVERGENCE_MARGIN},
+  "canonicalMinWindowEventCount" : ${CANONICAL_MIN_WINDOW_EVENTS},
+  "canonicalRollingMinAggregateSimilarityThreshold" : ${CANONICAL_AGGREGATE_SIM_THRESHOLD},
+  "canonicalAggregateDivergenceMarginThreshold" : ${CANONICAL_AGGREGATE_DIVERGENCE_MARGIN},
+  "useCanonicalMessageIdentityDiff" : ${canonical_msg_identity_json},
+  "rollingExclusiveMinCount" : ${ROLLING_EXCLUSIVE_MIN_COUNT},
+  "rollingMissingMinCount" : ${ROLLING_MISSING_MIN_COUNT},
+  "rollingExclusiveFractionThreshold" : ${ROLLING_EXCLUSIVE_FRACTION_THRESHOLD},
+  "rollingMissingFractionThreshold" : ${ROLLING_MISSING_FRACTION_THRESHOLD},
   "useBranchCoverage" : ${branch_json},
   "enableLogCheck" : ${logcheck_json},
   "useFormatCoverage" : false,
@@ -352,6 +398,17 @@ JSON
   "useTrace" : ${trace_json},
   "printTrace" : ${print_trace_json},
   "useCompressedOrderDebug" : ${compressed_order_json},
+  "useCanonicalTraceSimilarity" : ${canonical_trace_json},
+  "canonicalRollingMinWindowSimilarityThreshold" : ${CANONICAL_WINDOW_SIM_THRESHOLD},
+  "canonicalWindowDivergenceMarginThreshold" : ${CANONICAL_WINDOW_DIVERGENCE_MARGIN},
+  "canonicalMinWindowEventCount" : ${CANONICAL_MIN_WINDOW_EVENTS},
+  "canonicalRollingMinAggregateSimilarityThreshold" : ${CANONICAL_AGGREGATE_SIM_THRESHOLD},
+  "canonicalAggregateDivergenceMarginThreshold" : ${CANONICAL_AGGREGATE_DIVERGENCE_MARGIN},
+  "useCanonicalMessageIdentityDiff" : ${canonical_msg_identity_json},
+  "rollingExclusiveMinCount" : ${ROLLING_EXCLUSIVE_MIN_COUNT},
+  "rollingMissingMinCount" : ${ROLLING_MISSING_MIN_COUNT},
+  "rollingExclusiveFractionThreshold" : ${ROLLING_EXCLUSIVE_FRACTION_THRESHOLD},
+  "rollingMissingFractionThreshold" : ${ROLLING_MISSING_FRACTION_THRESHOLD},
   "useBranchCoverage" : ${branch_json},
   "enableLogCheck" : ${logcheck_json},
   "useFormatCoverage" : false,
@@ -441,6 +498,50 @@ while [[ $# -gt 0 ]]; do
             ;;
         --use-compressed-order-debug)
             USE_COMPRESSED_ORDER_DEBUG="$2"
+            shift 2
+            ;;
+        --use-canonical-trace)
+            USE_CANONICAL_TRACE="$2"
+            shift 2
+            ;;
+        --canonical-window-sim-threshold)
+            CANONICAL_WINDOW_SIM_THRESHOLD="$2"
+            shift 2
+            ;;
+        --canonical-aggregate-sim-threshold)
+            CANONICAL_AGGREGATE_SIM_THRESHOLD="$2"
+            shift 2
+            ;;
+        --canonical-window-divergence-margin)
+            CANONICAL_WINDOW_DIVERGENCE_MARGIN="$2"
+            shift 2
+            ;;
+        --canonical-aggregate-divergence-margin)
+            CANONICAL_AGGREGATE_DIVERGENCE_MARGIN="$2"
+            shift 2
+            ;;
+        --canonical-min-window-events)
+            CANONICAL_MIN_WINDOW_EVENTS="$2"
+            shift 2
+            ;;
+        --use-canonical-message-identity)
+            USE_CANONICAL_MESSAGE_IDENTITY="$2"
+            shift 2
+            ;;
+        --rolling-exclusive-min-count)
+            ROLLING_EXCLUSIVE_MIN_COUNT="$2"
+            shift 2
+            ;;
+        --rolling-missing-min-count)
+            ROLLING_MISSING_MIN_COUNT="$2"
+            shift 2
+            ;;
+        --rolling-exclusive-fraction-threshold)
+            ROLLING_EXCLUSIVE_FRACTION_THRESHOLD="$2"
+            shift 2
+            ;;
+        --rolling-missing-fraction-threshold)
+            ROLLING_MISSING_FRACTION_THRESHOLD="$2"
             shift 2
             ;;
         --use-branch-coverage)
@@ -594,6 +695,17 @@ HBASE_DAEMON_RETRY_TIMES=${HBASE_DAEMON_RETRY_TIMES}
 USE_TRACE=${USE_TRACE}
 PRINT_TRACE=${PRINT_TRACE}
 USE_COMPRESSED_ORDER_DEBUG=${USE_COMPRESSED_ORDER_DEBUG}
+USE_CANONICAL_TRACE=${USE_CANONICAL_TRACE}
+CANONICAL_WINDOW_SIM_THRESHOLD=${CANONICAL_WINDOW_SIM_THRESHOLD}
+CANONICAL_AGGREGATE_SIM_THRESHOLD=${CANONICAL_AGGREGATE_SIM_THRESHOLD}
+CANONICAL_WINDOW_DIVERGENCE_MARGIN=${CANONICAL_WINDOW_DIVERGENCE_MARGIN}
+CANONICAL_AGGREGATE_DIVERGENCE_MARGIN=${CANONICAL_AGGREGATE_DIVERGENCE_MARGIN}
+CANONICAL_MIN_WINDOW_EVENTS=${CANONICAL_MIN_WINDOW_EVENTS}
+USE_CANONICAL_MESSAGE_IDENTITY=${USE_CANONICAL_MESSAGE_IDENTITY}
+ROLLING_EXCLUSIVE_MIN_COUNT=${ROLLING_EXCLUSIVE_MIN_COUNT}
+ROLLING_MISSING_MIN_COUNT=${ROLLING_MISSING_MIN_COUNT}
+ROLLING_EXCLUSIVE_FRACTION_THRESHOLD=${ROLLING_EXCLUSIVE_FRACTION_THRESHOLD}
+ROLLING_MISSING_FRACTION_THRESHOLD=${ROLLING_MISSING_FRACTION_THRESHOLD}
 USE_BRANCH_COVERAGE=${USE_BRANCH_COVERAGE}
 ENABLE_LOG_CHECK=${ENABLE_LOG_CHECK}
 SERVER_PORT=${SERVER_PORT}
@@ -705,7 +817,7 @@ while true; do
 
     if (( rounds >= TARGET_ROUNDS )); then
         if [[ "${USE_TRACE}" == true ]]; then
-            tri_diff_count="$(safe_rg_count_file 'Message identity tri-diff:' "${SERVER_LOG}")"
+            tri_diff_count="$(safe_rg_count_file '\[TRACE\] Aggregate:|\[TRACE\] Window alignment failed|\[TRACE\] Windowed traces not available' "${SERVER_LOG}")"
             if (( tri_diff_count < TARGET_ROUNDS )); then
                 if [[ -z "${target_rounds_first_seen_epoch}" ]]; then
                     target_rounds_first_seen_epoch="${now_epoch}"
@@ -764,7 +876,7 @@ for i in $(seq 1 "${CLIENTS}"); do
     cp -f "${CLIENT_LOG_PREFIX}_${i}.log" "${RUN_DIR}/upfuzz_client_${i}.log" || true
 done
 
-rg -n 'TestPlanDiffFeedbackPacket received|Jaccard Similarity|Low Jaccard similarity|Only Old|Rolling|Only New|total exec :' "${SERVER_LOG}" > "${RUN_DIR}/server_key_markers.log" 2>/dev/null || true
+rg -n 'TestPlanDiffFeedbackPacket received|Semantic Similarity|Semantic tri-diff|TRACE-LEGACY|Only Old|Rolling|Only New|total exec :|traceInteresting|addToCorpus' "${SERVER_LOG}" > "${RUN_DIR}/server_key_markers.log" 2>/dev/null || true
 rg -n 'executeTestPlanPacketDifferential|trace diff: all three packets are collected|Feedback packet is null|ExecutionException|Exception' "${CLIENT_LOG_PREFIX}_1.log" > "${RUN_DIR}/client_key_markers.log" 2>/dev/null || true
 
 find "${ROOT_DIR}/failure" -maxdepth 1 -type d -name 'failure_*' -printf '%f\n' | sort > "${RUN_DIR}/failure_after.txt" || true
@@ -800,7 +912,7 @@ if [[ "${USE_TRACE}" == true ]]; then
     TRACE_MERGED_ROLLING_NONZERO_COUNT="$(safe_rg_count_file '=== Merged Trace 1 \(Rolling\), size=[1-9][0-9]* ===' "${SERVER_LOG}")"
     TRACE_MERGED_NEW_NONZERO_COUNT="$(safe_rg_count_file '=== Merged Trace 2 \(Only New\), size=[1-9][0-9]* ===' "${SERVER_LOG}")"
     TRACE_MERGED_ZERO_COUNT="$(safe_rg_count_file '=== Merged Trace [0-9]+ \([^)]*\), size=0 ===' "${SERVER_LOG}")"
-    MESSAGE_TRI_DIFF_COUNT="$(safe_rg_count_file 'Message identity tri-diff:' "${SERVER_LOG}")"
+    MESSAGE_TRI_DIFF_COUNT="$(safe_rg_count_file '\[TRACE\] Aggregate:|\[TRACE\] Window alignment failed|\[TRACE\] Windowed traces not available' "${SERVER_LOG}")"
     if (( TRACE_RECEIVED_COUNT > 0 || TRACE_LEN_POSITIVE_COUNT > 0 )); then
         TRACE_SIGNAL_OK=true
     else

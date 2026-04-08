@@ -2121,10 +2121,32 @@ public class FuzzingServer {
         // rolling-upgrade bug oracle. Gated strictly: all 3 lanes must be OK
         // and all 3 must have non-null structured validationResults.
         String crossClusterReport = null;
-        if (allLanesOkWithStructuredResults(testPlanFeedbackPackets)) {
+        boolean checkerDGateOpen = allLanesOkWithStructuredResults(
+                testPlanFeedbackPackets);
+        logger.info(
+                "[CheckerD] gate={}, validationResults sizes: [{}={}, {}={}, {}={}]",
+                checkerDGateOpen,
+                "old-old",
+                testPlanFeedbackPackets[0].validationResults == null
+                        ? "null"
+                        : testPlanFeedbackPackets[0].validationResults.size(),
+                "rolling",
+                testPlanFeedbackPackets[1].validationResults == null
+                        ? "null"
+                        : testPlanFeedbackPackets[1].validationResults.size(),
+                "new-new",
+                testPlanFeedbackPackets[2].validationResults == null
+                        ? "null"
+                        : testPlanFeedbackPackets[2].validationResults
+                                .size());
+        if (checkerDGateOpen) {
             crossClusterReport = checkCrossClusterInconsistencyStructured(
                     testPlanFeedbackPackets);
+            logger.info("[CheckerD] crossClusterReport={}",
+                    crossClusterReport == null ? "null (no divergence)"
+                            : "DIVERGENCE DETECTED");
             if (crossClusterReport != null) {
+                logger.info("[CheckerD] report:\n{}", crossClusterReport);
                 if (DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE
                         .moreSignificantThan(overallVerdict)) {
                     overallVerdict = DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE;
