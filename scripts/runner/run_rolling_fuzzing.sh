@@ -649,6 +649,31 @@ if ! docker image inspect "${IMAGE_TAG}" >/dev/null 2>&1; then
     die "Docker image not found: ${IMAGE_TAG}"
 fi
 
+# Validate prebuild directories exist and look correctly set up.
+# These are volume-mounted into Docker containers at runtime — if they're
+# missing or were extracted without the build script's config patches,
+# the system won't start inside the container.
+for _v in "${ORIGINAL_VERSION}" "${UPGRADED_VERSION}"; do
+    _prebuild="${ROOT_DIR}/prebuild/${SYSTEM}/${_v}"
+    if [[ ! -d "${_prebuild}" ]]; then
+        die "Prebuild directory missing: ${_prebuild}. Run scripts/docker/build_rolling_image_pair.sh ${SYSTEM} ${ORIGINAL_VERSION} ${UPGRADED_VERSION}"
+    fi
+    case "${SYSTEM}" in
+        cassandra)
+            [[ -f "${_prebuild}/bin/cqlsh_daemon.py" ]] \
+                || die "Prebuild not set up: ${_prebuild}/bin/cqlsh_daemon.py missing. Re-run build_rolling_image_pair.sh."
+            ;;
+        hbase)
+            [[ -f "${_prebuild}/bin/hbase" ]] \
+                || die "Prebuild not set up: ${_prebuild}/bin/hbase missing. Re-run build_rolling_image_pair.sh."
+            ;;
+        hdfs)
+            [[ -f "${_prebuild}/bin/hdfs" ]] \
+                || die "Prebuild not set up: ${_prebuild}/bin/hdfs missing. Re-run build_rolling_image_pair.sh."
+            ;;
+    esac
+done
+
 if [[ "${SYSTEM}" == "hbase" ]]; then
     if ! docker image inspect "upfuzz_hdfs:hadoop-2.10.2" >/dev/null 2>&1; then
         die "Required dependency image for HBase is missing: upfuzz_hdfs:hadoop-2.10.2"
