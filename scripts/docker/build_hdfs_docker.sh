@@ -173,6 +173,11 @@ main() {
 
     prepare_hdfs_upgrade_build_context "${ori_version}" "${up_version}"
 
+    if is_truthy "${SKIP_DOCKER_BUILD:-0}"; then
+        log "SKIP_DOCKER_BUILD set — skipping docker build"
+        return
+    fi
+
     local docker_args=()
     if is_truthy "${FORCE_DOCKER_REBUILD}"; then
         docker_args=(--no-cache --pull)

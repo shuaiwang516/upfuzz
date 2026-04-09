@@ -77,6 +77,7 @@ main() {
     env \
         UPFUZZ_DIR="${UPFUZZ_DIR}" \
         FORCE_DOCKER_REBUILD="${FORCE_DOCKER_REBUILD}" \
+        SKIP_DOCKER_BUILD="${SKIP_DOCKER_BUILD:-0}" \
         PREBUILD_MIRROR_URL="${PREBUILD_MIRROR_URL}" \
         JAVA8_HOME="${JAVA8_HOME:-/usr/lib/jvm/java-8-openjdk-amd64}" \
         "${builder_script}" "${original}" "${upgraded}"
