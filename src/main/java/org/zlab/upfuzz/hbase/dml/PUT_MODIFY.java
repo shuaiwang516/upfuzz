@@ -15,53 +15,44 @@ import java.util.List;
 
 public class PUT_MODIFY extends HBaseCommand {
 
-    boolean validConstruction;
-
     public PUT_MODIFY(HBaseState state) {
         super(state);
-        validConstruction = true;
-        try {
-            Parameter tableName = chooseTable(state, this, null);
-            this.params.add(tableName); // [0] table name
 
-            Parameter columnFamilyName = chooseNotEmptyColumnFamily(state, this,
-                    null);
-            this.params.add(columnFamilyName); // [1] column family name
+        Parameter tableName = chooseTable(state, this, null);
+        this.params.add(tableName); // [0] table name
 
-            // FIXME: If there's no row key in current cf, this will fail
-            // with exception.
-            Parameter rowKey = chooseRowKey(state, this, null);
-            this.params.add(rowKey); // [2] row name
+        Parameter columnFamilyName = chooseNotEmptyColumnFamily(state, this,
+                null);
+        this.params.add(columnFamilyName); // [1] column family name
 
-            Parameter column = chooseColumnName(state, this,
-                    columnFamilyName.toString(), null);
-            this.params.add(column); // [3] column2type
+        // FIXME: If there's no row key in current cf, this will fail
+        // with exception.
+        Parameter rowKey = chooseRowKey(state, this, null);
+        this.params.add(rowKey); // [2] row name
 
-            ParameterType.ConcreteType valueType = new ParameterType.NotEmpty(
-                    new STRINGType(20));
-            Parameter value = valueType.generateRandomParameter(state, this);
-            this.params.add(value); // [4] value
+        Parameter column = chooseColumnName(state, this,
+                columnFamilyName.toString(), null);
+        this.params.add(column); // [3] column2type
 
-            Parameter VISIBILITYType = new ParameterType.OptionalType(
-                    new ParameterType.InCollectionType(
-                            CONSTANTSTRINGType.instance,
-                            (s, c) -> Utilities
-                                    .strings2Parameters(
-                                            VISIBILITYTypes),
-                            null),
-                    null)
-                            .generateRandomParameter(state, this);
-            this.params.add(VISIBILITYType); // [5] visibility
-        } catch (Exception e) {
-            validConstruction = false;
-        }
+        ParameterType.ConcreteType valueType = new ParameterType.NotEmpty(
+                new STRINGType(20));
+        Parameter value = valueType.generateRandomParameter(state, this);
+        this.params.add(value); // [4] value
+
+        Parameter VISIBILITYType = new ParameterType.OptionalType(
+                new ParameterType.InCollectionType(
+                        CONSTANTSTRINGType.instance,
+                        (s, c) -> Utilities
+                                .strings2Parameters(
+                                        VISIBILITYTypes),
+                        null),
+                null)
+                        .generateRandomParameter(state, this);
+        this.params.add(VISIBILITYType); // [5] visibility
     }
 
     @Override
     public String constructCommandString() {
-        if (!validConstruction) {
-            return "put ";
-        }
         Parameter tableName = params.get(0);
         Parameter columnFamilyName = params.get(1);
         Parameter rowKey = params.get(2);
@@ -91,9 +82,6 @@ public class PUT_MODIFY extends HBaseCommand {
 
     @Override
     public boolean mutate(State s) throws Exception {
-        if (!validConstruction) {
-            return false;
-        }
         try {
             super.mutate(s);
             return true;

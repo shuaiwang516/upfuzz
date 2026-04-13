@@ -1,6 +1,5 @@
 package org.zlab.upfuzz.hbase.dml;
 
-import org.zlab.upfuzz.CustomExceptions;
 import org.zlab.upfuzz.Parameter;
 import org.zlab.upfuzz.ParameterType;
 import org.zlab.upfuzz.State;
@@ -12,8 +11,6 @@ import org.zlab.upfuzz.utils.*;
 import java.util.*;
 
 public class GET extends HBaseCommand {
-
-    boolean validConstruction;
 
     /**
      * Example
@@ -37,166 +34,150 @@ public class GET extends HBaseCommand {
      */
     public GET(HBaseState state) {
         super(state);
-        validConstruction = true;
-        try {
-            Parameter tableName = chooseTable(state, this, null);
-            this.params.add(tableName); // 0 table name
 
-            Parameter rowKey = chooseRowKey(state, this, null);
-            this.params.add(rowKey); // 1 row key
+        Parameter tableName = chooseTable(state, this, null);
+        this.params.add(tableName); // 0 table name
 
-            Parameter columnFamilyName = chooseOptionalColumnFamily(state,
-                    this);
-            this.params.add(columnFamilyName); // 2 column family name
+        Parameter rowKey = chooseRowKey(state, this, null);
+        this.params.add(rowKey); // 1 row key
 
-            Parameter column;
-            // if columnFamily is empty, pick a random column from a table
-            // else, pick a column from that column family
-            if (columnFamilyName.toString().isEmpty()) {
-                ArrayList<Parameter> columns = new ArrayList<>();
+        Parameter columnFamilyName = chooseOptionalColumnFamily(state,
+                this);
+        this.params.add(columnFamilyName); // 2 column family name
 
-                for (HBaseColumnFamily cf : state.table2families
-                        .get(tableName.toString()).values()) {
-                    columns.addAll(cf.colName2Type);
-                }
+        Parameter column;
+        // if columnFamily is empty, pick a random column from a table
+        // else, pick a column from that column family
+        if (columnFamilyName.toString().isEmpty()) {
+            ArrayList<Parameter> columns = new ArrayList<>();
 
-                ParameterType.ConcreteType columnType = new ParameterType.InCollectionType(
-                        CONSTANTSTRINGType.instance,
-                        (s, c) -> columns,
-                        null);
+            for (HBaseColumnFamily cf : state.table2families
+                    .get(tableName.toString()).values()) {
+                columns.addAll(cf.colName2Type);
+            }
 
-                column = new ParameterType.OptionalType(columnType, null)
-                        .generateRandomParameter(state, this);
-            } else {
+            ParameterType.ConcreteType columnType = new ParameterType.InCollectionType(
+                    CONSTANTSTRINGType.instance,
+                    (s, c) -> columns,
+                    null);
+
+            column = new ParameterType.OptionalType(columnType, null)
+                    .generateRandomParameter(state, this);
+        } else {
 
 //                column = chooseColumnName(state, this, columnFamilyName.toString(), null);
-                ParameterType.ConcreteType columnType = new ParameterType.InCollectionType(
-                        CONSTANTSTRINGType.instance,
-                        (s, c) -> ((HBaseState) s).table2families
-                                .get(c.params.get(0).toString())
-                                .get(columnFamilyName.toString()).colName2Type,
-                        null);
+            ParameterType.ConcreteType columnType = new ParameterType.InCollectionType(
+                    CONSTANTSTRINGType.instance,
+                    (s, c) -> ((HBaseState) s).table2families
+                            .get(c.params.get(0).toString())
+                            .get(columnFamilyName.toString()).colName2Type,
+                    null);
 
-                column = new ParameterType.OptionalType(columnType, null)
-                        .generateRandomParameter(state, this);
+            column = new ParameterType.OptionalType(columnType, null)
+                    .generateRandomParameter(state, this);
 
-            }
-            this.params.add(column); // 3 column2type
-
-            Parameter consistency = new ParameterType.OptionalType(
-                    new ParameterType.InCollectionType(
-                            CONSTANTSTRINGType.instance,
-                            (s, c) -> Utilities
-                                    .strings2Parameters(CONSISTENCYTypes),
-                            null),
-                    null).generateRandomParameter(state, this);
-            this.params.add(consistency); // 4 consistency
-
-            // AUTHORIZATIONS
-            Parameter authorization = new ParameterType.OptionalType(
-                    new ParameterType.InCollectionType(
-                            CONSTANTSTRINGType.instance,
-                            (s, c) -> Utilities
-                                    .strings2Parameters(AUTHORIZATION_TYPES),
-                            null),
-                    null).generateRandomParameter(state, this);
-            this.params.add(authorization); // 5 consistency
-
-            // TODO: TIMERANGE
-
-            // FILTER
-            // Parameter filter = new ParameterType.OptionalType(new
-            // FILTERType(),
-            // null).generateRandomParameter(state, this);
-            // this.params.add(filter); // [6] filter
-
-            // REGION_REPLICA_ID ig this is related to the # regions used when
-            // creating a table
-            Parameter regionReplicaID = new ParameterType.OptionalType(
-                    new INTType(2, 20), null)
-                            .generateRandomParameter(state, this);
-            this.params.add(regionReplicaID); // 6 region replica id
-
-            Parameter formatter = new ParameterType.OptionalType(
-                    new ParameterType.InCollectionType(
-                            CONSTANTSTRINGType.instance,
-                            (s, c) -> Utilities
-                                    .strings2Parameters(
-                                            DEFAULT_FORMATTER_FUNCTIONS),
-                            null),
-                    null).generateRandomParameter(state, this);
-            this.params.add(formatter); // 7 formatter
-        } catch (Exception e) {
-            validConstruction = false;
         }
+        this.params.add(column); // 3 column2type
+
+        Parameter consistency = new ParameterType.OptionalType(
+                new ParameterType.InCollectionType(
+                        CONSTANTSTRINGType.instance,
+                        (s, c) -> Utilities
+                                .strings2Parameters(CONSISTENCYTypes),
+                        null),
+                null).generateRandomParameter(state, this);
+        this.params.add(consistency); // 4 consistency
+
+        // AUTHORIZATIONS
+        Parameter authorization = new ParameterType.OptionalType(
+                new ParameterType.InCollectionType(
+                        CONSTANTSTRINGType.instance,
+                        (s, c) -> Utilities
+                                .strings2Parameters(AUTHORIZATION_TYPES),
+                        null),
+                null).generateRandomParameter(state, this);
+        this.params.add(authorization); // 5 consistency
+
+        // TODO: TIMERANGE
+
+        // FILTER
+        // Parameter filter = new ParameterType.OptionalType(new
+        // FILTERType(),
+        // null).generateRandomParameter(state, this);
+        // this.params.add(filter); // [6] filter
+
+        // REGION_REPLICA_ID ig this is related to the # regions used when
+        // creating a table
+        Parameter regionReplicaID = new ParameterType.OptionalType(
+                new INTType(2, 20), null)
+                        .generateRandomParameter(state, this);
+        this.params.add(regionReplicaID); // 6 region replica id
+
+        Parameter formatter = new ParameterType.OptionalType(
+                new ParameterType.InCollectionType(
+                        CONSTANTSTRINGType.instance,
+                        (s, c) -> Utilities
+                                .strings2Parameters(
+                                        DEFAULT_FORMATTER_FUNCTIONS),
+                        null),
+                null).generateRandomParameter(state, this);
+        this.params.add(formatter); // 7 formatter
     }
 
     @Override
     public String constructCommandString() {
-        if (!validConstruction) {
-            return "get ";
+        String tableName = this.params.get(0).toString();
+        String rowKey = this.params.get(1).toString();
+        String columnFamilyName = this.params.get(2).toString();
+        String qualifier = this.params.get(3).toString();
+        String consistency = this.params.get(4).toString();
+        String authorization = this.params.get(5).toString();
+        // String filter = this.params.get(6).toString();
+        String regionReplicaID = this.params.get(6).toString();
+        String formatter = this.params.get(7).toString();
+
+        StringBuilder sb = new StringBuilder();
+
+        sb.append(String.format("get '%s', '%s'", tableName,
+                rowKey));
+
+        StringBuilder s = new StringBuilder();
+
+        if (!(columnFamilyName.isEmpty() && qualifier.isEmpty())) {
+            s.append((s.length() == 0) ? "" : ", ");
+            if (!columnFamilyName.isEmpty() && !qualifier.isEmpty()) {
+                s.append(String.format("COLUMN => '%s:%s'",
+                        columnFamilyName, qualifier));
+            } else {
+                s.append(String.format("COLUMN => '%s'",
+                        columnFamilyName.isEmpty() ? qualifier
+                                : columnFamilyName));
+            }
         }
-        try {
-            String tableName = this.params.get(0).toString();
-            String rowKey = this.params.get(1).toString();
-            String columnFamilyName = this.params.get(2).toString();
-            String qualifier = this.params.get(3).toString();
-            String consistency = this.params.get(4).toString();
-            String authorization = this.params.get(5).toString();
-            // String filter = this.params.get(6).toString();
-            String regionReplicaID = this.params.get(6).toString();
-            String formatter = this.params.get(7).toString();
-
-            StringBuilder sb = new StringBuilder();
-
-            sb.append(String.format("get '%s', '%s'", tableName,
-                    rowKey));
-
-            StringBuilder s = new StringBuilder();
-
-            if (!(columnFamilyName.isEmpty() && qualifier.isEmpty())) {
-                s.append((s.length() == 0) ? "" : ", ");
-                if (!columnFamilyName.isEmpty() && !qualifier.isEmpty()) {
-                    s.append(String.format("COLUMN => '%s:%s'",
-                            columnFamilyName, qualifier));
-                } else {
-                    s.append(String.format("COLUMN => '%s'",
-                            columnFamilyName.isEmpty() ? qualifier
-                                    : columnFamilyName));
-                }
-            }
-            if (!consistency.isEmpty())
-                s.append((s.length() == 0) ? "" : ", ")
-                        .append("CONSISTENCY => '")
-                        .append(consistency).append("'");
-            if (!authorization.isEmpty()) {
-                s.append((s.length() == 0) ? "" : ", ")
-                        .append("AUTHORIZATIONS => ")
-                        .append(authorization);
-            }
-            // if (!filter.isEmpty())
-            // s.append((s.length() == 0) ? "" : ", ")
-            // .append(filter);
-            if (!regionReplicaID.isEmpty())
-                s.append((s.length() == 0) ? "" : ", ")
-                        .append("REGION_REPLICA_ID => ")
-                        .append(regionReplicaID);
-            if (!formatter.isEmpty())
-                s.append((s.length() == 0) ? "" : ", ")
-                        .append("FORMATTER => '")
-                        .append(formatter).append("'");
-            if ((s.length() == 0))
-                return sb.toString();
-            sb.append(", {").append(s.toString()).append("}");
+        if (!consistency.isEmpty())
+            s.append((s.length() == 0) ? "" : ", ")
+                    .append("CONSISTENCY => '")
+                    .append(consistency).append("'");
+        if (!authorization.isEmpty()) {
+            s.append((s.length() == 0) ? "" : ", ")
+                    .append("AUTHORIZATIONS => ")
+                    .append(authorization);
+        }
+        // if (!filter.isEmpty())
+        // s.append((s.length() == 0) ? "" : ", ")
+        // .append(filter);
+        if (!regionReplicaID.isEmpty())
+            s.append((s.length() == 0) ? "" : ", ")
+                    .append("REGION_REPLICA_ID => ")
+                    .append(regionReplicaID);
+        if (!formatter.isEmpty())
+            s.append((s.length() == 0) ? "" : ", ")
+                    .append("FORMATTER => '")
+                    .append(formatter).append("'");
+        if ((s.length() == 0))
             return sb.toString();
-        }
-        // this is the case when we don't insert all params into this.params
-        // because:
-        // table has no row keys
-        // table has no columns families with qualifiers
-        catch (IndexOutOfBoundsException e) {
-            return "get ";
-        }
+        sb.append(", {").append(s.toString()).append("}");
+        return sb.toString();
     }
 
     @Override
@@ -206,14 +187,10 @@ public class GET extends HBaseCommand {
 
     @Override
     public boolean mutate(State s) throws Exception {
-        if (!validConstruction) {
-            return false;
-        }
         try {
             super.mutate(s);
             return true;
         } catch (Exception e) {
-            System.out.println("mutation on get failed");
             return false;
         }
     }

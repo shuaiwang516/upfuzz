@@ -15,58 +15,48 @@ import java.util.Collection;
 
 public class DELETE extends HBaseCommand {
 
-    boolean validConstruction;
-
     public DELETE(HBaseState state) {
         super(state);
-        validConstruction = true;
 
-        try {
-            Parameter tableName = chooseTable(state, this, null);
-            this.params.add(tableName); // [0] table name
+        Parameter tableName = chooseTable(state, this, null);
+        this.params.add(tableName); // [0] table name
 
-            Parameter rowKey = chooseRowKey(state, this, null);
-            this.params.add(rowKey); // [1] row key
+        Parameter rowKey = chooseRowKey(state, this, null);
+        this.params.add(rowKey); // [1] row key
 
-            Parameter columnFamilyName = chooseNotEmptyColumnFamily(state, this,
-                    null);
-            this.params.add(columnFamilyName); // [2] column family name
+        Parameter columnFamilyName = chooseNotEmptyColumnFamily(state, this,
+                null);
+        this.params.add(columnFamilyName); // [2] column family name
 
-            HBaseColumnFamily cf = state.table2families
-                    .get(tableName.toString())
-                    .get(columnFamilyName.toString());
+        HBaseColumnFamily cf = state.table2families
+                .get(tableName.toString())
+                .get(columnFamilyName.toString());
 
-            Parameter qualifier = cf.getRandomQualifier();
+        Parameter qualifier = cf.getRandomQualifier();
 
-            // this should not be the case since chooseNotEmptyColumnFamily
-            // returns non-empty
-            // column families, but for sanity
-            if (qualifier == null) {
-                validConstruction = false;
-                return;
-            }
-
-            this.params.add(qualifier); // [3] qualifier
-
-            Parameter VISIBILITYType = new ParameterType.OptionalType(
-                    new ParameterType.InCollectionType(
-                            CONSTANTSTRINGType.instance,
-                            (s, c) -> Utilities
-                                    .strings2Parameters(
-                                            VISIBILITYTypes),
-                            null),
-                    null).generateRandomParameter(state, this);
-            this.params.add(VISIBILITYType); // [4] visibility
-        } catch (CustomExceptions.EmptyCollectionException e) {
-            validConstruction = false;
+        // this should not be the case since chooseNotEmptyColumnFamily
+        // returns non-empty
+        // column families, but for sanity
+        if (qualifier == null) {
+            throw new CustomExceptions.EmptyCollectionException(
+                    "No qualifier available in column family", null);
         }
+
+        this.params.add(qualifier); // [3] qualifier
+
+        Parameter VISIBILITYType = new ParameterType.OptionalType(
+                new ParameterType.InCollectionType(
+                        CONSTANTSTRINGType.instance,
+                        (s, c) -> Utilities
+                                .strings2Parameters(
+                                        VISIBILITYTypes),
+                        null),
+                null).generateRandomParameter(state, this);
+        this.params.add(VISIBILITYType); // [4] visibility
     }
 
     @Override
     public String constructCommandString() {
-        if (!validConstruction) {
-            return "delete ";
-        }
         Parameter tableName = params.get(0);
         Parameter rowKey = params.get(1);
         Parameter columnFamilyName = params.get(2);
@@ -90,9 +80,6 @@ public class DELETE extends HBaseCommand {
 
     @Override
     public boolean mutate(State s) throws Exception {
-        if (!validConstruction) {
-            return false;
-        }
         try {
             super.mutate(s);
             return true;

@@ -12,36 +12,29 @@ import org.zlab.upfuzz.utils.Utilities;
 public class CLONE_TABLE_SCHEMA extends HBaseCommand {
     // clone_table_schema '<source_table_name>', '<new_table_name>'
 
-    boolean validConstruction;
-
     public CLONE_TABLE_SCHEMA(HBaseState state) {
         super(state);
-        validConstruction = true;
-        try {
-            Parameter tableName = chooseTable(state, this, null);
-            this.params.add(tableName); // [0] table name
 
-            ParameterType.ConcreteType newTableNameType = new ParameterType.NotInCollectionType(
-                    new ParameterType.NotEmpty(UUIDType.instance),
-                    (s, c) -> ((HBaseState) s).getTables(), null);
-            Parameter newTableName = newTableNameType
-                    .generateRandomParameter(state, this);
-            this.params.add(newTableName); // [1]=newTableName
+        Parameter tableName = chooseTable(state, this, null);
+        this.params.add(tableName); // [0] table name
 
-            Parameter options = new ParameterType.OptionalType(
-                    new ParameterType.InCollectionType(
-                            CONSTANTSTRINGType.instance,
-                            (s, c) -> Utilities
-                                    .strings2Parameters(
-                                            CLONE_TABLE_SCHEMA_OPTIONAL_ARGS),
-                            null),
-                    null).generateRandomParameter(state, this);
+        ParameterType.ConcreteType newTableNameType = new ParameterType.NotInCollectionType(
+                new ParameterType.NotEmpty(UUIDType.instance),
+                (s, c) -> ((HBaseState) s).getTables(), null);
+        Parameter newTableName = newTableNameType
+                .generateRandomParameter(state, this);
+        this.params.add(newTableName); // [1]=newTableName
 
-            this.params.add(options); // [2] = options
-        } catch (Exception e) {
-            validConstruction = false;
-        }
+        Parameter options = new ParameterType.OptionalType(
+                new ParameterType.InCollectionType(
+                        CONSTANTSTRINGType.instance,
+                        (s, c) -> Utilities
+                                .strings2Parameters(
+                                        CLONE_TABLE_SCHEMA_OPTIONAL_ARGS),
+                        null),
+                null).generateRandomParameter(state, this);
 
+        this.params.add(options); // [2] = options
     }
 
     @Override
@@ -49,9 +42,6 @@ public class CLONE_TABLE_SCHEMA extends HBaseCommand {
         // clone_table_schema '<source_table_name>', '<new_table_name>'
         // by default, clone_table_schema preserves the split keys
         // if we pass in false as the last arg, it won't
-        if (!validConstruction) {
-            return "clone_table_schema ";
-        }
         return String.format(
                 "clone_table_schema '%s', '%s'%s",
                 params.get(0).toString(), params.get(1).toString(),
@@ -61,9 +51,6 @@ public class CLONE_TABLE_SCHEMA extends HBaseCommand {
     @Override
     public void updateState(State state) {
         // Add a new table with the same schema as the source table
-        if (!validConstruction) {
-            return;
-        }
         Parameter newTableName = params.get(1);
         ((HBaseState) state).addTable(newTableName.toString());
         ((HBaseState) state).table2families.put(newTableName.toString(),

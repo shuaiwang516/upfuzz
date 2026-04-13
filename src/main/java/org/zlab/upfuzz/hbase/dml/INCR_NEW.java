@@ -15,26 +15,23 @@ public class INCR_NEW extends HBaseCommand {
     // Syntax: put '<table_name>', '<row_key>', '<column_family:qualifier>',
     // '<value>', [timestamp]
 
-    boolean validConstruction;
-
     // New row, column
     public INCR_NEW(HBaseState state) {
         super(state);
-        validConstruction = true;
-        try {
-            Parameter tableName = chooseTable(state, this, null);
-            this.params.add(tableName); // [0] table name
 
-            Parameter columnFamilyName = chooseColumnFamily(state, this, null);
-            this.params.add(columnFamilyName); // [1] column family name
+        Parameter tableName = chooseTable(state, this, null);
+        this.params.add(tableName); // [0] table name
 
-            ParameterType.ConcreteType rowKeyType = new ParameterType.NotInCollectionType(
-                    new ParameterType.NotEmpty(UUIDType.instance),
-                    (s, c) -> ((HBaseState) s).getRowKey(tableName.toString()),
-                    null);
-            Parameter rowKeyName = rowKeyType
-                    .generateRandomParameter(state, this);
-            this.params.add(rowKeyName); // [2] row key
+        Parameter columnFamilyName = chooseColumnFamily(state, this, null);
+        this.params.add(columnFamilyName); // [1] column family name
+
+        ParameterType.ConcreteType rowKeyType = new ParameterType.NotInCollectionType(
+                new ParameterType.NotEmpty(UUIDType.instance),
+                (s, c) -> ((HBaseState) s).getRowKey(tableName.toString()),
+                null);
+        Parameter rowKeyName = rowKeyType
+                .generateRandomParameter(state, this);
+        this.params.add(rowKeyName); // [2] row key
 
 //            ParameterType.ConcreteType columnsType = // LIST<PAIR<String,TYPEType>>
 //                    new ParameterType.NotEmpty(
@@ -47,26 +44,19 @@ public class INCR_NEW extends HBaseCommand {
 //            Parameter column = columnsType
 //                    .generateRandomParameter(state, this);
 //            params.add(column); // [3] column2type
-            ParameterType.ConcreteType columnType = new STRINGType(20);
-            Parameter column = columnType.generateRandomParameter(state, this);
-            params.add(column); // [3] column
+        ParameterType.ConcreteType columnType = new STRINGType(20);
+        Parameter column = columnType.generateRandomParameter(state, this);
+        params.add(column); // [3] column
 
-            // int
-            Parameter incrValue = new ParameterType.OptionalType(
-                    new INTType(1, 100), null).generateRandomParameter(state,
-                            this);
-            this.params.add(incrValue); // [4] column family name
-        } catch (Exception e) {
-            validConstruction = false;
-        }
-
+        // int
+        Parameter incrValue = new ParameterType.OptionalType(
+                new INTType(1, 100), null).generateRandomParameter(state,
+                        this);
+        this.params.add(incrValue); // [4] column family name
     }
 
     @Override
     public String constructCommandString() {
-        if (!validConstruction) {
-            return "incr ";
-        }
         Parameter tableName = params.get(0);
         Parameter columnFamilyName = params.get(1);
         Parameter rowKey = params.get(2);
@@ -86,9 +76,6 @@ public class INCR_NEW extends HBaseCommand {
 
     @Override
     public void updateState(State state) {
-        if (!validConstruction) {
-            return;
-        }
         Parameter tableName = params.get(0);
         Parameter columnFamilyName = params.get(1);
         Parameter rowKey = params.get(2);
