@@ -13,41 +13,31 @@ public class INCR_EXISTING extends HBaseCommand {
     // Syntax: put '<table_name>', '<row_key>', '<column_family:qualifier>',
     // '<value>', [timestamp]
 
-    boolean validConstruction;
-
     // New row, column
     public INCR_EXISTING(HBaseState state) {
         super(state);
-        validConstruction = true;
-        try {
-            Parameter tableName = chooseTable(state, this, null);
-            this.params.add(tableName); // [0] table name
 
-            Parameter columnFamilyName = chooseColumnFamily(state, this, null);
-            this.params.add(columnFamilyName); // [1] column family name
+        Parameter tableName = chooseTable(state, this, null);
+        this.params.add(tableName); // [0] table name
 
-            Parameter rowKey = chooseRowKey(state, this, null);
-            this.params.add(rowKey); // [2] row key
+        Parameter columnFamilyName = chooseColumnFamily(state, this, null);
+        this.params.add(columnFamilyName); // [1] column family name
 
-            Parameter column = chooseColumnName(state, this,
-                    columnFamilyName.toString(), null);
-            this.params.add(column); // [3] column2type
+        Parameter rowKey = chooseRowKey(state, this, null);
+        this.params.add(rowKey); // [2] row key
 
-            Parameter incrValue = new ParameterType.OptionalType(
-                    new INTType(1, 100), null).generateRandomParameter(state,
-                            this);
-            this.params.add(incrValue); // [4] column family name
-        } catch (Exception e) {
-            validConstruction = false;
-        }
+        Parameter column = chooseColumnName(state, this,
+                columnFamilyName.toString(), null);
+        this.params.add(column); // [3] column2type
 
+        Parameter incrValue = new ParameterType.OptionalType(
+                new INTType(1, 100), null).generateRandomParameter(state,
+                        this);
+        this.params.add(incrValue); // [4] column family name
     }
 
     @Override
     public String constructCommandString() {
-        if (!validConstruction) {
-            return "incr ";
-        }
         Parameter tableName = params.get(0);
         Parameter columnFamilyName = params.get(1);
         Parameter rowKey = params.get(2);
@@ -61,20 +51,18 @@ public class INCR_EXISTING extends HBaseCommand {
         if (incrValue.toString().isEmpty()) {
             valueStr = "";
         } else {
-            valueStr = "', " + incrValue.toString();
+            valueStr = ", " + incrValue.toString();
         }
         return "incr "
                 + "'" + tableName.toString() + "', "
                 + "'" + rowKey.toString() + "', "
                 + "'" + columnFamilyName.toString() + ":"
-                + colNameStr + valueStr;
+                + colNameStr + "'"
+                + valueStr;
     }
 
     @Override
     public void updateState(State state) {
-        if (!validConstruction) {
-            return;
-        }
         Parameter tableName = params.get(0);
         Parameter columnFamilyName = params.get(1);
         Parameter rowKey = params.get(2);
@@ -129,9 +117,6 @@ public class INCR_EXISTING extends HBaseCommand {
 
     @Override
     public boolean mutate(State s) throws Exception {
-        if (!validConstruction) {
-            return false;
-        }
         try {
             super.mutate(s);
             return true;

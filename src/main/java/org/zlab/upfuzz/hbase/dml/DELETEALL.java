@@ -1,6 +1,5 @@
 package org.zlab.upfuzz.hbase.dml;
 
-import org.zlab.upfuzz.CustomExceptions;
 import org.zlab.upfuzz.Parameter;
 import org.zlab.upfuzz.ParameterType;
 import org.zlab.upfuzz.State;
@@ -26,51 +25,39 @@ public class DELETEALL extends HBaseCommand {
      * if you don't wish to specify a column, use '' for the column argument
      */
 
-    boolean validConstruction;
-
     public DELETEALL(HBaseState state) {
         super(state);
 
-        validConstruction = true;
+        Parameter TableName = chooseTable(state, this, null);
+        this.params.add(TableName); // [0] table name
 
-        try {
-            Parameter TableName = chooseTable(state, this, null);
-            this.params.add(TableName); // [0] table name
+        Parameter rowKey = chooseRowKey(state, this, null);
+        this.params.add(rowKey); // [1] row name
 
-            Parameter rowKey = chooseRowKey(state, this, null);
-            this.params.add(rowKey); // [1] row name
+        // for this command's arguments, we either use a fixed row, or we
+        // use a row prefix filter, can't use both
+        // so, in the constructCommandString, we check to see if the
+        // parameter for the rowPrefixFilter is empty
+        ParameterType.ConcreteType rowPrefixFilterType = new ParameterType.OptionalType(
+                new ParameterType.NotEmpty(new STRINGType(3)),
+                null);
+        Parameter rowPrefixFilter = rowPrefixFilterType
+                .generateRandomParameter(state, this);
+        this.params.add(rowPrefixFilter); // [2] row prefix filter
 
-            // for this command's arguments, we either use a fixed row, or we
-            // use a row prefix filter, can't use both
-            // so, in the constructCommandString, we check to see if the
-            // parameter for the rowPrefixFilter is empty
-            ParameterType.ConcreteType rowPrefixFilterType = new ParameterType.OptionalType(
-                    new ParameterType.NotEmpty(new STRINGType(3)),
-                    null);
-            Parameter rowPrefixFilter = rowPrefixFilterType
-                    .generateRandomParameter(state, this);
-            this.params.add(rowPrefixFilter); // [2] row prefix filter
-
-            Parameter visibility = new ParameterType.OptionalType(
-                    new ParameterType.InCollectionType(
-                            CONSTANTSTRINGType.instance,
-                            (s, c) -> Utilities
-                                    .strings2Parameters(
-                                            VISIBILITYTypes),
-                            null),
-                    null).generateRandomParameter(state, this);
-            params.add(visibility); // [3] visibility
-
-        } catch (CustomExceptions.EmptyCollectionException e) {
-            validConstruction = false;
-        }
+        Parameter visibility = new ParameterType.OptionalType(
+                new ParameterType.InCollectionType(
+                        CONSTANTSTRINGType.instance,
+                        (s, c) -> Utilities
+                                .strings2Parameters(
+                                        VISIBILITYTypes),
+                        null),
+                null).generateRandomParameter(state, this);
+        params.add(visibility); // [3] visibility
     }
 
     @Override
     public String constructCommandString() {
-        if (!validConstruction) {
-            return "deleteall ";
-        }
         Parameter tableName = this.params.get(0);
         Parameter rowKey = this.params.get(1);
         Parameter rowPrefixFilter = this.params.get(2);
@@ -105,9 +92,6 @@ public class DELETEALL extends HBaseCommand {
 
     @Override
     public boolean mutate(State s) throws Exception {
-        if (!validConstruction) {
-            return false;
-        }
         try {
             super.mutate(s);
             return true;

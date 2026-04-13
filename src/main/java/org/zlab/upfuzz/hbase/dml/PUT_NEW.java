@@ -1,6 +1,5 @@
 package org.zlab.upfuzz.hbase.dml;
 
-import org.zlab.upfuzz.CustomExceptions;
 import org.zlab.upfuzz.Parameter;
 import org.zlab.upfuzz.ParameterType;
 import org.zlab.upfuzz.State;
@@ -17,57 +16,48 @@ public class PUT_NEW extends HBaseCommand {
     // syntax: put '<table_name>', '<row_key>', '<column_family:column_name>',
     // 'value' {VISIBILITY=>'PRIVATE|SECRET', ATTRIBUTES=>{'mykey'=>'myvalue'}}
 
-    boolean validConstruction;
-
     // New row, column
     public PUT_NEW(HBaseState state) {
         super(state);
-        validConstruction = true;
-        try {
-            Parameter tableName = chooseTable(state, this, null);
-            this.params.add(tableName); // [0] table name
 
-            ParameterType.ConcreteType rowKeyType = new ParameterType.NotInCollectionType(
-                    new ParameterType.NotEmpty(UUIDType.instance),
-                    (s, c) -> ((HBaseState) s).getRowKey(tableName.toString()),
-                    null);
-            Parameter rowKeyName = rowKeyType
-                    .generateRandomParameter(state, this);
-            this.params.add(rowKeyName); // [1] row key
+        Parameter tableName = chooseTable(state, this, null);
+        this.params.add(tableName); // [0] table name
 
-            Parameter columnFamilyName = chooseColumnFamily(state, this,
-                    null);
-            this.params.add(columnFamilyName); // [2] column family name
+        ParameterType.ConcreteType rowKeyType = new ParameterType.NotInCollectionType(
+                new ParameterType.NotEmpty(UUIDType.instance),
+                (s, c) -> ((HBaseState) s).getRowKey(tableName.toString()),
+                null);
+        Parameter rowKeyName = rowKeyType
+                .generateRandomParameter(state, this);
+        this.params.add(rowKeyName); // [1] row key
 
-            ParameterType.ConcreteType columnType = new STRINGType(20);
-            Parameter column = columnType.generateRandomParameter(state, this);
-            params.add(column); // [3] column
+        Parameter columnFamilyName = chooseColumnFamily(state, this,
+                null);
+        this.params.add(columnFamilyName); // [2] column family name
 
-            ParameterType.ConcreteType valueType = new ParameterType.NotEmpty(
-                    new STRINGType(20));
-            Parameter value = valueType.generateRandomParameter(state, this);
-            this.params.add(value); // [4] value
+        ParameterType.ConcreteType columnType = new STRINGType(20);
+        Parameter column = columnType.generateRandomParameter(state, this);
+        params.add(column); // [3] column
 
-            Parameter VISIBILITYType = new ParameterType.OptionalType(
-                    new ParameterType.InCollectionType(
-                            CONSTANTSTRINGType.instance,
-                            (s, c) -> Utilities
-                                    .strings2Parameters(
-                                            VISIBILITYTypes),
-                            null),
-                    null)
-                            .generateRandomParameter(state, this);
-            params.add(VISIBILITYType); // [5] visibility
-        } catch (CustomExceptions.EmptyCollectionException e) {
-            validConstruction = false;
-        }
+        ParameterType.ConcreteType valueType = new ParameterType.NotEmpty(
+                new STRINGType(20));
+        Parameter value = valueType.generateRandomParameter(state, this);
+        this.params.add(value); // [4] value
+
+        Parameter VISIBILITYType = new ParameterType.OptionalType(
+                new ParameterType.InCollectionType(
+                        CONSTANTSTRINGType.instance,
+                        (s, c) -> Utilities
+                                .strings2Parameters(
+                                        VISIBILITYTypes),
+                        null),
+                null)
+                        .generateRandomParameter(state, this);
+        params.add(VISIBILITYType); // [5] visibility
     }
 
     @Override
     public String constructCommandString() {
-        if (!validConstruction) {
-            return "put ";
-        }
         String tableName = params.get(0).toString();
         String rowKey = params.get(1).toString();
         String columnFamilyName = params.get(2).toString();
@@ -87,9 +77,6 @@ public class PUT_NEW extends HBaseCommand {
 
     @Override
     public void updateState(State state) {
-        if (!validConstruction) {
-            return;
-        }
         Parameter tableName = params.get(0);
         Parameter rowKey = params.get(1);
         Parameter columnFamilyName = params.get(2);
@@ -121,9 +108,6 @@ public class PUT_NEW extends HBaseCommand {
 
     @Override
     public boolean mutate(State s) throws Exception {
-        if (!validConstruction) {
-            return false;
-        }
         try {
             super.mutate(s);
             return true;
