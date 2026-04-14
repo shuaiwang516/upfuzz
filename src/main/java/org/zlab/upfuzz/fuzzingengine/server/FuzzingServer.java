@@ -2007,22 +2007,36 @@ public class FuzzingServer {
                                 .computeSemantic(mergedOO, mergedRO,
                                         mergedNN);
 
-                        rollingExclusive = totalMapCount(triDiff.only1);
-                        totalMessages = triDiff.sequence1.size();
-                        rollingExclusiveFraction = totalMessages > 0
-                                ? (double) rollingExclusive / totalMessages
-                                : 0;
-
-                        rollingMissing = totalMapCount(triDiff.in02Only);
-                        rollingMissingFraction = totalMessages > 0
-                                ? (double) rollingMissing / totalMessages
-                                : 0;
-
+                        rollingExclusive = triDiff.rollingExclusiveCount();
+                        rollingMissing = triDiff.rollingMissingCount();
+                        totalMessages = triDiff.rollingLaneSize();
                         totalAllThreeCount = triDiff.totalAllThreeCount();
+                        rollingExclusiveFraction = triDiff
+                                .rollingExclusiveFraction();
+                        rollingMissingFraction = triDiff
+                                .rollingMissingFraction();
+
+                        // Phase 1 invariant: both fractions must stay in
+                        // [0, 1]. The accessors guarantee this by
+                        // construction — a WARN here indicates a
+                        // regression in the tri-diff math, which would
+                        // silently contaminate offline re-scoring, so
+                        // surface it during fuzzing.
+                        if (rollingExclusiveFraction < 0.0
+                                || rollingExclusiveFraction > 1.0
+                                || rollingMissingFraction < 0.0
+                                || rollingMissingFraction > 1.0) {
+                            logger.warn(
+                                    "[TRACE] Tri-diff fraction out of [0,1]: exclusive={}, missing={}, laneSize={}, baselineShared={}",
+                                    rollingExclusiveFraction,
+                                    rollingMissingFraction,
+                                    totalMessages,
+                                    triDiff.baselineSharedCount());
+                        }
 
                         logger.info(
                                 "[TRACE] TriDiff Window {} ({}): rollingExclusive={} ({}), "
-                                        + "rollingMissing={} ({}), all3={}, total={}",
+                                        + "rollingMissing={} ({}), baselineShared={}, all3={}, total={}",
                                 aw.rolling.ordinal,
                                 aw.rolling.comparisonStageId,
                                 rollingExclusive,
@@ -2031,19 +2045,22 @@ public class FuzzingServer {
                                 rollingMissing,
                                 String.format("%.4f",
                                         rollingMissingFraction),
+                                triDiff.baselineSharedCount(),
                                 totalAllThreeCount,
                                 totalMessages);
 
-                        triDiffExclusiveFired = rollingExclusive >= Config
-                                .getConf().rollingExclusiveMinCount
-                                && rollingExclusiveFraction >= Config
-                                        .getConf().rollingExclusiveFractionThreshold;
-                        triDiffMissingFired = rollingMissing >= Config
-                                .getConf().rollingMissingMinCount
-                                && rollingMissingFraction >= Config
-                                        .getConf().rollingMissingFractionThreshold;
-                        triDiffInteresting = triDiffExclusiveFired
-                                || triDiffMissingFired;
+                        TriDiffWindowDecision decision = evaluateTriDiffWindow(
+                                triDiff,
+                                aw.rolling.stageKind,
+                                Config.getConf().rollingExclusiveMinCount,
+                                Config
+                                        .getConf().rollingExclusiveFractionThreshold,
+                                Config.getConf().rollingMissingMinCount,
+                                Config
+                                        .getConf().rollingMissingFractionThreshold);
+                        triDiffExclusiveFired = decision.exclusiveInteresting;
+                        triDiffMissingFired = decision.missingInteresting;
+                        triDiffInteresting = decision.triDiffInteresting;
                     }
 
                     // Phase 0: emit a window row for every evaluated window
@@ -2321,7 +2338,6 @@ public class FuzzingServer {
                         newBranchCoverage,
                         traceInteresting,
                         anyTriDiffExclusiveFired,
-                        anyTriDiffMissingFired,
                         anyWindowSimFired,
                         aggregateSimFired);
                 admissionReasonForRow = admissionReason;
@@ -4149,16 +4165,24 @@ public class FuzzingServer {
     }
 
     /**
-     * Phase 0 helper: map the raw trigger flags to a single admission reason.
-     * Branch coverage always wins; within the trace-only fallback, tri-diff
-     * exclusive is reported before tri-diff missing (so Phase 1's hotfix on
-     * missing-only is measurable), and windowSim is the weakest class.
+     * Map the raw trigger flags to a single admission reason. Branch coverage
+     * always wins; within the trace-only fallback, tri-diff exclusive beats
+     * window/aggregate similarity.
+     *
+     * <p>Phase 1 hotfix: missing-message churn is no longer a direct admission
+     * path, so it is not accepted as a primary reason here either. A round
+     * where missing co-fires alongside an actual admission signal must be
+     * attributed to the signal that genuinely admitted it; otherwise the
+     * {@link AdmissionReason#TRACE_ONLY_TRIDIFF_MISSING} counter would
+     * overcount and make the Phase 1 hotfix impossible to verify from the CSV
+     * summary. The fact that missing co-fired is still recorded on
+     * {@link AdmissionSummaryRow#triDiffMissingFired} (boolean column) for
+     * observability.
      */
-    private static AdmissionReason classifyAdmissionReason(
+    static AdmissionReason classifyAdmissionReason(
             boolean newBranchCoverage,
             boolean traceInteresting,
             boolean triDiffExclusiveFired,
-            boolean triDiffMissingFired,
             boolean windowSimFired,
             boolean aggregateSimFired) {
         if (newBranchCoverage) {
@@ -4167,9 +4191,6 @@ public class FuzzingServer {
         }
         if (triDiffExclusiveFired) {
             return AdmissionReason.TRACE_ONLY_TRIDIFF_EXCLUSIVE;
-        }
-        if (triDiffMissingFired) {
-            return AdmissionReason.TRACE_ONLY_TRIDIFF_MISSING;
         }
         if (windowSimFired || aggregateSimFired) {
             return AdmissionReason.TRACE_ONLY_WINDOW_SIM;
@@ -4384,5 +4405,70 @@ public class FuzzingServer {
             total += value;
         }
         return total;
+    }
+
+    // === Phase 1: tri-diff window decision ===
+
+    /**
+     * Explicit sub-decisions for a single aligned tri-diff window. Separating
+     * {@code exclusiveInteresting} from {@code missingInteresting} is what lets
+     * Phase 1 disable missing-only admission while still tracking missing-signal
+     * counters for observability and later analysis. The {@code triDiffInteresting}
+     * field is the final answer fed into corpus admission — after Phase 1 it is
+     * equal to {@code exclusiveInteresting}.
+     */
+    static final class TriDiffWindowDecision {
+        final boolean exclusiveInteresting;
+        final boolean missingInteresting;
+        final boolean triDiffInteresting;
+
+        TriDiffWindowDecision(boolean exclusiveInteresting,
+                boolean missingInteresting, boolean triDiffInteresting) {
+            this.exclusiveInteresting = exclusiveInteresting;
+            this.missingInteresting = missingInteresting;
+            this.triDiffInteresting = triDiffInteresting;
+        }
+    }
+
+    /**
+     * Evaluate a single aligned tri-diff window.
+     *
+     * <p>Rolling-exclusive churn (messages the rolling lane produced that neither
+     * baseline has) is the strong signal and is the only direct seed-admission
+     * path after the Phase 1 hotfix. Missing-message churn (messages both
+     * baselines share that rolling dropped) is still thresholded and reported,
+     * but no longer contributes to {@code triDiffInteresting}. The missing path
+     * is additionally stage-gated: {@code PRE_UPGRADE} windows never produce
+     * {@code missingInteresting=true} because Apr 12 evidence showed benign
+     * pre-upgrade missing drift was driving the "always-on" missing trigger.
+     */
+    static TriDiffWindowDecision evaluateTriDiffWindow(
+            DiffComputeMessageTriDiff.MessageTriDiffResult triDiff,
+            TraceWindow.StageKind stageKind,
+            int rollingExclusiveMinCount,
+            double rollingExclusiveFractionThreshold,
+            int rollingMissingMinCount,
+            double rollingMissingFractionThreshold) {
+        int rollingExclusive = triDiff.rollingExclusiveCount();
+        int rollingMissing = triDiff.rollingMissingCount();
+        double exclusiveFraction = triDiff.rollingExclusiveFraction();
+        double missingFraction = triDiff.rollingMissingFraction();
+
+        boolean exclusiveInteresting = rollingExclusive >= rollingExclusiveMinCount
+                && exclusiveFraction >= rollingExclusiveFractionThreshold;
+
+        boolean preUpgradeStage = stageKind == TraceWindow.StageKind.PRE_UPGRADE;
+        boolean missingInteresting = !preUpgradeStage
+                && rollingMissing >= rollingMissingMinCount
+                && missingFraction >= rollingMissingFractionThreshold;
+
+        // Phase 1 hotfix: missing-only windows no longer admit seeds.
+        // triDiffInteresting reflects the admission verdict; missingInteresting
+        // is kept for observability so offline re-scoring and Phase 7 reruns
+        // can reproduce the decision.
+        boolean triDiffInteresting = exclusiveInteresting;
+
+        return new TriDiffWindowDecision(exclusiveInteresting,
+                missingInteresting, triDiffInteresting);
     }
 }
