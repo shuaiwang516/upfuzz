@@ -192,6 +192,15 @@ def wait_for_marker(assignments: List[MachineAssignment], session: str,
     return results
 
 
+def require_success(results, stage: str):
+    failed = [a.label for a, ok in results.values() if not ok]
+    if failed:
+        print(f"\n[ERROR] {stage} did not complete successfully on {len(failed)} machines:")
+        for label in failed:
+            print(f"  - {label}")
+        sys.exit(1)
+
+
 def parallel_quick(assignments, cmd_fn, desc=""):
     """Run quick SSH commands on all machines in parallel."""
     print(f"\n{'='*60}")
@@ -214,6 +223,7 @@ def parallel_quick(assignments, cmd_fn, desc=""):
 
 def cmd_deploy(assignments: List[MachineAssignment], args):
     """Full deployment: setup → clone → build → pull+setup → launch."""
+    prebuild_timeout = max(3600, min(args.timeout_sec, 7200))
 
     # Step 1: Setup environment
     print("\n[Step 1/5] Setting up environment...")
@@ -231,7 +241,9 @@ def cmd_deploy(assignments: List[MachineAssignment], args):
             f"--skip-prebuild-check --skip-image-check --skip-build\n"
             f"fi\n"
         ))
-    wait_for_marker(assignments, "setup", timeout=600, desc="Environment setup")
+    results = wait_for_marker(assignments, "setup", timeout=600,
+                              desc="Environment setup")
+    require_success(results, "Environment setup")
 
     # Step 2: Clone/update repos
     print("\n[Step 2/5] Cloning/updating repos...")
@@ -251,7 +263,9 @@ def cmd_deploy(assignments: List[MachineAssignment], args):
             f"git checkout {BRANCH} && git reset --hard origin/{BRANCH}\n"
             f"fi\n"
         ))
-    wait_for_marker(assignments, "clone", timeout=300, desc="Clone repos")
+    results = wait_for_marker(assignments, "clone", timeout=300,
+                              desc="Clone repos")
+    require_success(results, "Clone repos")
 
     # Step 3: Build ssg-runtime + upfuzz
     print("\n[Step 3/5] Building ssg-runtime + upfuzz...")
@@ -269,7 +283,8 @@ def cmd_deploy(assignments: List[MachineAssignment], args):
             f"JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64 "
             f"./gradlew --no-daemon copyDependencies\n"
         ))
-    wait_for_marker(assignments, "build", timeout=300, desc="Build")
+    results = wait_for_marker(assignments, "build", timeout=300, desc="Build")
+    require_success(results, "Build")
 
     # Step 4: Pull Docker images from Docker Hub + setup prebuilds from mir
     # Images are pre-built locally and pushed to Docker Hub — no docker build on CloudLab.
@@ -294,8 +309,10 @@ def cmd_deploy(assignments: List[MachineAssignment], args):
             f"SKIP_DOCKER_BUILD=1 bash scripts/docker/build_rolling_image_pair.sh "
             f"{a.job['system']} {a.job['original']} {a.job['upgraded']}\n"
         ))
-    wait_for_marker(assignments, "docker", timeout=900, poll_interval=20,
-                    desc="Pull images + setup prebuilds")
+    results = wait_for_marker(assignments, "docker", timeout=prebuild_timeout,
+                              poll_interval=20,
+                              desc="Pull images + setup prebuilds")
+    require_success(results, "Pull images + setup prebuilds")
 
     # Step 5: Launch
     cmd_launch(assignments, args)
