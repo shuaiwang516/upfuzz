@@ -25,7 +25,7 @@
 2. Prebuilds must be uploaded to mir server at:
    `https://mir.cs.illinois.edu/~swang516/rupfuzz/prebuild/`
 
-3. Machine list at `scripts/cloudlab-runner/machine_list.txt` (12 machines).
+3. Machine list at `scripts/cloudlab-runner/machine_list.txt` (currently 6 machines).
 
 ## Usage
 
@@ -48,14 +48,14 @@ python3 scripts/cloudlab_launcher.py stop
 # Download results
 python3 scripts/cloudlab_launcher.py download --dest /mnt/ssd/rupfuzz/cloudlab-results/apr10
 
-# Only mode 5 machines (first 6)
+# Current 6-machine list (equivalent to all machines today)
 python3 scripts/cloudlab_launcher.py monitor --machines 1-6
 
-# Only mode 6 machines (second 6)
-python3 scripts/cloudlab_launcher.py monitor --machines 7-12
-
-# Force all machines to mode 5
+# Explicitly force mode 5 (not needed with the current 6-machine list)
 python3 scripts/cloudlab_launcher.py deploy --mode 5 --timeout-sec 43200
+
+# Override all machines to mode 6 if you want a branch-only run
+python3 scripts/cloudlab_launcher.py deploy --mode 6 --timeout-sec 43200
 
 # Custom tag
 python3 scripts/cloudlab_launcher.py deploy --tag my-experiment --timeout-sec 7200
@@ -71,19 +71,15 @@ The `deploy` command runs these steps in order:
 4. **Pull images + setup prebuilds** — Pulls pre-built Docker images from Docker Hub, then runs the build script with `FORCE_DOCKER_REBUILD=0` to download prebuilds from mir and apply config patches (num_tokens, daemon scripts, etc.)
 5. **Launch** — Starts fuzzing in tmux sessions on all machines
 
-## Machine Assignment (default)
+## Machine Assignment (current default)
+
+With the current 6-entry `scripts/cloudlab-runner/machine_list.txt`, the launcher maps one predefined job to each machine and all six assignments run in `testingMode=5` by default. The mixed `mode 5 / mode 6` behavior only applies when the machine list has more than six entries, or when `--mode` is explicitly provided.
 
 | Machine # | Host | Job | Mode |
 |-----------|------|-----|------|
-| 1 | pc22 | Cassandra 3.11→4.1 | 5 (trace) |
-| 2 | pc16 | Cassandra 4.1→5.0 | 5 (trace) |
-| 3 | pc37 | HBase 2.5→2.6 | 5 (trace) |
-| 4 | pc44 | HBase 2.6→4.0 | 5 (trace) |
-| 5 | pc34 | HDFS 2.10→3.3 | 5 (trace) |
-| 6 | pc48 | HDFS 3.3→3.4 | 5 (trace) |
-| 7 | pc06 | Cassandra 3.11→4.1 | 6 (branch only) |
-| 8 | pc27 | Cassandra 4.1→5.0 | 6 (branch only) |
-| 9 | pc13 | HBase 2.5→2.6 | 6 (branch only) |
-| 10 | pc41 | HBase 2.6→4.0 | 6 (branch only) |
-| 11 | pc32 | HDFS 2.10→3.3 | 6 (branch only) |
-| 12 | pc26 | HDFS 3.3→3.4 | 6 (branch only) |
+| 1 | clnode270 | Cassandra 3.11→4.1 | 5 (trace) |
+| 2 | clnode264 | Cassandra 4.1→5.0 | 5 (trace) |
+| 3 | clnode262 | HBase 2.5→2.6 | 5 (trace) |
+| 4 | clnode275 | HBase 2.6→4.0 | 5 (trace) |
+| 5 | clnode282 | HDFS 2.10→3.3 | 5 (trace) |
+| 6 | clnode265 | HDFS 3.3→3.4 | 5 (trace) |
