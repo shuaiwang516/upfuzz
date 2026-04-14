@@ -17,6 +17,7 @@ import org.apache.commons.lang3.SerializationUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jacoco.core.data.ExecutionDataStore;
+import org.zlab.net.tracker.CanonicalKeyMode;
 import org.zlab.net.tracker.Trace;
 import org.zlab.net.tracker.TraceEntry;
 import org.zlab.net.tracker.diff.DiffComputeCompressedOrder;
@@ -1851,6 +1852,8 @@ public class FuzzingServer {
             }
 
             if (Config.getConf().printTrace) {
+                CanonicalKeyMode debugKeyMode = Config
+                        .getConf().canonicalKeyMode;
                 for (int i = 0; i < serializedTraces.length; i++) {
                     String clusterType = testPlanID2Setup.get(i);
                     logger.info("=== Merged Trace " + i + " ("
@@ -1863,10 +1866,11 @@ public class FuzzingServer {
                                 + entryIdx + "] " + entry);
                         entryIdx++;
                     }
-                    // Print canonical key sequence
-                    logger.info("[" + clusterType
-                            + "] canonical keys: "
-                            + serializedTraces[i].getCanonicalKeysForDiff());
+                    // Print canonical key sequence at the configured tier
+                    logger.info("[" + clusterType + "] canonical keys ("
+                            + debugKeyMode + "): "
+                            + serializedTraces[i]
+                                    .getCanonicalKeysForDiff(debugKeyMode));
                 }
             }
         }
@@ -1952,6 +1956,8 @@ public class FuzzingServer {
         if (Config.getConf().useCanonicalTraceSimilarity
                 && windowedTracesAvailable) {
 
+            CanonicalKeyMode keyMode = Config.getConf().canonicalKeyMode;
+
             List<AlignedWindow> aligned = alignWindows(
                     testPlanFeedbackPackets[0].windowedTrace,
                     testPlanFeedbackPackets[1].windowedTrace,
@@ -1961,8 +1967,9 @@ public class FuzzingServer {
                 logger.info(
                         "[TRACE] Window alignment failed or abstained — trace scoring skipped");
             } else {
-                logger.info("[TRACE] Aligned {} comparable windows",
-                        aligned.size());
+                logger.info(
+                        "[TRACE] Aligned {} comparable windows (keyMode={})",
+                        aligned.size(), keyMode);
 
                 // Accumulators for aggregate similarity
                 long aggIntersectionOO_RO = 0, aggUnionOO_RO = 0;
@@ -1976,7 +1983,7 @@ public class FuzzingServer {
 
                     // --- Per-window similarity ---
                     double[] sims = DiffComputeSemanticSimilarity.compute(
-                            mergedOO, mergedRO, mergedNN);
+                            mergedOO, mergedRO, mergedNN, keyMode);
                     double rollingMinSimilarity = Math.min(sims[0], sims[1]);
                     double baselineSimilarity = sims[2];
                     double rollingDivergenceMargin = Math.min(
@@ -2019,8 +2026,8 @@ public class FuzzingServer {
                             && Config
                                     .getConf().useCanonicalMessageIdentityDiff) {
                         DiffComputeMessageTriDiff.MessageTriDiffResult triDiff = DiffComputeMessageTriDiff
-                                .computeSemantic(mergedOO, mergedRO,
-                                        mergedNN);
+                                .computeSemantic(mergedOO, mergedRO, mergedNN,
+                                        keyMode);
 
                         rollingExclusive = triDiff.rollingExclusiveCount();
                         rollingMissing = triDiff.rollingMissingCount();
@@ -2120,13 +2127,13 @@ public class FuzzingServer {
                     // min-event threshold)
                     if (windowHasEnoughEvents) {
                         Map<String, Integer> msOO = mergedOO != null
-                                ? mergedOO.getCanonicalMultiset()
+                                ? mergedOO.getCanonicalMultiset(keyMode)
                                 : Collections.emptyMap();
                         Map<String, Integer> msRO = mergedRO != null
-                                ? mergedRO.getCanonicalMultiset()
+                                ? mergedRO.getCanonicalMultiset(keyMode)
                                 : Collections.emptyMap();
                         Map<String, Integer> msNN = mergedNN != null
-                                ? mergedNN.getCanonicalMultiset()
+                                ? mergedNN.getCanonicalMultiset(keyMode)
                                 : Collections.emptyMap();
 
                         if (Config.getConf().printTrace) {

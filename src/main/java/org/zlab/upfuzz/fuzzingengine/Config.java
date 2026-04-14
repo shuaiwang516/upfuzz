@@ -2,6 +2,7 @@ package org.zlab.upfuzz.fuzzingengine;
 
 import com.google.gson.GsonBuilder;
 import java.lang.reflect.Field;
+import org.zlab.net.tracker.CanonicalKeyMode;
 
 /**
  * Configuration for the fuzzing engine
@@ -349,6 +350,16 @@ public class Config {
         public int rollingMissingMinCount = 3;
         public double rollingExclusiveFractionThreshold = 0.05;
         public double rollingMissingFractionThreshold = 0.05;
+
+        // --- Canonical key tier (Phase 3) ---
+        // Controls how strictly two messages are considered the same by
+        // window similarity and tri-diff. SEMANTIC is the original Phase 2
+        // key; SEMANTIC_SHAPE_SUMMARY is the Apr 12 recommended default
+        // because it separates within-semantic drift while still bucketing
+        // benign value noise so it can survive cross-version refactors.
+        // SEMANTIC_SHAPE_VALUE is reserved for offline analysis; it
+        // over-fragments in cross-version campaigns.
+        public CanonicalKeyMode canonicalKeyMode = CanonicalKeyMode.SEMANTIC_SHAPE_SUMMARY;
 
         // Debug
         public boolean useCompressedOrderDebug = false;
