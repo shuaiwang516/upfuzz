@@ -86,7 +86,7 @@ public class FuzzingServer {
 
     public TestPlanCorpus testPlanCorpus = new TestPlanCorpus();
     public FullStopCorpus fullStopCorpus = new FullStopCorpus();
-    public RollingSeedCorpus rollingSeedCorpus = new RollingSeedCorpus();
+    public RollingSeedCorpus rollingSeedCorpus;
 
     // Phase 0 observability
     public final ObservabilityMetrics observabilityMetrics;
@@ -241,6 +241,21 @@ public class FuzzingServer {
         this.observabilityMetrics
                 .setEnabled(Config.getConf().enableObservabilityArtifacts);
         this.observabilityMetrics.writeAllArtifacts();
+
+        // Phase 2: construct the tiered rolling corpus from the current
+        // Config snapshot. The long-term pools and admission caps depend on
+        // these knobs, so the corpus cannot be safely initialized at field
+        // declaration time (before Config is loaded by Main).
+        this.rollingSeedCorpus = new RollingSeedCorpus(
+                Config.getConf().rollingCorpusMaxSize,
+                Config.getConf().traceOnlyCorpusMaxShare,
+                Config.getConf().traceOnlyAdmissionCapPerRound,
+                Config.getConf().traceOnlyAdmissionCapPer100Rounds,
+                Config.getConf().traceOnlyProbationRounds,
+                Config.getConf().traceProbationMaxSelectionsWithoutPayoff,
+                Config.getConf().traceProbationRediscoveryThreshold,
+                Config.getConf().branchBackedSelectionWeight,
+                new java.util.Random(Config.getConf().seed ^ 0xC0FFEEL));
 
         if (Config.getConf().useVersionDelta) {
             corpus = new CorpusVersionDeltaFiveQueueWithBoundary();
@@ -2311,17 +2326,33 @@ public class FuzzingServer {
         boolean weakCandidate = !structuredCandidate
                 && (eventVerdict == DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE
                         || errorLogVerdict == DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE);
+        // Phase 2: the corpus needs the same root-lineage lookup that the
+        // observability layer already performs so promotion credits land on
+        // the rolling-corpus seed that fathered this round's mutation.
+        int parentLineageRoot = observabilityMetrics
+                .resolveRootLifecycleId(
+                        testPlanDiffFeedbackPacket.testPacketID);
         if (newBranchCoverage) {
             observabilityMetrics.recordDownstreamBranchHit(
                     testPlanDiffFeedbackPacket.testPacketID);
+            if (parentLineageRoot >= 0) {
+                rollingSeedCorpus.notifyBranchPayoff(parentLineageRoot);
+            }
         }
         if (structuredCandidate) {
             observabilityMetrics.recordDownstreamStructuredCandidateHit(
                     testPlanDiffFeedbackPacket.testPacketID);
+            if (parentLineageRoot >= 0) {
+                rollingSeedCorpus
+                        .notifyStructuredCandidatePayoff(parentLineageRoot);
+            }
         }
         if (weakCandidate) {
             observabilityMetrics.recordDownstreamWeakCandidateHit(
                     testPlanDiffFeedbackPacket.testPacketID);
+            // Weak candidates intentionally do not feed Phase 2 promotion
+            // until Phase 5 cleans up candidate routing — they are too
+            // noisy to drive retention.
         }
 
         // Mode-3/mode-5 rolling differential paths no longer persist the
@@ -2330,6 +2361,7 @@ public class FuzzingServer {
         // does not depend on a stored per-seed oracle.
         AdmissionReason admissionReasonForRow = AdmissionReason.UNKNOWN;
         boolean admittedThisRound = false;
+        RollingSeedCorpus.AdmissionOutcome rollingCorpusOutcome = null;
         if (addToCorpus) {
             TestPlan testPlan = testID2TestPlan
                     .get(testPlanDiffFeedbackPacket.testPacketID);
@@ -2340,42 +2372,108 @@ public class FuzzingServer {
                         anyTriDiffExclusiveFired,
                         anyWindowSimFired,
                         aggregateSimFired);
-                admissionReasonForRow = admissionReason;
-                admittedThisRound = true;
-                observabilityMetrics.recordAdmission(admissionReason);
-                // Tag this plan with its admission testID so future
-                // mutations know who to credit as parent.
-                testPlan.lineageTestId = testPlanDiffFeedbackPacket.testPacketID;
-                observabilityMetrics.recordSeedAddition(
-                        testPlanDiffFeedbackPacket.testPacketID,
-                        finishedTestID,
-                        admissionReason,
-                        observabilityMetrics.resolveRootLifecycleId(
-                                testPlanDiffFeedbackPacket.testPacketID));
 
-                testPlanCorpus.addTestPlan(testPlan);
-                if ((Config.getConf().testingMode == 5
-                        || Config.getConf().testingMode == 6)
+                // Phase 2: for mode-5/mode-6, route the admission through
+                // the tiered corpus first. Trace-only admissions may be
+                // rejected by the per-round, 100-round, or share caps; in
+                // that case we drop the admission entirely — both the
+                // long-lived corpus AND the short-term testPlanCorpus —
+                // so trace-only flooding is suppressed end-to-end.
+                boolean isModeFive = Config.getConf().testingMode == 5
+                        || Config.getConf().testingMode == 6;
+                boolean rollingCorpusAccepted = true;
+                if (isModeFive && Config.getConf().useTraceProbation
                         && testPlan.seed != null) {
                     RollingSeed storedRollingSeed = new RollingSeed(
                             SerializationUtils.clone(testPlan.seed),
                             new LinkedList<>());
-                    // Phase 0: tag the stored rolling seed with the
-                    // packet-level testID used at admission so lineage
-                    // lookups in later mutations can credit this seed's
-                    // lifecycle record.
+                    storedRollingSeed.lineageTestId = testPlanDiffFeedbackPacket.testPacketID;
+                    // Pass the already-resolved parent lineage root so the
+                    // corpus can enforce the Phase 2 "independent parents"
+                    // rule for rediscovery promotion: repeated admissions
+                    // from the same ancestor count as a single event.
+                    rollingCorpusOutcome = rollingSeedCorpus.tryAdmit(
+                            storedRollingSeed,
+                            admissionReason,
+                            finishedTestID,
+                            parentLineageRoot);
+                    rollingCorpusAccepted = rollingCorpusOutcome.isAdmitted();
+                    if (!rollingCorpusAccepted) {
+                        logger.info(
+                                "Phase 2 corpus rejected trace-only admission (reason={}, outcome={}, "
+                                        + "branchBacked={}, probation={}, promoted={})",
+                                admissionReason,
+                                rollingCorpusOutcome,
+                                rollingSeedCorpus.branchBackedSize(),
+                                rollingSeedCorpus.traceProbationSize(),
+                                rollingSeedCorpus.tracePromotedSize());
+                    }
+                } else if (isModeFive && testPlan.seed != null) {
+                    // useTraceProbation disabled → fall back to legacy
+                    // cycle-queue admission semantics. Preserves old
+                    // mode-5 behavior when Phase 2 is turned off.
+                    RollingSeed storedRollingSeed = new RollingSeed(
+                            SerializationUtils.clone(testPlan.seed),
+                            new LinkedList<>());
                     storedRollingSeed.lineageTestId = testPlanDiffFeedbackPacket.testPacketID;
                     rollingSeedCorpus.addSeed(storedRollingSeed);
-                    logger.info(
-                            "Mode 5 rollingSeedCorpus updated from interesting test plan, size={}",
-                            rollingSeedCorpus.size());
                 }
+
+                if (!rollingCorpusAccepted) {
+                    addToCorpus = false;
+                } else {
+                    admissionReasonForRow = admissionReason;
+                    admittedThisRound = true;
+                    observabilityMetrics.recordAdmission(admissionReason);
+                    // Tag this plan with its admission testID so future
+                    // mutations know who to credit as parent.
+                    testPlan.lineageTestId = testPlanDiffFeedbackPacket.testPacketID;
+                    observabilityMetrics.recordSeedAddition(
+                            testPlanDiffFeedbackPacket.testPacketID,
+                            finishedTestID,
+                            admissionReason,
+                            observabilityMetrics.resolveRootLifecycleId(
+                                    testPlanDiffFeedbackPacket.testPacketID));
+
+                    testPlanCorpus.addTestPlan(testPlan);
+                    if (isModeFive) {
+                        logger.info(
+                                "Mode 5 rollingSeedCorpus updated from interesting test plan, "
+                                        + "total={} (branchBacked={}, probation={}, promoted={}), outcome={}",
+                                rollingSeedCorpus.size(),
+                                rollingSeedCorpus.branchBackedSize(),
+                                rollingSeedCorpus.traceProbationSize(),
+                                rollingSeedCorpus.tracePromotedSize(),
+                                rollingCorpusOutcome);
+                    }
+                    logger.info(
+                            "Added test plan to corpus (newOriBC=" + newOriBC
+                                    + ", newUpgradeBC=" + newUpgradeBC
+                                    + ", traceInteresting="
+                                    + traceInteresting + ", reason="
+                                    + admissionReason + ")");
+                }
+            }
+        }
+
+        // Phase 2: evict trace-probation seeds that have timed out or
+        // exhausted their selection budget without any payoff. Runs once
+        // per completed differential round so the pool stays responsive
+        // to the current campaign without needing a separate sweeper
+        // thread.
+        if ((Config.getConf().testingMode == 5
+                || Config.getConf().testingMode == 6)
+                && Config.getConf().useTraceProbation) {
+            int evicted = rollingSeedCorpus
+                    .evictExpiredProbation(finishedTestID);
+            if (evicted > 0) {
                 logger.info(
-                        "Added test plan to corpus (newOriBC=" + newOriBC
-                                + ", newUpgradeBC=" + newUpgradeBC
-                                + ", traceInteresting="
-                                + traceInteresting + ", reason="
-                                + admissionReason + ")");
+                        "Phase 2 corpus evicted {} expired trace-probation seeds "
+                                + "(branchBacked={}, probation={}, promoted={})",
+                        evicted,
+                        rollingSeedCorpus.branchBackedSize(),
+                        rollingSeedCorpus.traceProbationSize(),
+                        rollingSeedCorpus.tracePromotedSize());
             }
         }
 
@@ -3935,6 +4033,24 @@ public class FuzzingServer {
                             + Config.getConf().useTrace,
                     "testPlanCorpus : " + testPlanCorpus.queue.size(),
                     "rollingSeedCorpus : " + rollingSeedCorpus.size());
+            // Phase 2: tiered pool sizes and cap-rejection counters
+            System.out.format("|%30s|%30s|%30s|\n",
+                    "rolling BB/probation/promoted : "
+                            + rollingSeedCorpus.branchBackedSize() + "/"
+                            + rollingSeedCorpus.traceProbationSize() + "/"
+                            + rollingSeedCorpus.tracePromotedSize(),
+                    "trace promoted/evicted : "
+                            + rollingSeedCorpus.getTotalTracePromoted() + "/"
+                            + rollingSeedCorpus
+                                    .getTotalTraceProbationEvicted(),
+                    "trace rej round/100/share : "
+                            + rollingSeedCorpus
+                                    .getTotalTraceRejectedPerRound()
+                            + "/"
+                            + rollingSeedCorpus.getTotalTraceRejectedWindow()
+                            + "/"
+                            + rollingSeedCorpus
+                                    .getTotalTraceRejectedShare());
             System.out.format("|%30s|%30s|%30s|\n",
                     "lane timeout old/roll/new : " + oldOldLaneTimeoutNum + "/"
                             + rollingLaneTimeoutNum + "/"

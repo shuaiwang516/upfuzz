@@ -360,6 +360,54 @@ public class Config {
         // writes become expensive on long campaigns.
         public boolean enableObservabilityArtifacts = true;
 
+        // --- Phase 2 corpus admission and retention ---
+        // Master switch for Phase 2 tiered corpus. When true, the rolling
+        // seed corpus routes trace-only admissions into a probation pool,
+        // reserves capacity for branch-backed seeds, and biases parent
+        // selection. When false, the corpus falls back to the legacy
+        // "admit everything" cycle-queue behavior so Phase 2 can be
+        // disabled without rebuilding.
+        public boolean useTraceProbation = true;
+
+        // Soft total cap on the rolling corpus. The trace-only pool
+        // share is computed as floor(rollingCorpusMaxSize *
+        // traceOnlyCorpusMaxShare). Branch-backed seeds are never
+        // rejected because of this cap — it only bounds trace-only
+        // growth.
+        public int rollingCorpusMaxSize = 500;
+
+        // Upper bound on the trace-only pool (probation + promoted) as a
+        // fraction of rollingCorpusMaxSize. Defaults to 0.33 per the
+        // Apr 12 plan.
+        public double traceOnlyCorpusMaxShare = 0.33;
+
+        // Maximum trace-only admissions per single round.
+        public int traceOnlyAdmissionCapPerRound = 1;
+
+        // Maximum trace-only admissions over any sliding 100-round
+        // window.
+        public int traceOnlyAdmissionCapPer100Rounds = 15;
+
+        // Number of rounds a trace-only seed may stay in probation
+        // without any downstream payoff before being evicted.
+        public int traceOnlyProbationRounds = 50;
+
+        // Number of times a trace-probation seed may be selected as a
+        // mutation parent without any downstream payoff before being
+        // evicted.
+        public int traceProbationMaxSelectionsWithoutPayoff = 10;
+
+        // Number of independent rediscoveries (same command-sequence
+        // content admitted again while still in probation) required to
+        // promote a trace-probation seed to the long-lived trace pool.
+        public int traceProbationRediscoveryThreshold = 3;
+
+        // Probability that a call to RollingSeedCorpus.getSeed() first
+        // tries the branch-backed pool. Defaults to 0.5 per the Apr 12
+        // plan recommendation of a 50/50 split between branch-backed
+        // and promoted-trace pools.
+        public double branchBackedSelectionWeight = 0.5;
+
         /**
          * ---------------Version Specific-----------------
          * To avoid FPs
