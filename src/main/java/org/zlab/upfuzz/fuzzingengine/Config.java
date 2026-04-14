@@ -353,6 +353,13 @@ public class Config {
         // Debug
         public boolean useCompressedOrderDebug = false;
 
+        // --- Phase 0 observability ---
+        // If true, the server writes reason-coded admission counters,
+        // seed lifecycle metadata, and per-window trigger rows to
+        // <failureDir>/observability/. Can be turned off if the CSV
+        // writes become expensive on long campaigns.
+        public boolean enableObservabilityArtifacts = true;
+
         /**
          * ---------------Version Specific-----------------
          * To avoid FPs

@@ -913,6 +913,13 @@ for i in $(seq 1 "${CLIENTS}"); do
     cp -f "${CLIENT_LOG_PREFIX}_${i}.log" "${RUN_DIR}/upfuzz_client_${i}.log" || true
 done
 
+# Phase 0 observability snapshot: per-round CSVs written by the server.
+OBSERVABILITY_SRC="${ROOT_DIR}/failure/observability"
+if [[ -d "${OBSERVABILITY_SRC}" ]]; then
+    mkdir -p "${RUN_DIR}/observability"
+    cp -f "${OBSERVABILITY_SRC}"/*.csv "${RUN_DIR}/observability/" 2>/dev/null || true
+fi
+
 rg -n 'TestPlanDiffFeedbackPacket received|Semantic Similarity|Semantic tri-diff|TRACE-LEGACY|Only Old|Rolling|Only New|total exec :|traceInteresting|addToCorpus' "${SERVER_LOG}" > "${RUN_DIR}/server_key_markers.log" 2>/dev/null || true
 rg -n 'executeTestPlanPacketDifferential|trace diff: all three packets are collected|Feedback packet is null|ExecutionException|Exception' "${CLIENT_LOG_PREFIX}_1.log" > "${RUN_DIR}/client_key_markers.log" 2>/dev/null || true
 

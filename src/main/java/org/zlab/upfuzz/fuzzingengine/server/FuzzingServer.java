@@ -39,6 +39,10 @@ import org.zlab.upfuzz.fuzzingengine.FeedBack;
 import org.zlab.upfuzz.fuzzingengine.configgen.ConfigGen;
 import org.zlab.upfuzz.fuzzingengine.packet.*;
 import org.zlab.upfuzz.fuzzingengine.executor.Executor;
+import org.zlab.upfuzz.fuzzingengine.server.observability.AdmissionReason;
+import org.zlab.upfuzz.fuzzingengine.server.observability.AdmissionSummaryRow;
+import org.zlab.upfuzz.fuzzingengine.server.observability.ObservabilityMetrics;
+import org.zlab.upfuzz.fuzzingengine.server.observability.WindowTriggerRow;
 import org.zlab.upfuzz.fuzzingengine.server.testtracker.TestTrackerGraph;
 import org.zlab.upfuzz.fuzzingengine.testplan.TestPlan;
 import org.zlab.upfuzz.fuzzingengine.testplan.event.Event;
@@ -83,6 +87,9 @@ public class FuzzingServer {
     public TestPlanCorpus testPlanCorpus = new TestPlanCorpus();
     public FullStopCorpus fullStopCorpus = new FullStopCorpus();
     public RollingSeedCorpus rollingSeedCorpus = new RollingSeedCorpus();
+
+    // Phase 0 observability
+    public final ObservabilityMetrics observabilityMetrics;
 
     /**
      * FIXME
@@ -221,6 +228,19 @@ public class FuzzingServer {
 
         startTime = TimeUnit.SECONDS.convert(System.nanoTime(),
                 TimeUnit.NANOSECONDS);
+
+        // Phase 0: measurement artifacts land under
+        // <failureDir>/observability/.
+        // Immediately truncate-to-headers so a fresh run does not leak stale
+        // rows from a previous run sharing the same failureDir.
+        Path observabilityDir = Paths
+                .get(Config.getConf().failureDir == null ? "failure"
+                        : Config.getConf().failureDir)
+                .resolve("observability");
+        this.observabilityMetrics = new ObservabilityMetrics(observabilityDir);
+        this.observabilityMetrics
+                .setEnabled(Config.getConf().enableObservabilityArtifacts);
+        this.observabilityMetrics.writeAllArtifacts();
 
         if (Config.getConf().useVersionDelta) {
             corpus = new CorpusVersionDeltaFiveQueueWithBoundary();
@@ -993,6 +1013,10 @@ public class FuzzingServer {
 
     private boolean mutateAndEnqueueExistingTestPlan(TestPlan testPlan) {
         boolean anyEnqueued = false;
+        int parentLineageId = testPlan.lineageTestId;
+        if (parentLineageId >= 0) {
+            observabilityMetrics.recordParentSelection(parentLineageId);
+        }
         for (int i = 0; i < Config.getConf().testPlanMutationEpoch; i++) {
             TestPlan mutateTestPlan = null;
             int j = 0;
@@ -1019,7 +1043,14 @@ public class FuzzingServer {
             // This epoch exhausted its retry budget; skip to next epoch
             if (j == Config.getConf().testPlanMutationRetry)
                 continue;
+            // Phase 0: the mutated child inherits the parent's lineage but
+            // will only get its own lineageTestId when it is admitted.
+            mutateTestPlan.lineageTestId = -1;
             testID2TestPlan.put(testID, mutateTestPlan);
+
+            if (parentLineageId >= 0) {
+                observabilityMetrics.linkChildToParent(testID, parentLineageId);
+            }
 
             int configIdx = configGen.generateConfig();
             String configFileName = "test" + configIdx;
@@ -1060,6 +1091,11 @@ public class FuzzingServer {
     private boolean generateAndEnqueueTestPlansFromRollingSeed(
             RollingSeed rollingSeed,
             int maxMutationRetry) {
+        int parentLineageId = rollingSeed != null ? rollingSeed.lineageTestId
+                : -1;
+        if (parentLineageId >= 0) {
+            observabilityMetrics.recordParentSelection(parentLineageId);
+        }
         TestPlan testPlan = null;
         for (int i = 0; i < Config.getConf().testPlanGenerationNum; i++) {
             for (int j = 0; j < maxMutationRetry; j++) {
@@ -1071,7 +1107,13 @@ public class FuzzingServer {
             if (testPlan == null)
                 return false;
 
+            testPlan.lineageTestId = -1;
             testID2TestPlan.put(testID, testPlan);
+
+            if (parentLineageId >= 0) {
+                observabilityMetrics.linkChildToParent(testID, parentLineageId);
+            }
+
             int configIdx = configGen.generateConfig();
             String configFileName = "test" + configIdx;
 
@@ -1871,6 +1913,13 @@ public class FuzzingServer {
 
         // === Canonical trace scoring (Phase 4) ===
         boolean traceInteresting = false;
+        // Phase 0 observability: accumulate which rules fired so we can
+        // pick a primary admission reason later.
+        boolean anyTriDiffExclusiveFired = false;
+        boolean anyTriDiffMissingFired = false;
+        boolean anyWindowSimFired = false;
+        boolean aggregateSimFired = false;
+        int windowsEvaluatedThisRound = 0;
 
         boolean allLanesOk = normalizeLaneStatus(
                 testPlanFeedbackPackets[0]) == TestPlanFeedbackPacket.LaneStatus.OK
@@ -1943,6 +1992,14 @@ public class FuzzingServer {
 
                     // --- Per-window tri-diff ---
                     boolean triDiffInteresting = false;
+                    boolean triDiffExclusiveFired = false;
+                    boolean triDiffMissingFired = false;
+                    int rollingExclusive = 0;
+                    int rollingMissing = 0;
+                    int totalMessages = 0;
+                    int totalAllThreeCount = 0;
+                    double rollingExclusiveFraction = 0.0;
+                    double rollingMissingFraction = 0.0;
                     if (windowHasEnoughEvents
                             && Config
                                     .getConf().useCanonicalMessageIdentityDiff) {
@@ -1950,18 +2007,18 @@ public class FuzzingServer {
                                 .computeSemantic(mergedOO, mergedRO,
                                         mergedNN);
 
-                        int rollingExclusive = totalMapCount(
-                                triDiff.only1);
-                        int totalMessages = triDiff.sequence1.size();
-                        double rollingExclusiveFraction = totalMessages > 0
+                        rollingExclusive = totalMapCount(triDiff.only1);
+                        totalMessages = triDiff.sequence1.size();
+                        rollingExclusiveFraction = totalMessages > 0
                                 ? (double) rollingExclusive / totalMessages
                                 : 0;
 
-                        int rollingMissing = totalMapCount(
-                                triDiff.in02Only);
-                        double rollingMissingFraction = totalMessages > 0
+                        rollingMissing = totalMapCount(triDiff.in02Only);
+                        rollingMissingFraction = totalMessages > 0
                                 ? (double) rollingMissing / totalMessages
                                 : 0;
+
+                        totalAllThreeCount = triDiff.totalAllThreeCount();
 
                         logger.info(
                                 "[TRACE] TriDiff Window {} ({}): rollingExclusive={} ({}), "
@@ -1974,17 +2031,57 @@ public class FuzzingServer {
                                 rollingMissing,
                                 String.format("%.4f",
                                         rollingMissingFraction),
-                                triDiff.totalAllThreeCount(),
+                                totalAllThreeCount,
                                 totalMessages);
 
-                        triDiffInteresting = (rollingExclusive >= Config
+                        triDiffExclusiveFired = rollingExclusive >= Config
                                 .getConf().rollingExclusiveMinCount
                                 && rollingExclusiveFraction >= Config
-                                        .getConf().rollingExclusiveFractionThreshold)
-                                || (rollingMissing >= Config
-                                        .getConf().rollingMissingMinCount
-                                        && rollingMissingFraction >= Config
-                                                .getConf().rollingMissingFractionThreshold);
+                                        .getConf().rollingExclusiveFractionThreshold;
+                        triDiffMissingFired = rollingMissing >= Config
+                                .getConf().rollingMissingMinCount
+                                && rollingMissingFraction >= Config
+                                        .getConf().rollingMissingFractionThreshold;
+                        triDiffInteresting = triDiffExclusiveFired
+                                || triDiffMissingFired;
+                    }
+
+                    // Phase 0: emit a window row for every evaluated window
+                    // (regardless of whether it fires) so offline re-scoring
+                    // can reproduce admission decisions. Use finishedTestID
+                    // because the static {@code round} counter is only bumped
+                    // by the stacked-tests path and stays at 0 in rolling
+                    // modes.
+                    observabilityMetrics.recordWindowTrigger(
+                            new WindowTriggerRow(
+                                    finishedTestID,
+                                    testPlanDiffFeedbackPacket.testPacketID,
+                                    aw.rolling.ordinal,
+                                    aw.rolling.comparisonStageId,
+                                    totalMessages,
+                                    totalAllThreeCount,
+                                    rollingExclusive,
+                                    rollingMissing,
+                                    rollingExclusiveFraction,
+                                    rollingMissingFraction,
+                                    sims[0],
+                                    sims[1],
+                                    baselineSimilarity,
+                                    rollingMinSimilarity,
+                                    rollingDivergenceMargin,
+                                    windowHasEnoughEvents,
+                                    windowInteresting,
+                                    triDiffExclusiveFired,
+                                    triDiffMissingFired));
+                    windowsEvaluatedThisRound++;
+                    if (windowInteresting) {
+                        anyWindowSimFired = true;
+                    }
+                    if (triDiffExclusiveFired) {
+                        anyTriDiffExclusiveFired = true;
+                    }
+                    if (triDiffMissingFired) {
+                        anyTriDiffMissingFired = true;
                     }
 
                     // Accumulate for aggregate (only windows above
@@ -2076,6 +2173,7 @@ public class FuzzingServer {
 
                     if (aggregateInteresting) {
                         traceInteresting = true;
+                        aggregateSimFired = true;
                         logger.info(
                                 "[TRACE] Aggregate interesting: sim={}, margin={}",
                                 String.format("%.4f", aggRollingMinSim),
@@ -2178,6 +2276,7 @@ public class FuzzingServer {
 
         // === Corpus update (gated by verdict) ===
         boolean addToCorpus = newOriBC || newUpgradeBC || traceInteresting;
+        boolean newBranchCoverage = newOriBC || newUpgradeBC;
         // WS0: exclude same-version bugs from corpus to avoid FP-prone
         // descendants
         if (overallVerdict == DiffVerdict.SAME_VERSION_BUG) {
@@ -2185,21 +2284,72 @@ public class FuzzingServer {
                     "Suppressing corpus add: test triggers SAME_VERSION_BUG");
             addToCorpus = false;
         }
+
+        // Phase 0: downstream payoff credit for the parent of this child,
+        // irrespective of whether we admit the child ourselves. Structured
+        // (Checker D cross-cluster) candidates are tracked separately from
+        // weak event/error-log candidates so Phase 2 retention decisions can
+        // ignore the latter until Phase 5 cleans candidate routing up.
+        boolean structuredCandidate = crossClusterReport != null;
+        boolean weakCandidate = !structuredCandidate
+                && (eventVerdict == DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE
+                        || errorLogVerdict == DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE);
+        if (newBranchCoverage) {
+            observabilityMetrics.recordDownstreamBranchHit(
+                    testPlanDiffFeedbackPacket.testPacketID);
+        }
+        if (structuredCandidate) {
+            observabilityMetrics.recordDownstreamStructuredCandidateHit(
+                    testPlanDiffFeedbackPacket.testPacketID);
+        }
+        if (weakCandidate) {
+            observabilityMetrics.recordDownstreamWeakCandidateHit(
+                    testPlanDiffFeedbackPacket.testPacketID);
+        }
+
         // Mode-3/mode-5 rolling differential paths no longer persist the
         // old-old lane results as validationReadResultsOracle. Checker D
         // (cross-cluster structured comparison) runs at verdict time and
         // does not depend on a stored per-seed oracle.
+        AdmissionReason admissionReasonForRow = AdmissionReason.UNKNOWN;
+        boolean admittedThisRound = false;
         if (addToCorpus) {
             TestPlan testPlan = testID2TestPlan
                     .get(testPlanDiffFeedbackPacket.testPacketID);
             if (testPlan != null) {
+                AdmissionReason admissionReason = classifyAdmissionReason(
+                        newBranchCoverage,
+                        traceInteresting,
+                        anyTriDiffExclusiveFired,
+                        anyTriDiffMissingFired,
+                        anyWindowSimFired,
+                        aggregateSimFired);
+                admissionReasonForRow = admissionReason;
+                admittedThisRound = true;
+                observabilityMetrics.recordAdmission(admissionReason);
+                // Tag this plan with its admission testID so future
+                // mutations know who to credit as parent.
+                testPlan.lineageTestId = testPlanDiffFeedbackPacket.testPacketID;
+                observabilityMetrics.recordSeedAddition(
+                        testPlanDiffFeedbackPacket.testPacketID,
+                        finishedTestID,
+                        admissionReason,
+                        observabilityMetrics.resolveRootLifecycleId(
+                                testPlanDiffFeedbackPacket.testPacketID));
+
                 testPlanCorpus.addTestPlan(testPlan);
                 if ((Config.getConf().testingMode == 5
                         || Config.getConf().testingMode == 6)
                         && testPlan.seed != null) {
-                    rollingSeedCorpus.addSeed(new RollingSeed(
+                    RollingSeed storedRollingSeed = new RollingSeed(
                             SerializationUtils.clone(testPlan.seed),
-                            new LinkedList<>()));
+                            new LinkedList<>());
+                    // Phase 0: tag the stored rolling seed with the
+                    // packet-level testID used at admission so lineage
+                    // lookups in later mutations can credit this seed's
+                    // lifecycle record.
+                    storedRollingSeed.lineageTestId = testPlanDiffFeedbackPacket.testPacketID;
+                    rollingSeedCorpus.addSeed(storedRollingSeed);
                     logger.info(
                             "Mode 5 rollingSeedCorpus updated from interesting test plan, size={}",
                             rollingSeedCorpus.size());
@@ -2208,7 +2358,8 @@ public class FuzzingServer {
                         "Added test plan to corpus (newOriBC=" + newOriBC
                                 + ", newUpgradeBC=" + newUpgradeBC
                                 + ", traceInteresting="
-                                + traceInteresting + ")");
+                                + traceInteresting + ", reason="
+                                + admissionReason + ")");
             }
         }
 
@@ -2391,6 +2542,35 @@ public class FuzzingServer {
                 noiseNum++;
             }
         }
+
+        // Phase 0: emit a per-round admission summary row for this
+        // completed differential execution. Cumulative counts embedded in
+        // the row reflect the state *after* any admission recorded above.
+        observabilityMetrics.recordAdmissionSummary(new AdmissionSummaryRow(
+                finishedTestID,
+                testPlanDiffFeedbackPacket.testPacketID,
+                admittedThisRound,
+                admissionReasonForRow,
+                newBranchCoverage,
+                traceInteresting,
+                anyTriDiffExclusiveFired,
+                anyTriDiffMissingFired,
+                anyWindowSimFired,
+                aggregateSimFired,
+                structuredCandidate,
+                weakCandidate,
+                windowsEvaluatedThisRound,
+                overallVerdict == null ? "NONE" : overallVerdict.name(),
+                observabilityMetrics
+                        .getAdmissionCount(AdmissionReason.BRANCH_ONLY),
+                observabilityMetrics
+                        .getAdmissionCount(AdmissionReason.BRANCH_AND_TRACE),
+                observabilityMetrics.getAdmissionCount(
+                        AdmissionReason.TRACE_ONLY_WINDOW_SIM),
+                observabilityMetrics.getAdmissionCount(
+                        AdmissionReason.TRACE_ONLY_TRIDIFF_EXCLUSIVE),
+                observabilityMetrics.getAdmissionCount(
+                        AdmissionReason.TRACE_ONLY_TRIDIFF_MISSING)));
 
         // --- Cleanup and status update ---
         testID2TestPlan.remove(testPlanDiffFeedbackPacket.testPacketID);
@@ -3773,6 +3953,35 @@ public class FuzzingServer {
             oriObjCoverage.measureCoverageOfModifiedReferences(
                     modifiedSerializedFields, true);
         }
+
+        // Phase 0: compact admission counters line, then flush CSV artifacts
+        if (observabilityMetrics.isEnabled()) {
+            System.out.format("|%30s|%30s|%30s|%30s|\n",
+                    "adm branch : "
+                            + observabilityMetrics.getAdmissionCount(
+                                    AdmissionReason.BRANCH_ONLY),
+                    "adm br+tr : "
+                            + observabilityMetrics.getAdmissionCount(
+                                    AdmissionReason.BRANCH_AND_TRACE),
+                    "adm tr-excl : "
+                            + observabilityMetrics.getAdmissionCount(
+                                    AdmissionReason.TRACE_ONLY_TRIDIFF_EXCLUSIVE),
+                    "adm tr-miss : "
+                            + observabilityMetrics.getAdmissionCount(
+                                    AdmissionReason.TRACE_ONLY_TRIDIFF_MISSING));
+            System.out.format("|%30s|%30s|%30s|%30s|\n",
+                    "adm tr-sim : "
+                            + observabilityMetrics.getAdmissionCount(
+                                    AdmissionReason.TRACE_ONLY_WINDOW_SIM),
+                    "seeds tracked : "
+                            + observabilityMetrics.lifecycleCount(),
+                    "round rows : "
+                            + observabilityMetrics.admissionRowCount(),
+                    "window rows : "
+                            + observabilityMetrics.windowRowCount());
+            observabilityMetrics.writeAllArtifacts();
+        }
+
         System.out.println();
     }
 
@@ -3937,6 +4146,35 @@ public class FuzzingServer {
             newEvents.add(new DowngradeOp(nodeIdx));
         }
         return newEvents;
+    }
+
+    /**
+     * Phase 0 helper: map the raw trigger flags to a single admission reason.
+     * Branch coverage always wins; within the trace-only fallback, tri-diff
+     * exclusive is reported before tri-diff missing (so Phase 1's hotfix on
+     * missing-only is measurable), and windowSim is the weakest class.
+     */
+    private static AdmissionReason classifyAdmissionReason(
+            boolean newBranchCoverage,
+            boolean traceInteresting,
+            boolean triDiffExclusiveFired,
+            boolean triDiffMissingFired,
+            boolean windowSimFired,
+            boolean aggregateSimFired) {
+        if (newBranchCoverage) {
+            return traceInteresting ? AdmissionReason.BRANCH_AND_TRACE
+                    : AdmissionReason.BRANCH_ONLY;
+        }
+        if (triDiffExclusiveFired) {
+            return AdmissionReason.TRACE_ONLY_TRIDIFF_EXCLUSIVE;
+        }
+        if (triDiffMissingFired) {
+            return AdmissionReason.TRACE_ONLY_TRIDIFF_MISSING;
+        }
+        if (windowSimFired || aggregateSimFired) {
+            return AdmissionReason.TRACE_ONLY_WINDOW_SIM;
+        }
+        return AdmissionReason.UNKNOWN;
     }
 
     // === Phase 4: Canonical trace scoring helpers ===

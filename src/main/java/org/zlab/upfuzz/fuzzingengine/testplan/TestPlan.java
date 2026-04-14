@@ -29,6 +29,12 @@ public class TestPlan implements Serializable {
 
     public Seed seed; // Make this transient?
 
+    // Phase 0 observability: testPacketID captured when this plan was last
+    // admitted to the corpus. -1 means the plan has never been saved yet and
+    // any mutations originating from it cannot be credited to a lifecycle
+    // record.
+    public int lineageTestId = -1;
+
     // ----read results comparison----
     public List<String> validationCommands;
     public List<String> validationReadResultsOracle;
