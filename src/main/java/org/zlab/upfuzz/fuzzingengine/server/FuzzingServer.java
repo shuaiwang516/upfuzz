@@ -2077,6 +2077,22 @@ public class FuzzingServer {
                             && rollingDivergenceMargin > Config
                                     .getConf().canonicalWindowDivergenceMarginThreshold;
 
+                    // Phase 2: compute the per-window corroboration inputs
+                    // up front so {@link #evaluateTriDiffWindow} can
+                    // consume them. {@code changedMessageCount} counts
+                    // payloads whose class changed between versions on
+                    // the rolling lane; {@code upgradedBoundaryEventCount}
+                    // counts actual per-event boundary crossings — a
+                    // message whose sender and receiver split between
+                    // upgraded and non-upgraded nodes. The previous
+                    // implementation used {@code rawUpgradedNodeSet.size()}
+                    // which overstated corroboration (a stage could have
+                    // several upgraded nodes but zero cross-version
+                    // traffic).
+                    int changedMessageCount = countChangedMessages(mergedRO);
+                    int upgradedBoundaryEventCount = countUpgradedBoundaryCrossings(
+                            mergedRO, aw.rolling.rawUpgradedNodeSet);
+
                     // --- Per-window tri-diff ---
                     boolean triDiffInteresting = false;
                     boolean triDiffExclusiveFired = false;
@@ -2092,6 +2108,17 @@ public class FuzzingServer {
                             .emptyMap();
                     Map<String, Integer> rollingMissingBuckets = Collections
                             .emptyMap();
+                    // Phase 2 window-level evaluation results. Defaults
+                    // mirror the "tri-diff skipped" case: no support, no
+                    // stage credit, no change evidence. When the triDiff
+                    // block runs, these are overwritten with the richer
+                    // decision result; otherwise the fall-through path
+                    // below re-derives them from the legacy classifier.
+                    boolean supportGatePassed = false;
+                    boolean stageGatePassed = false;
+                    boolean changedMessageGatePassed = false;
+                    TraceEvidenceStrength windowStrength = TraceEvidenceStrength.NONE;
+                    boolean windowStrengthFromDecision = false;
                     if (windowHasEnoughEvents
                             && Config
                                     .getConf().useCanonicalMessageIdentityDiff) {
@@ -2152,36 +2179,47 @@ public class FuzzingServer {
                                         .getConf().rollingExclusiveFractionThreshold,
                                 Config.getConf().rollingMissingMinCount,
                                 Config
-                                        .getConf().rollingMissingFractionThreshold);
+                                        .getConf().rollingMissingFractionThreshold,
+                                /* windowSimInteresting */ windowInteresting,
+                                changedMessageCount,
+                                upgradedBoundaryEventCount,
+                                rollingMinSimilarity,
+                                baselineSimilarity,
+                                TraceStrengthGates
+                                        .fromConfig(Config.getConf()));
                         triDiffExclusiveFired = decision.exclusiveInteresting;
                         triDiffMissingFired = decision.missingInteresting;
                         triDiffInteresting = decision.triDiffInteresting;
+                        // Phase 2: the decision is now the single source of
+                        // truth for per-window support / stage / change
+                        // gating and the final strength label.
+                        supportGatePassed = decision.supportGatePassed;
+                        stageGatePassed = decision.stageGatePassed;
+                        changedMessageGatePassed = decision.changedMessageGatePassed;
+                        windowStrength = decision.traceEvidenceStrength;
+                        windowStrengthFromDecision = true;
                     }
-
-                    // Phase 0 per-window support accounting. A window is
-                    // "support-backed" when it has three-way shared support:
-                    // at least one canonical message appears in all three
-                    // lanes (old-old ∩ rolling ∩ new-new). baselineShared
-                    // alone is not enough — it equals
-                    // {@code totalAllThreeCount + rollingMissingCount}, so
-                    // a window where rolling is completely missing would
-                    // otherwise still look "supported". The Apr15
-                    // diagnostics specifically flagged the all3=0 case as
-                    // the unreliable one, so gate on all3>0.
-                    boolean supportGatePassed = totalAllThreeCount > 0;
-                    int changedMessageCount = countChangedMessages(mergedRO);
-                    int upgradedBoundaryEventCount = aw.rolling.rawUpgradedNodeSet == null
-                            ? 0
-                            : aw.rolling.rawUpgradedNodeSet.size();
 
                     boolean windowFired = windowInteresting
                             || triDiffExclusiveFired;
-                    TraceEvidenceStrength windowStrength = classifyWindowTraceEvidenceStrength(
-                            windowFired,
-                            supportGatePassed,
-                            aw.rolling.stageKind,
-                            changedMessageCount,
-                            upgradedBoundaryEventCount);
+                    if (!windowStrengthFromDecision) {
+                        // Tri-diff was skipped (either
+                        // useCanonicalMessageIdentityDiff=false or the
+                        // window was below the min-event gate). Fall back
+                        // to the legacy Phase 0 classifier so window-sim
+                        // admissions still get a strength label. Support
+                        // is locked to false here because the triDiff
+                        // counters were never computed.
+                        supportGatePassed = false;
+                        stageGatePassed = false;
+                        changedMessageGatePassed = false;
+                        windowStrength = classifyWindowTraceEvidenceStrength(
+                                windowFired,
+                                supportGatePassed,
+                                aw.rolling.stageKind,
+                                changedMessageCount,
+                                upgradedBoundaryEventCount);
+                    }
 
                     // Phase 0: emit a window row for every evaluated window
                     // (regardless of whether it fires) so offline re-scoring
@@ -2362,6 +2400,21 @@ public class FuzzingServer {
                     "[TRACE] Windowed traces not available — canonical scoring skipped");
         }
 
+        // Phase 2: round-level trace evidence strength. Computed right
+        // after the trace scoring loop so the corpus / admission code
+        // below can gate on it. Weak and unsupported labels are the
+        // Apr15 noise pattern Phase 2 is designed to filter: PRE_UPGRADE
+        // churn, all3=0 windows, and aggregate-sim-only rounds never
+        // produce a STRONG label, so the enforcement below drops them
+        // from trace-only admission and from BRANCH_AND_TRACE promotion
+        // while keeping them visible on the observability rows.
+        TraceEvidenceStrength traceEvidenceStrength = classifyRoundTraceEvidenceStrength(
+                traceInteresting,
+                firingStrongWindowCount,
+                firingWeakWindowCount,
+                firingUnsupportedWindowCount,
+                aggregateSimFired);
+
         // === Verdict classification (WS0) — runs BEFORE corpus update ===
         DiffVerdict overallVerdict = DiffVerdict.NONE;
         TestPlanFeedbackPacket rollingFb = testPlanFeedbackPackets[1];
@@ -2454,8 +2507,31 @@ public class FuzzingServer {
                 + " errorLog=" + errorLogVerdict);
 
         // === Corpus update (gated by verdict) ===
-        boolean addToCorpus = newOriBC || newUpgradeBC || traceInteresting;
+        // Phase 2 enforcement: trace evidence only drives admission when
+        // the round-level label is STRONG. Weak and unsupported rounds
+        // never produce trace-only admissions and never upgrade a
+        // branch-only admission into BRANCH_AND_TRACE — this is the core
+        // filter Phase 2 adds to the Phase 1 exclusive-only admission
+        // contract. {@code traceInteresting} stays as the raw signal for
+        // observability so offline replay can see which rounds fired at
+        // the Phase 0/1 level; {@code effectiveTraceInteresting} is the
+        // Phase 2 decision that actually feeds the admission path.
+        boolean effectiveTraceInteresting = isPhase2TraceAdmissible(
+                traceInteresting, traceEvidenceStrength);
+        boolean addToCorpus = newOriBC || newUpgradeBC
+                || effectiveTraceInteresting;
         boolean newBranchCoverage = newOriBC || newUpgradeBC;
+        if (traceInteresting && !effectiveTraceInteresting) {
+            logger.info(
+                    "[TRACE] Phase 2 demoted trace evidence: strength={}, "
+                            + "strongWindows={}, weakWindows={}, unsupportedWindows={}, "
+                            + "aggregateSim={}",
+                    traceEvidenceStrength,
+                    firingStrongWindowCount,
+                    firingWeakWindowCount,
+                    firingUnsupportedWindowCount,
+                    aggregateSimFired);
+        }
         // WS0: exclude same-version bugs from corpus to avoid FP-prone
         // descendants
         if (overallVerdict == DiffVerdict.SAME_VERSION_BUG) {
@@ -2518,15 +2594,12 @@ public class FuzzingServer {
             testLevelCandidateStrength = StructuredCandidateStrength.NONE;
         }
 
-        // Phase 0 confidence labels. Trace evidence stays as-is; the
-        // weak-candidate sub-classifier uses the new comparator-backed
-        // strength value.
-        TraceEvidenceStrength traceEvidenceStrength = classifyRoundTraceEvidenceStrength(
-                traceInteresting,
-                firingStrongWindowCount,
-                firingWeakWindowCount,
-                firingUnsupportedWindowCount,
-                aggregateSimFired);
+        // Phase 0 weak-candidate sub-classifier uses the new
+        // comparator-backed strength value. The round-level trace
+        // evidence strength was already computed before the verdict
+        // block so the Phase 2 enforcement on {@code addToCorpus} can
+        // see it; keep that single computation as the source of truth
+        // rather than recomputing here.
         WeakCandidateKind weakCandidateKind = classifyWeakCandidateKind(
                 structuredCandidate,
                 structuredCandidateStrength,
@@ -2584,7 +2657,7 @@ public class FuzzingServer {
                 || Config.getConf().testingMode == 6;
         if (addToCorpus
                 && isRollingMode
-                && traceInteresting
+                && effectiveTraceInteresting
                 && Config.getConf().useTraceSignatureDedup
                 && shouldSuppressTraceOnlyBySignature(
                         newBranchCoverage,
@@ -2614,9 +2687,15 @@ public class FuzzingServer {
             TestPlan testPlan = testID2TestPlan
                     .get(testPlanDiffFeedbackPacket.testPacketID);
             if (testPlan != null) {
+                // Phase 2 enforcement: use the effective trace signal
+                // (already gated on round-level STRONG) when selecting
+                // the admission reason so BRANCH_AND_TRACE / TRACE_ONLY_*
+                // cannot be produced by weak or unsupported trace. The
+                // CSV still receives the raw {@code traceInteresting}
+                // flag separately for observability.
                 AdmissionReason admissionReason = classifyAdmissionReason(
                         newBranchCoverage,
-                        traceInteresting,
+                        effectiveTraceInteresting,
                         anyTriDiffExclusiveFired,
                         anyWindowSimFired,
                         aggregateSimFired);
@@ -4746,6 +4825,23 @@ public class FuzzingServer {
         return AdmissionReason.UNKNOWN;
     }
 
+    /**
+     * Phase 2 trace-admission gate. Trace evidence only drives an
+     * admission (or upgrades a branch-only admission into
+     * {@link AdmissionReason#BRANCH_AND_TRACE}) when the round-level
+     * trace evidence strength is {@link TraceEvidenceStrength#STRONG}.
+     *
+     * <p>Weak and unsupported rounds keep producing trace observability
+     * rows but never enter the corpus via the trace path. This is what
+     * turns the Phase 0/1 label into actual enforcement — the Apr15
+     * {@code all3=0}, {@code PRE_UPGRADE}, baseline-disagreement, and
+     * aggregate-sim-only rounds all land here.
+     */
+    static boolean isPhase2TraceAdmissible(boolean traceInteresting,
+            TraceEvidenceStrength strength) {
+        return traceInteresting && strength == TraceEvidenceStrength.STRONG;
+    }
+
     // === Phase 0: confidence label classifiers ===
 
     /**
@@ -4765,6 +4861,85 @@ public class FuzzingServer {
             }
         }
         return count;
+    }
+
+    /**
+     * Count per-event upgraded-boundary crossings in a merged rolling-lane
+     * trace. A crossing is a message where exactly one endpoint — sender
+     * or receiver — belongs to {@code upgradedNodeSet}. Returns 0 when
+     * either the trace or the upgraded set is null/empty.
+     *
+     * <p>This is the Phase 2 corroboration signal. The Apr15 code used
+     * {@code rawUpgradedNodeSet.size()} which only tells us how many
+     * nodes have already flipped to new bits, not how many messages
+     * actually crossed a version boundary. That overstated corroboration
+     * in stages where the rolling lane had several upgraded nodes but
+     * all observed traffic stayed within a single version (e.g., a
+     * post-upgrade stage where writes happen between two new-version
+     * replicas). The per-event count below fixes that.
+     *
+     * <p>Node indices are extracted from raw IDs of the form
+     * {@code <executorID>-N<index>} (see
+     * {@code CassandraDocker.NET_TRACE_NODE_ID}). Entries with
+     * unparseable endpoints are skipped rather than counted, so a
+     * malformed row cannot accidentally inflate the corroboration
+     * counter.
+     */
+    static int countUpgradedBoundaryCrossings(Trace mergedTrace,
+            Set<Integer> upgradedNodeSet) {
+        if (mergedTrace == null || upgradedNodeSet == null
+                || upgradedNodeSet.isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        for (TraceEntry entry : mergedTrace.getTraceEntries()) {
+            if (entry == null) {
+                continue;
+            }
+            int srcIdx = extractNodeIndex(entry.nodeId);
+            int dstIdx = extractNodeIndex(entry.peerId);
+            if (srcIdx < 0 || dstIdx < 0) {
+                continue;
+            }
+            boolean srcUp = upgradedNodeSet.contains(srcIdx);
+            boolean dstUp = upgradedNodeSet.contains(dstIdx);
+            if (srcUp ^ dstUp) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Parse a node index out of a raw node ID string. Handles three
+     * forms (see {@code CassandraDocker.NET_TRACE_NODE_ID}):
+     * <ul>
+     *   <li>{@code <executorID>-N<digits>} — preferred, e.g.
+     *       {@code SrnNTLLS-N0} -> {@code 0}.</li>
+     *   <li>{@code N<digits>} — bare normalized form.</li>
+     *   <li>{@code <digits>} — plain decimal.</li>
+     * </ul>
+     * Returns -1 for null, empty, or unparseable inputs so the caller
+     * can safely skip the entry without counting it.
+     */
+    static int extractNodeIndex(String rawId) {
+        if (rawId == null || rawId.isEmpty() || "null".equals(rawId)) {
+            return -1;
+        }
+        String candidate;
+        int dashN = rawId.lastIndexOf("-N");
+        if (dashN >= 0 && dashN + 2 < rawId.length()) {
+            candidate = rawId.substring(dashN + 2);
+        } else if (rawId.length() >= 2 && rawId.charAt(0) == 'N') {
+            candidate = rawId.substring(1);
+        } else {
+            candidate = rawId;
+        }
+        try {
+            return Integer.parseInt(candidate);
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 
     /**
@@ -5160,40 +5335,156 @@ public class FuzzingServer {
         return total;
     }
 
-    // === Phase 1: tri-diff window decision ===
+    // === Phase 1/2: tri-diff window decision ===
 
     /**
-     * Explicit sub-decisions for a single aligned tri-diff window. Separating
-     * {@code exclusiveInteresting} from {@code missingInteresting} is what lets
-     * Phase 1 disable missing-only admission while still tracking missing-signal
-     * counters for observability and later analysis. The {@code triDiffInteresting}
-     * field is the final answer fed into corpus admission — after Phase 1 it is
-     * equal to {@code exclusiveInteresting}.
+     * Explicit sub-decisions for a single aligned tri-diff window.
+     *
+     * <p>Phase 1 added the
+     * {@code exclusiveInteresting} / {@code missingInteresting} split so
+     * that missing-only admissions could be disabled while still keeping
+     * the missing counter visible for observability.
+     *
+     * <p>Phase 2 extends the decision object with support/stage/change
+     * gating results and the per-window
+     * {@link TraceEvidenceStrength} label. These fields are the source of
+     * truth for the round-level strength roll-up — the caller no longer
+     * has to re-derive them from the raw triDiff numbers. The original
+     * boolean fields stay populated exactly as before so the legacy
+     * admission path and Phase 1 regression tests remain unchanged.
+     *
+     * <p>Invariants:
+     * <ul>
+     *   <li>{@code traceEvidenceStrength == NONE} iff {@code !windowFired},
+     *       where "fired" means either {@code exclusiveInteresting} or
+     *       {@code windowSimInteresting}.</li>
+     *   <li>{@code traceEvidenceStrength == STRONG} implies
+     *       {@code supportGatePassed && stageGatePassed} and at least
+     *       one of (a) {@code changedMessageGatePassed} — which is
+     *       itself true when <em>either</em> the changed-message
+     *       path or the upgraded-boundary path clears its minimum
+     *       with non-zero evidence — or (b) the strong-support
+     *       fallback ({@code totalAllThreeCount >=
+     *       strongTraceFallbackMinAllThreeCount} with
+     *       {@code rollingMinSimilarity <=
+     *       strongTraceFallbackMaxRollingMinSimilarity}).</li>
+     *   <li>{@code changedMessageGatePassed} is a logical OR of the
+     *       changed-message and upgraded-boundary corroboration paths;
+     *       the two minima control the threshold for each path
+     *       independently and are never AND-combined.</li>
+     *   <li>{@code traceEvidenceStrength == UNSUPPORTED} iff the window
+     *       fired but {@code !supportGatePassed}.</li>
+     * </ul>
      */
     static final class TriDiffWindowDecision {
         final boolean exclusiveInteresting;
         final boolean missingInteresting;
         final boolean triDiffInteresting;
+        // --- Phase 2 gating result fields ---
+        final boolean supportGatePassed;
+        final boolean stageGatePassed;
+        final boolean changedMessageGatePassed;
+        final TraceEvidenceStrength traceEvidenceStrength;
 
         TriDiffWindowDecision(boolean exclusiveInteresting,
                 boolean missingInteresting, boolean triDiffInteresting) {
+            this(exclusiveInteresting, missingInteresting, triDiffInteresting,
+                    /* supportGatePassed */ false,
+                    /* stageGatePassed */ false,
+                    /* changedMessageGatePassed */ false,
+                    TraceEvidenceStrength.NONE);
+        }
+
+        TriDiffWindowDecision(boolean exclusiveInteresting,
+                boolean missingInteresting, boolean triDiffInteresting,
+                boolean supportGatePassed, boolean stageGatePassed,
+                boolean changedMessageGatePassed,
+                TraceEvidenceStrength traceEvidenceStrength) {
             this.exclusiveInteresting = exclusiveInteresting;
             this.missingInteresting = missingInteresting;
             this.triDiffInteresting = triDiffInteresting;
+            this.supportGatePassed = supportGatePassed;
+            this.stageGatePassed = stageGatePassed;
+            this.changedMessageGatePassed = changedMessageGatePassed;
+            this.traceEvidenceStrength = traceEvidenceStrength == null
+                    ? TraceEvidenceStrength.NONE
+                    : traceEvidenceStrength;
         }
     }
 
     /**
-     * Evaluate a single aligned tri-diff window.
+     * Phase 2 gate knobs captured as an immutable bundle. Grouping them
+     * keeps {@link #evaluateTriDiffWindow(
+     * DiffComputeMessageTriDiff.MessageTriDiffResult, TraceWindow.StageKind,
+     * int, double, int, double, TraceStrengthGates)} readable and lets
+     * unit tests build "all-zero" / "all-strict" gate fixtures without
+     * worrying about positional arguments.
      *
-     * <p>Rolling-exclusive churn (messages the rolling lane produced that neither
-     * baseline has) is the strong signal and is the only direct seed-admission
-     * path after the Phase 1 hotfix. Missing-message churn (messages both
-     * baselines share that rolling dropped) is still thresholded and reported,
-     * but no longer contributes to {@code triDiffInteresting}. The missing path
-     * is additionally stage-gated: {@code PRE_UPGRADE} windows never produce
-     * {@code missingInteresting=true} because Apr 12 evidence showed benign
-     * pre-upgrade missing drift was driving the "always-on" missing trigger.
+     * <p>All thresholds are inclusive (">="). Setting everything to 0 (or
+     * -1 for ratios) reproduces the pre-Phase-2 behavior, which is what
+     * the legacy overload does.
+     */
+    static final class TraceStrengthGates {
+        final int minAllThreeCount;
+        final int minBaselineSharedCount;
+        final double minBaselineSimilarity;
+        final int minChangedMessageCount;
+        final int minUpgradedBoundaryCount;
+        final boolean preUpgradeCanStrengthenBranch;
+        final int fallbackMinAllThreeCount;
+        final double fallbackMaxRollingMinSimilarity;
+
+        TraceStrengthGates(int minAllThreeCount,
+                int minBaselineSharedCount,
+                double minBaselineSimilarity,
+                int minChangedMessageCount,
+                int minUpgradedBoundaryCount,
+                boolean preUpgradeCanStrengthenBranch,
+                int fallbackMinAllThreeCount,
+                double fallbackMaxRollingMinSimilarity) {
+            this.minAllThreeCount = minAllThreeCount;
+            this.minBaselineSharedCount = minBaselineSharedCount;
+            this.minBaselineSimilarity = minBaselineSimilarity;
+            this.minChangedMessageCount = minChangedMessageCount;
+            this.minUpgradedBoundaryCount = minUpgradedBoundaryCount;
+            this.preUpgradeCanStrengthenBranch = preUpgradeCanStrengthenBranch;
+            this.fallbackMinAllThreeCount = fallbackMinAllThreeCount;
+            this.fallbackMaxRollingMinSimilarity = fallbackMaxRollingMinSimilarity;
+        }
+
+        /** Default gates that disable all Phase 2 promotions (legacy behavior). */
+        static TraceStrengthGates permissive() {
+            return new TraceStrengthGates(
+                    /* minAllThreeCount */ 0,
+                    /* minBaselineSharedCount */ 0,
+                    /* minBaselineSimilarity */ 0.0,
+                    /* minChangedMessageCount */ 0,
+                    /* minUpgradedBoundaryCount */ 0,
+                    /* preUpgradeCanStrengthenBranch */ true,
+                    /* fallbackMinAllThreeCount */ 0,
+                    /* fallbackMaxRollingMinSimilarity */ 1.0);
+        }
+
+        /** Snapshot of the current server config. */
+        static TraceStrengthGates fromConfig(Config.Configuration conf) {
+            return new TraceStrengthGates(
+                    conf.strongTraceMinAllThreeCount,
+                    conf.strongTraceMinBaselineSharedCount,
+                    conf.strongTraceMinBaselineSimilarity,
+                    conf.strongTraceMinChangedMessageCount,
+                    conf.strongTraceMinUpgradedBoundaryCount,
+                    conf.preUpgradeTraceCanStrengthenBranch,
+                    conf.strongTraceFallbackMinAllThreeCount,
+                    conf.strongTraceFallbackMaxRollingMinSimilarity);
+        }
+    }
+
+    /**
+     * Legacy six-argument entry point. Preserved for
+     * {@link org.zlab.upfuzz.fuzzingengine.server.FuzzingServerTriDiffDecisionTest}
+     * and any offline replay harness that only cares about the Phase 1
+     * boolean triad. Phase 2 fields are populated with "permissive" values
+     * so the returned object is still usable in a support-aware context.
      */
     static TriDiffWindowDecision evaluateTriDiffWindow(
             DiffComputeMessageTriDiff.MessageTriDiffResult triDiff,
@@ -5202,10 +5493,79 @@ public class FuzzingServer {
             double rollingExclusiveFractionThreshold,
             int rollingMissingMinCount,
             double rollingMissingFractionThreshold) {
+        return evaluateTriDiffWindow(
+                triDiff,
+                stageKind,
+                rollingExclusiveMinCount,
+                rollingExclusiveFractionThreshold,
+                rollingMissingMinCount,
+                rollingMissingFractionThreshold,
+                /* windowSimInteresting */ false,
+                /* changedMessageCount */ 0,
+                /* upgradedBoundaryEventCount */ 0,
+                /* rollingMinSimilarity */ Double.NaN,
+                /* baselineSimilarity */ Double.NaN,
+                TraceStrengthGates.permissive());
+    }
+
+    /**
+     * Evaluate a single aligned tri-diff window with full Phase 2 gating.
+     *
+     * <p>Rolling-exclusive churn (messages the rolling lane produced that
+     * neither baseline has) is the only direct seed-admission path after
+     * Phase 1. This method preserves that exclusive/missing admission
+     * contract and additionally computes Phase 2 support/stage/change
+     * gating:
+     *
+     * <ol>
+     *   <li><b>Support gate:</b> at least one canonical message must
+     *       appear in all three lanes
+     *       ({@code totalAllThreeCount >= minAllThreeCount}) and the
+     *       baseline-shared count must clear its own floor. Windows that
+     *       fail the support gate are labelled
+     *       {@link TraceEvidenceStrength#UNSUPPORTED}.</li>
+     *   <li><b>Stage gate:</b> only
+     *       {@link TraceWindow.StageKind#POST_STAGE} and
+     *       {@link TraceWindow.StageKind#POST_FINAL_STAGE} (plus
+     *       {@link TraceWindow.StageKind#FAULT_RECOVERY} for completeness)
+     *       are mixed-version-relevant. {@code PRE_UPGRADE} is gated off
+     *       by default — the config knob
+     *       {@code preUpgradeTraceCanStrengthenBranch} flips this for
+     *       offline replay.</li>
+     *   <li><b>Baseline-agreement gate:</b> if the two baselines
+     *       disagree too much with each other
+     *       ({@code baselineSimilarity < minBaselineSimilarity}), the
+     *       round itself is already unstable and promoting a rolling
+     *       divergence to {@link TraceEvidenceStrength#STRONG} would
+     *       amplify noise. The window drops to WEAK instead.</li>
+     *   <li><b>Change gate:</b> a STRONG window usually needs
+     *       corroborating upgrade evidence — changed-message traffic or
+     *       upgraded-boundary events. Windows that otherwise pass the
+     *       support/stage/baseline gates but lack this corroboration
+     *       stay WEAK unless the strong-support fallback fires
+     *       (very high {@code totalAllThreeCount} with a very low
+     *       {@code rollingMinSimilarity}).</li>
+     * </ol>
+     */
+    static TriDiffWindowDecision evaluateTriDiffWindow(
+            DiffComputeMessageTriDiff.MessageTriDiffResult triDiff,
+            TraceWindow.StageKind stageKind,
+            int rollingExclusiveMinCount,
+            double rollingExclusiveFractionThreshold,
+            int rollingMissingMinCount,
+            double rollingMissingFractionThreshold,
+            boolean windowSimInteresting,
+            int changedMessageCount,
+            int upgradedBoundaryEventCount,
+            double rollingMinSimilarity,
+            double baselineSimilarity,
+            TraceStrengthGates gates) {
         int rollingExclusive = triDiff.rollingExclusiveCount();
         int rollingMissing = triDiff.rollingMissingCount();
         double exclusiveFraction = triDiff.rollingExclusiveFraction();
         double missingFraction = triDiff.rollingMissingFraction();
+        int totalAllThreeCount = triDiff.totalAllThreeCount();
+        int baselineSharedCount = triDiff.baselineSharedCount();
 
         boolean exclusiveInteresting = rollingExclusive >= rollingExclusiveMinCount
                 && exclusiveFraction >= rollingExclusiveFractionThreshold;
@@ -5217,11 +5577,77 @@ public class FuzzingServer {
 
         // Phase 1 hotfix: missing-only windows no longer admit seeds.
         // triDiffInteresting reflects the admission verdict; missingInteresting
-        // is kept for observability so offline re-scoring and Phase 7 reruns
+        // is kept for observability so offline re-scoring and later reruns
         // can reproduce the decision.
         boolean triDiffInteresting = exclusiveInteresting;
 
+        // Phase 2: compute support/stage/change gating for the strength
+        // label. These gates never affect the admission booleans — they
+        // only decide whether a firing window counts as STRONG, WEAK, or
+        // UNSUPPORTED for the round-level roll-up.
+        TraceStrengthGates effectiveGates = gates == null
+                ? TraceStrengthGates.permissive()
+                : gates;
+
+        boolean windowFired = exclusiveInteresting || windowSimInteresting;
+        boolean supportGatePassed = totalAllThreeCount > 0
+                && totalAllThreeCount >= effectiveGates.minAllThreeCount
+                && baselineSharedCount >= effectiveGates.minBaselineSharedCount;
+
+        boolean mixedVersionStage = stageKind == TraceWindow.StageKind.POST_STAGE
+                || stageKind == TraceWindow.StageKind.POST_FINAL_STAGE
+                || stageKind == TraceWindow.StageKind.FAULT_RECOVERY;
+        boolean stageGatePassed = mixedVersionStage
+                || (preUpgradeStage
+                        && effectiveGates.preUpgradeCanStrengthenBranch);
+
+        boolean baselineAgreementOk = Double.isNaN(baselineSimilarity)
+                || baselineSimilarity >= effectiveGates.minBaselineSimilarity;
+
+        // Phase 2 corroboration gate: changed-message traffic and
+        // upgraded-boundary traffic are <em>alternative</em> paths per
+        // the plan ("strong trace should usually require at least one
+        // of: changed-message traffic, upgraded-boundary traffic,
+        // strong support plus very high divergence"). Each path must
+        // (a) be non-zero, and (b) clear its own minimum threshold to
+        // count; a window passes the gate when <em>either</em> path
+        // qualifies. Setting either minimum to 0 only relaxes that
+        // path — it does not make the other path mandatory. The
+        // strong-support fallback below remains a third independent
+        // path to STRONG.
+        boolean changedMessageCorroborates = changedMessageCount > 0
+                && changedMessageCount >= effectiveGates.minChangedMessageCount;
+        boolean upgradedBoundaryCorroborates = upgradedBoundaryEventCount > 0
+                && upgradedBoundaryEventCount >= effectiveGates.minUpgradedBoundaryCount;
+        boolean changedMessageGatePassed = changedMessageCorroborates
+                || upgradedBoundaryCorroborates;
+
+        // Strong-support fallback: very large all3 + very low rolling
+        // similarity should still count as STRONG even without a
+        // changed-message or upgraded-boundary co-signal, because the
+        // rolling lane is genuinely drifting from a well-agreed
+        // three-way shared baseline.
+        boolean fallbackStrongSupport = totalAllThreeCount >= effectiveGates.fallbackMinAllThreeCount
+                && effectiveGates.fallbackMinAllThreeCount > 0
+                && !Double.isNaN(rollingMinSimilarity)
+                && rollingMinSimilarity <= effectiveGates.fallbackMaxRollingMinSimilarity;
+
+        TraceEvidenceStrength strength;
+        if (!windowFired) {
+            strength = TraceEvidenceStrength.NONE;
+        } else if (!supportGatePassed) {
+            strength = TraceEvidenceStrength.UNSUPPORTED;
+        } else if (!stageGatePassed || !baselineAgreementOk) {
+            strength = TraceEvidenceStrength.WEAK;
+        } else if (changedMessageGatePassed || fallbackStrongSupport) {
+            strength = TraceEvidenceStrength.STRONG;
+        } else {
+            strength = TraceEvidenceStrength.WEAK;
+        }
+
         return new TriDiffWindowDecision(exclusiveInteresting,
-                missingInteresting, triDiffInteresting);
+                missingInteresting, triDiffInteresting,
+                supportGatePassed, stageGatePassed, changedMessageGatePassed,
+                strength);
     }
 }

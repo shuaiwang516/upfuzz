@@ -351,6 +351,40 @@ public class Config {
         public double rollingExclusiveFractionThreshold = 0.05;
         public double rollingMissingFractionThreshold = 0.05;
 
+        // --- Phase 2 trace evidence strength gates ---
+        // Phase 2 makes trace evidence support-aware, stage-aware, and
+        // change-aware. Windows that fire the tri-diff exclusive rule (or
+        // the window-sim rule) are still visible for observability, but a
+        // window must additionally pass the knobs below before the
+        // round-level trace strength can be promoted to STRONG. Windows
+        // that fire without passing these gates are classified as WEAK
+        // (or UNSUPPORTED when no three-way shared support exists).
+        //
+        // All gates are inclusive (">= threshold") so a conservative
+        // default of 0 disables the knob and preserves Phase 0 behavior.
+        // The defaults below match the Apr15 offline-replay target
+        // (`strongTraceMinAllThreeCount=3`) and leave the stricter
+        // baseline/similarity/changed-message knobs open for offline
+        // tuning.
+        public int strongTraceMinAllThreeCount = 3;
+        public int strongTraceMinBaselineSharedCount = 3;
+        public double strongTraceMinBaselineSimilarity = 0.70;
+        public int strongTraceMinChangedMessageCount = 0;
+        public int strongTraceMinUpgradedBoundaryCount = 0;
+        // When false (Phase 2 default), PRE_UPGRADE windows can never
+        // upgrade a branch admission into STRONG trace-backed status.
+        // The flag exists so offline replay can A/B the policy without
+        // rebuilding.
+        public boolean preUpgradeTraceCanStrengthenBranch = false;
+        // Apr15 cutoff for "strong support alone": when changed-message
+        // and upgraded-boundary evidence is absent, the window can still
+        // reach STRONG if both (a) totalAllThreeCount is at or above
+        // this threshold and (b) rollingMinSimilarity drops far below
+        // the baseline. The defaults are intentionally strict so only
+        // large, highly divergent windows qualify.
+        public int strongTraceFallbackMinAllThreeCount = 20;
+        public double strongTraceFallbackMaxRollingMinSimilarity = 0.40;
+
         // --- Canonical key tier (Phase 3) ---
         // Controls how strictly two messages are considered the same by
         // window similarity and tri-diff. SEMANTIC is the original Phase 2

@@ -356,9 +356,23 @@ class TraceSignatureDedupTest {
         Trace trace = new Trace();
         int idx = 0;
         for (String message : messages) {
+            // Alternate N0 <-> N1 so the rolling lane (which reports
+            // rawUpgradedNodes={0}) produces real per-event boundary
+            // crossings for the Phase 2 corroboration gate. Without
+            // this, {@code countUpgradedBoundaryCrossings} would see
+            // null endpoints, return 0, and Phase 2 would correctly
+            // demote the round to WEAK — but then the signature-dedup
+            // path under test would never fire. The baselines use the
+            // same endpoint pattern; their boundary-crossing count is
+            // still zero because their rawUpgradedNodeSet is empty
+            // (old-old) or covers both nodes (new-new).
             trace.recordSend("TraceSignatureDedupTest.fakeSend", 10010001,
                     new int[] { idx }, message,
-                    SendMeta.builder().messageType("ReplayMessage").build(),
+                    SendMeta.builder()
+                            .messageType("ReplayMessage")
+                            .nodeId("replay-N" + (idx % 2))
+                            .peerId("replay-N" + ((idx + 1) % 2))
+                            .build(),
                     message);
             idx++;
         }
