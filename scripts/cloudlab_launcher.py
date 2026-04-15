@@ -237,7 +237,7 @@ def cmd_deploy(assignments: List[MachineAssignment], args):
             f"  git clone --depth 1 --branch {BRANCH} {UPFUZZ_REPO_URL} upfuzz\n"
             f"  cd upfuzz\n"
             f"  sudo bash scripts/setup-cloudlab/setup_env.sh "
-            f"--mode full --use-existing-repos "
+            f"--mode full "
             f"--skip-prebuild-check --skip-image-check --skip-build\n"
             f"fi\n"
         ))
