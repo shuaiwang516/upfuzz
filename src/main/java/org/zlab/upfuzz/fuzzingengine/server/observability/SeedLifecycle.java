@@ -9,17 +9,22 @@ import java.util.concurrent.atomic.AtomicLong;
  * later as the seed is selected as a mutation parent and as its descendants
  * produce downstream branch hits or candidate artifacts.
  *
- * <p>Phase 0 uses this record to answer two questions after a run:
+ * <p>Phase 0 used this record to answer two questions after a run:
  * <ul>
  *   <li>What rule admitted this seed?</li>
  *   <li>Did that seed later pay off in new branch coverage or structured
  *       tri-lane candidates?</li>
  * </ul>
  *
- * <p>Structured (cross-cluster Checker D) and weak (event-failure /
- * error-log) candidate credits are tracked separately because the Phase 2
- * retention policy must be able to ignore the noisy weak categories that
- * Phase 5 will clean up.
+ * <p>Phase 1 splits the Phase 0 {@code descendantStructuredCandidateHits}
+ * bucket into {@code descendantStrongStructuredCandidateHits} (strong,
+ * confident checker-D divergences) and keeps
+ * {@code descendantStructuredCandidateHits} as a backward-compatible
+ * alias for the strong count — only strong structured candidates are
+ * allowed to promote parent seeds. Weak structured divergences, rolling-
+ * only event crashes, and rolling-only error logs each get their own
+ * counter under the weak umbrella so offline analysis can see which
+ * kind of noise dominates a given campaign.
  */
 public final class SeedLifecycle {
     public final int seedTestId;
@@ -30,8 +35,39 @@ public final class SeedLifecycle {
 
     public final AtomicLong timesSelectedAsParent = new AtomicLong(0);
     public final AtomicLong descendantNewBranchHits = new AtomicLong(0);
+
+    /**
+     * Strong structured candidates (Phase 1). Before Phase 1 this field
+     * counted all structured candidates — strong and weak combined.
+     * Phase 1 restricts it to the strong slice because only strong
+     * structured candidates promote parent seeds, so existing parsers
+     * of {@code seed_lifecycle_summary.csv} that only look at this
+     * column now see a cleaner signal.
+     */
     public final AtomicLong descendantStructuredCandidateHits = new AtomicLong(
             0);
+
+    /** Phase 1: weak structured divergences, tracked separately. */
+    public final AtomicLong descendantWeakStructuredCandidateHits = new AtomicLong(
+            0);
+    /** Phase 1: rolling-only event-crash candidates. */
+    public final AtomicLong descendantWeakEventCandidateHits = new AtomicLong(
+            0);
+    /** Phase 1: rolling-only error-log candidates. */
+    public final AtomicLong descendantWeakErrorLogCandidateHits = new AtomicLong(
+            0);
+
+    /**
+     * Weak candidate umbrella preserving Phase 0 semantics: sum of
+     * rolling-only event crash + rolling-only error log hits. Weak
+     * <em>structured</em> divergence is NOT rolled into this counter
+     * because offline parsers of {@code seed_lifecycle_summary.csv}
+     * expected the Phase 0 "rolling-only weak signal" meaning. To
+     * see the full Phase 1 weak picture, offline code should sum
+     * {@link #descendantWeakStructuredCandidateHits},
+     * {@link #descendantWeakEventCandidateHits}, and
+     * {@link #descendantWeakErrorLogCandidateHits}.
+     */
     public final AtomicLong descendantWeakCandidateHits = new AtomicLong(0);
 
     public SeedLifecycle(
@@ -59,7 +95,10 @@ public final class SeedLifecycle {
                 "times_selected_as_parent",
                 "descendant_new_branch_hits",
                 "descendant_structured_candidate_hits",
-                "descendant_weak_candidate_hits");
+                "descendant_weak_candidate_hits",
+                "descendant_weak_structured_candidate_hits",
+                "descendant_weak_event_candidate_hits",
+                "descendant_weak_error_log_candidate_hits");
     }
 
     public String toCsvRow() {
@@ -72,7 +111,10 @@ public final class SeedLifecycle {
         sb.append(timesSelectedAsParent.get()).append(',');
         sb.append(descendantNewBranchHits.get()).append(',');
         sb.append(descendantStructuredCandidateHits.get()).append(',');
-        sb.append(descendantWeakCandidateHits.get());
+        sb.append(descendantWeakCandidateHits.get()).append(',');
+        sb.append(descendantWeakStructuredCandidateHits.get()).append(',');
+        sb.append(descendantWeakEventCandidateHits.get()).append(',');
+        sb.append(descendantWeakErrorLogCandidateHits.get());
         return sb.toString();
     }
 }

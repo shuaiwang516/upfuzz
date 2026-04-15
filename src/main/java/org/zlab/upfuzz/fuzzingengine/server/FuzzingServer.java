@@ -2393,7 +2393,8 @@ public class FuzzingServer {
         // 3. Cross-cluster structured inconsistency (Checker D) — primary
         // rolling-upgrade bug oracle. Gated strictly: all 3 lanes must be OK
         // and all 3 must have non-null structured validationResults.
-        String crossClusterReport = null;
+        CrossClusterComparisonOutcome crossClusterOutcome = CrossClusterComparisonOutcome
+                .none();
         boolean checkerDGateOpen = allLanesOkWithStructuredResults(
                 testPlanFeedbackPackets);
         logger.info(
@@ -2413,13 +2414,17 @@ public class FuzzingServer {
                         : testPlanFeedbackPackets[2].validationResults
                                 .size());
         if (checkerDGateOpen) {
-            crossClusterReport = checkCrossClusterInconsistencyStructured(
+            crossClusterOutcome = checkCrossClusterInconsistencyStructured(
                     testPlanFeedbackPackets);
-            logger.info("[CheckerD] crossClusterReport={}",
-                    crossClusterReport == null ? "null (no divergence)"
-                            : "DIVERGENCE DETECTED");
-            if (crossClusterReport != null) {
-                logger.info("[CheckerD] report:\n{}", crossClusterReport);
+            logger.info(
+                    "[CheckerD] diverged={}, strength={}, containsUnknown={}, containsDaemonError={}",
+                    crossClusterOutcome.diverged,
+                    crossClusterOutcome.strength,
+                    crossClusterOutcome.containsUnknown,
+                    crossClusterOutcome.containsDaemonError);
+            if (crossClusterOutcome.diverged) {
+                logger.info("[CheckerD] report:\n{}",
+                        crossClusterOutcome.report);
                 if (DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE
                         .moreSignificantThan(overallVerdict)) {
                     overallVerdict = DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE;
@@ -2445,7 +2450,7 @@ public class FuzzingServer {
 
         logger.info("Verdict classification: overall=" + overallVerdict
                 + " event=" + eventVerdict + " crossCluster="
-                + (crossClusterReport != null ? "CANDIDATE" : "NONE")
+                + (crossClusterOutcome.diverged ? "CANDIDATE" : "NONE")
                 + " errorLog=" + errorLogVerdict);
 
         // === Corpus update (gated by verdict) ===
@@ -2459,27 +2464,69 @@ public class FuzzingServer {
             addToCorpus = false;
         }
 
-        // Phase 0: downstream payoff credit for the parent of this child,
-        // irrespective of whether we admit the child ourselves. Structured
-        // (Checker D cross-cluster) candidates are tracked separately from
-        // weak event/error-log candidates so Phase 2 retention decisions can
-        // ignore the latter until Phase 5 cleans candidate routing up.
-        boolean structuredCandidate = crossClusterReport != null;
-        boolean weakCandidate = !structuredCandidate
-                && (eventVerdict == DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE
-                        || errorLogVerdict == DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE);
+        // Phase 1: confidence labels now come directly from the checker-D
+        // outcome, so the comparator's row-level strength policy is the
+        // single source of truth for how strong the structured divergence
+        // is. The packet-level UNKNOWN/DAEMON_ERROR scan is still available
+        // as a fallback, but Phase 1 prefers the comparator result because
+        // it understands payload/failure-class/asymmetric divergence.
+        boolean structuredCandidate = crossClusterOutcome.diverged;
+        StructuredCandidateStrength structuredCandidateStrength = crossClusterOutcome.strength;
+        if (structuredCandidate
+                && structuredCandidateStrength == StructuredCandidateStrength.NONE) {
+            // Defensive: if the outcome is diverged but the strength slot
+            // somehow ended up NONE, fall back to the packet scan so we
+            // never accidentally call a divergent round NONE.
+            structuredCandidateStrength = classifyStructuredCandidateStrength(
+                    structuredCandidate, testPlanFeedbackPackets);
+        }
+        boolean strongStructuredCandidate = structuredCandidate
+                && structuredCandidateStrength == StructuredCandidateStrength.STRONG;
+        boolean weakStructuredCandidate = structuredCandidate
+                && !strongStructuredCandidate;
 
-        // Phase 0 confidence labels. The labels only feed observability in
-        // this phase — admission and routing are unchanged. Later phases
-        // will read them directly from the admission summary row.
+        // Rolling-only event / error-log candidates are always weak
+        // unless a strong structured divergence coexists (which then
+        // promotes the whole round into the strong bucket). They appear
+        // in the candidate/weak directory and never call
+        // notifyStructuredCandidatePayoff.
+        boolean rollingOnlyEventCandidate = !structuredCandidate
+                && eventVerdict == DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE;
+        boolean rollingOnlyErrorLogCandidate = !structuredCandidate
+                && errorLogVerdict == DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE;
+
+        // CSV-backward-compat weakCandidate flag: keeps the Phase 0
+        // semantics ("not structured AND rolling-only event/error") so
+        // existing offline parsers of trace_admission_summary.csv still
+        // report the same column meaning. Phase 1 tracks unstable
+        // structured divergence separately.
+        boolean weakCandidate = rollingOnlyEventCandidate
+                || rollingOnlyErrorLogCandidate;
+
+        // Test-level routing strength: STRONG if any strong structured
+        // divergence, else WEAK if any weak candidate fires, else NONE.
+        // All candidate reports for this run land in a single
+        // failure/candidate/{strong,weak}/failure_N directory so
+        // event / inconsistency / errorLog reports stay co-located.
+        StructuredCandidateStrength testLevelCandidateStrength;
+        if (strongStructuredCandidate) {
+            testLevelCandidateStrength = StructuredCandidateStrength.STRONG;
+        } else if (weakStructuredCandidate || rollingOnlyEventCandidate
+                || rollingOnlyErrorLogCandidate) {
+            testLevelCandidateStrength = StructuredCandidateStrength.WEAK;
+        } else {
+            testLevelCandidateStrength = StructuredCandidateStrength.NONE;
+        }
+
+        // Phase 0 confidence labels. Trace evidence stays as-is; the
+        // weak-candidate sub-classifier uses the new comparator-backed
+        // strength value.
         TraceEvidenceStrength traceEvidenceStrength = classifyRoundTraceEvidenceStrength(
                 traceInteresting,
                 firingStrongWindowCount,
                 firingWeakWindowCount,
                 firingUnsupportedWindowCount,
                 aggregateSimFired);
-        StructuredCandidateStrength structuredCandidateStrength = classifyStructuredCandidateStrength(
-                structuredCandidate, testPlanFeedbackPackets);
         WeakCandidateKind weakCandidateKind = classifyWeakCandidateKind(
                 structuredCandidate,
                 structuredCandidateStrength,
@@ -2498,13 +2545,31 @@ public class FuzzingServer {
                 rollingSeedCorpus.notifyBranchPayoff(parentLineageRoot);
             }
         }
-        if (structuredCandidate) {
+        // Phase 1: only strong structured candidates are allowed to
+        // promote a probationary seed. Weak structured candidates are
+        // still tracked for review via
+        // recordDownstreamWeakStructuredCandidateHit
+        // but never call notifyStructuredCandidatePayoff.
+        if (strongStructuredCandidate) {
             observabilityMetrics.recordDownstreamStructuredCandidateHit(
                     testPlanDiffFeedbackPacket.testPacketID);
             if (parentLineageRoot >= 0) {
                 rollingSeedCorpus
                         .notifyStructuredCandidatePayoff(parentLineageRoot);
             }
+        }
+        if (weakStructuredCandidate) {
+            observabilityMetrics
+                    .recordDownstreamWeakStructuredCandidateHit(
+                            testPlanDiffFeedbackPacket.testPacketID);
+        }
+        if (rollingOnlyEventCandidate) {
+            observabilityMetrics.recordDownstreamWeakEventCandidateHit(
+                    testPlanDiffFeedbackPacket.testPacketID);
+        }
+        if (rollingOnlyErrorLogCandidate) {
+            observabilityMetrics.recordDownstreamWeakErrorLogCandidateHit(
+                    testPlanDiffFeedbackPacket.testPacketID);
         }
         if (weakCandidate) {
             observabilityMetrics.recordDownstreamWeakCandidateHit(
@@ -2732,16 +2797,18 @@ public class FuzzingServer {
                 }
                 noiseNum++;
             } else if (eventVerdict == DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE) {
-                candidateDir = ensureVerdictDir(candidateDir,
+                candidateDir = ensureCandidateVerdictDir(candidateDir,
                         rollingFb.configFileName, rollingFb.fullSequence,
-                        DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE);
+                        testLevelCandidateStrength);
                 saveEventCrashReport(candidateDir,
                         testPlanDiffFeedbackPacket.testPacketID,
                         DiffReportHelper.eventCrashHeader("Rolling")
                                 + rollingFb.eventFailedReport,
                         "Rolling",
                         DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE,
-                        rollingFb.configFileName);
+                        rollingFb.configFileName,
+                        testLevelCandidateStrength,
+                        weakCandidateKind);
                 candidateNum++;
             } else if (eventVerdict == DiffVerdict.SAME_VERSION_BUG) {
                 sameVersionDir = ensureVerdictDir(sameVersionDir,
@@ -2781,17 +2848,24 @@ public class FuzzingServer {
             }
         }
 
-        // 3. Cross-cluster inconsistency → always CANDIDATE (tri-diff is
-        // correct)
-        if (crossClusterReport != null) {
-            candidateDir = ensureVerdictDir(candidateDir,
+        // 3. Cross-cluster inconsistency → tri-diff is always a rolling
+        // candidate. Phase 1 routes strong vs weak (unstable) structured
+        // divergence into separate subdirectories, and the report body
+        // already carries the confidence metadata line inserted by
+        // checkCrossClusterInconsistencyStructured.
+        if (crossClusterOutcome.diverged) {
+            candidateDir = ensureCandidateVerdictDir(candidateDir,
                     rollingFb.configFileName, rollingFb.fullSequence,
-                    DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE);
+                    testLevelCandidateStrength);
             saveInconsistencyReport(candidateDir,
                     testPlanDiffFeedbackPacket.testPacketID,
-                    crossClusterReport,
+                    crossClusterOutcome.report,
                     DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE,
-                    rollingFb.configFileName);
+                    rollingFb.configFileName,
+                    structuredCandidateStrength,
+                    weakCandidateKind,
+                    crossClusterOutcome.containsUnknown,
+                    crossClusterOutcome.containsDaemonError);
             candidateNum++;
         }
 
@@ -2801,9 +2875,9 @@ public class FuzzingServer {
         // 5. ERROR logs — routed by errorLogVerdict
         if (anyErrorLog) {
             if (errorLogVerdict == DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE) {
-                candidateDir = ensureVerdictDir(candidateDir,
+                candidateDir = ensureCandidateVerdictDir(candidateDir,
                         rollingFb.configFileName, rollingFb.fullSequence,
-                        DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE);
+                        testLevelCandidateStrength);
                 for (int i = 0; i < 3; i++) {
                     if (testPlanFeedbackPackets[i].hasERRORLog) {
                         String laneTag = testPlanID2Setup.getOrDefault(i,
@@ -2814,7 +2888,9 @@ public class FuzzingServer {
                                 testPlanDiffFeedbackPacket.testPacketID,
                                 laneTag,
                                 DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE,
-                                rollingFb.configFileName);
+                                rollingFb.configFileName,
+                                testLevelCandidateStrength,
+                                weakCandidateKind);
                     }
                 }
                 candidateNum++;
@@ -2950,40 +3026,69 @@ public class FuzzingServer {
      * Structured cross-cluster comparison (Checker D).
      * Requires all 3 packets to have non-null structured validationResults.
      * No legacy string-based fallback for mode-3/mode-5 paths.
+     *
+     * <p>Phase 1: returns a {@link CrossClusterComparisonOutcome} that
+     * carries confidence ({@link StructuredCandidateStrength}) alongside
+     * the report text, so callers can route strong vs weak structured
+     * candidates into separate directories without re-inspecting packet
+     * failure classes.
      */
-    private String checkCrossClusterInconsistencyStructured(
+    private CrossClusterComparisonOutcome checkCrossClusterInconsistencyStructured(
             TestPlanFeedbackPacket[] packets) {
         if (packets[0].validationResults == null
                 || packets[1].validationResults == null
                 || packets[2].validationResults == null) {
-            return null;
+            return CrossClusterComparisonOutcome.none();
         }
-        String oldVsRolling = ValidationResultComparator.compare(
+        ValidationComparison oldVsRolling = ValidationResultComparator.compare(
                 packets[0].validationResults,
                 packets[1].validationResults,
                 "Old-Old", "Rolling");
-        String newVsRolling = ValidationResultComparator.compare(
+        ValidationComparison newVsRolling = ValidationResultComparator.compare(
                 packets[2].validationResults,
                 packets[1].validationResults,
                 "New-New", "Rolling");
-        String oldVsNew = ValidationResultComparator.compare(
+        ValidationComparison oldVsNew = ValidationResultComparator.compare(
                 packets[0].validationResults,
                 packets[2].validationResults,
                 "Old-Old", "New-New");
 
         // Rolling diverges from both baselines, and baselines agree
-        if (oldVsRolling != null && newVsRolling != null
-                && oldVsNew == null) {
+        if (oldVsRolling.isDivergent() && newVsRolling.isDivergent()
+                && oldVsNew.equivalent) {
+            // Pair-level strength is STRONG only when both rolling-vs-baseline
+            // comparisons are themselves STRONG. A single weak pair taints
+            // the candidate because the router can no longer trust the
+            // rolling-only signal.
+            StructuredCandidateStrength pairStrength;
+            if (oldVsRolling.strength == StructuredCandidateStrength.STRONG
+                    && newVsRolling.strength == StructuredCandidateStrength.STRONG) {
+                pairStrength = StructuredCandidateStrength.STRONG;
+            } else {
+                pairStrength = StructuredCandidateStrength.WEAK;
+            }
+            boolean containsUnknown = oldVsRolling.involvesUnknown
+                    || newVsRolling.involvesUnknown
+                    || oldVsNew.involvesUnknown;
+            boolean containsDaemonError = oldVsRolling.involvesDaemonError
+                    || newVsRolling.involvesDaemonError
+                    || oldVsNew.involvesDaemonError;
             StringBuilder sb = new StringBuilder();
-            sb.append(
-                    DiffReportHelper.crossClusterHeader());
+            sb.append(DiffReportHelper.crossClusterHeader());
             sb.append(
                     "Old-Old and New-New agree but Rolling differs.\n");
-            sb.append(oldVsRolling).append("\n");
-            sb.append(newVsRolling).append("\n");
-            return sb.toString();
+            sb.append(DiffReportHelper.confidenceMetadataLine(
+                    pairStrength, containsUnknown, containsDaemonError));
+            sb.append(oldVsRolling.reportLine).append("\n");
+            sb.append(newVsRolling.reportLine).append("\n");
+            return new CrossClusterComparisonOutcome(
+                    /*diverged*/ true,
+                    pairStrength,
+                    sb.toString(),
+                    containsUnknown,
+                    containsDaemonError);
         }
-        return null;
+        return CrossClusterComparisonOutcome.none();
     }
 
     // Helper to lazily create failure dir (reuses existing pattern)
@@ -3912,7 +4017,9 @@ public class FuzzingServer {
 
     /**
      * Create a failure directory routed by verdict.
-     * candidate  → failure/candidate/failure_N/
+     * candidate  → failure/candidate/failure_N/ (Phase 0 layout; Phase 1
+     *              uses {@link #createCandidateVerdictDir} instead so
+     *              candidates land under strong/weak subdirectories)
      * same_version → failure/same_version/failure_N/
      * noise / infra / oracle → failure/noise/failure_N/
      */
@@ -3951,6 +4058,47 @@ public class FuzzingServer {
             return dir;
         }
         return verdictDir;
+    }
+
+    /**
+     * Phase 1 candidate directory creator. Splits the
+     * {@code failure/candidate/} bucket into {@code strong/} and
+     * {@code weak/} subdirectories so downstream triage can separate
+     * checker-D strong structured divergences from the weak pile
+     * without re-reading report bodies.
+     *
+     * <p>{@link StructuredCandidateStrength#NONE} is treated as WEAK
+     * defensively — no candidate routing should ever pass NONE, but if
+     * it does we want a single home for the artefact rather than a
+     * crash.
+     */
+    private Path createCandidateVerdictDir(String configFileName,
+            StructuredCandidateStrength strength) {
+        String subBucket = strength == StructuredCandidateStrength.STRONG
+                ? DiffReportHelper.STRONG_CANDIDATE_SUBDIR
+                : DiffReportHelper.WEAK_CANDIDATE_SUBDIR;
+        Path bucketDir = Paths.get(Config.getConf().failureDir, subBucket);
+        bucketDir.toFile().mkdirs();
+        while (Paths.get(bucketDir.toString(),
+                "failure_" + failureId).toFile().exists()) {
+            failureId++;
+        }
+        Path failureSubDir = Paths.get(bucketDir.toString(),
+                "failure_" + failureId++);
+        failureSubDir.toFile().mkdir();
+        copyConfig(failureSubDir, configFileName);
+        return failureSubDir;
+    }
+
+    private Path ensureCandidateVerdictDir(Path candidateDir,
+            String configFileName, String fullSequence,
+            StructuredCandidateStrength strength) {
+        if (candidateDir == null) {
+            Path dir = createCandidateVerdictDir(configFileName, strength);
+            saveFullSequence(dir, fullSequence);
+            return dir;
+        }
+        return candidateDir;
     }
 
     private void copyConfig(Path failureSubDir, String configFileName) {
@@ -4047,13 +4195,32 @@ public class FuzzingServer {
     private void saveEventCrashReport(Path failureDir, int testID,
             String report, String laneTag, DiffVerdict verdict,
             String configIdx) {
+        saveEventCrashReport(failureDir, testID, report, laneTag, verdict,
+                configIdx, null, null);
+    }
+
+    /**
+     * Phase 1 variant with the Phase 1 confidence labels embedded in the
+     * report metadata block. {@code strength} and {@code weakKind} are
+     * optional: pass {@code null} for callers that do not know them
+     * (e.g. SAME_VERSION_BUG routing) and the metadata block falls
+     * back to the Phase 0 layout.
+     */
+    private void saveEventCrashReport(Path failureDir, int testID,
+            String report, String laneTag, DiffVerdict verdict,
+            String configIdx,
+            StructuredCandidateStrength strength,
+            WeakCandidateKind weakKind) {
         Path subDir = createFailureSubDir(failureDir, "event_crash");
         String fileName = DiffReportHelper.reportFileName(
                 DiffReportHelper.CheckerType.EVENT_CRASH, testID, laneTag);
         String fullReport = verdict != null
                 ? DiffReportHelper.buildMetadataBlock(
                         DiffReportHelper.CheckerType.EVENT_CRASH,
-                        laneTag, verdict, testID, configIdx, null)
+                        laneTag, verdict, testID, configIdx, null,
+                        strength, weakKind,
+                        /*containsUnknown*/ false,
+                        /*containsDaemonError*/ false)
                         + report
                 : report;
         Path crashReportPath = Paths.get(subDir.toString(), fileName);
@@ -4104,6 +4271,22 @@ public class FuzzingServer {
 
     private void saveInconsistencyReport(Path failureDir, int testID,
             String report, DiffVerdict verdict, String configIdx) {
+        saveInconsistencyReport(failureDir, testID, report, verdict,
+                configIdx, null, null, false, false);
+    }
+
+    /**
+     * Phase 1 variant: records the checker-D strength and the
+     * UNKNOWN/DAEMON_ERROR touches in the report metadata block so
+     * offline parsers can re-bucket strong vs weak structured
+     * divergences without re-parsing the comparator output.
+     */
+    private void saveInconsistencyReport(Path failureDir, int testID,
+            String report, DiffVerdict verdict, String configIdx,
+            StructuredCandidateStrength strength,
+            WeakCandidateKind weakKind,
+            boolean containsUnknown,
+            boolean containsDaemonError) {
         Path inconsistencySubDir = createFailureSubDir(failureDir,
                 "inconsistency");
         String fileName = DiffReportHelper.reportFileName(
@@ -4112,7 +4295,9 @@ public class FuzzingServer {
         String fullReport = verdict != null
                 ? DiffReportHelper.buildMetadataBlock(
                         DiffReportHelper.CheckerType.CROSS_CLUSTER_INCONSISTENCY,
-                        null, verdict, testID, configIdx, null)
+                        null, verdict, testID, configIdx, null,
+                        strength, weakKind,
+                        containsUnknown, containsDaemonError)
                         + report
                 : report;
         Path crashReportPath = Paths.get(
@@ -4132,13 +4317,29 @@ public class FuzzingServer {
 
     private void saveErrorReport(Path failureDir, String report, int testID,
             String laneTag, DiffVerdict verdict, String configIdx) {
+        saveErrorReport(failureDir, report, testID, laneTag, verdict,
+                configIdx, null, null);
+    }
+
+    /**
+     * Phase 1 variant: records the error log's strength + weak-candidate
+     * kind in the metadata block so downstream review can split weak
+     * event/error-log signals from strong structured divergences.
+     */
+    private void saveErrorReport(Path failureDir, String report, int testID,
+            String laneTag, DiffVerdict verdict, String configIdx,
+            StructuredCandidateStrength strength,
+            WeakCandidateKind weakKind) {
         Path errorSubDir = createFailureSubDir(failureDir, "errorLog");
         String fileName = DiffReportHelper.reportFileName(
                 DiffReportHelper.CheckerType.ERROR_LOG, testID, laneTag);
         String fullReport = verdict != null
                 ? DiffReportHelper.buildMetadataBlock(
                         DiffReportHelper.CheckerType.ERROR_LOG,
-                        laneTag, verdict, testID, configIdx, null)
+                        laneTag, verdict, testID, configIdx, null,
+                        strength, weakKind,
+                        /*containsUnknown*/ false,
+                        /*containsDaemonError*/ false)
                         + report
                 : report;
         Path reportPath = Paths.get(errorSubDir.toString(), fileName);

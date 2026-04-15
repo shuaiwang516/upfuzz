@@ -264,42 +264,82 @@ public final class ObservabilityMetrics {
     }
 
     /**
-     * Credit the parent for a structured cross-cluster divergence (Checker
-     * D). This is the only candidate category that Phase 2 retention
-     * policy should rely on — everything else is currently too noisy.
+     * Credit the parent for a strong structured cross-cluster divergence
+     * (Checker D). Phase 1 treats this as the only candidate category
+     * safe enough to promote a probationary seed — weak structured
+     * divergence and rolling-only event/error-log candidates go into
+     * dedicated counters so Phase 2 retention can ignore them.
      */
     public void recordDownstreamStructuredCandidateHit(int childTestId) {
-        if (!enabled || childTestId < 0) {
-            return;
-        }
-        int rootId = resolveRootLifecycleId(childTestId);
-        if (rootId == NO_PARENT) {
-            return;
-        }
-        SeedLifecycle record = seedLifecycles.get(rootId);
+        SeedLifecycle record = resolveLifecycleForCredit(childTestId);
         if (record != null) {
             record.descendantStructuredCandidateHits.incrementAndGet();
         }
     }
 
     /**
+     * Phase 1: credit the parent for a <em>weak</em> structured
+     * cross-cluster divergence. Weak structured candidates do not promote
+     * probation seeds — they are tracked here so Phase 1 effectiveness
+     * can be measured against the Apr15 baseline without polluting the
+     * strong-structured counter.
+     */
+    public void recordDownstreamWeakStructuredCandidateHit(int childTestId) {
+        SeedLifecycle record = resolveLifecycleForCredit(childTestId);
+        if (record != null) {
+            record.descendantWeakStructuredCandidateHits.incrementAndGet();
+        }
+    }
+
+    /**
+     * Phase 1: credit the parent for a rolling-only event-crash
+     * candidate. Event crashes are the noisiest weak source on Cassandra
+     * and HBase; a dedicated counter makes the noise visible without
+     * erasing it from the aggregate.
+     */
+    public void recordDownstreamWeakEventCandidateHit(int childTestId) {
+        SeedLifecycle record = resolveLifecycleForCredit(childTestId);
+        if (record != null) {
+            record.descendantWeakEventCandidateHits.incrementAndGet();
+        }
+    }
+
+    /**
+     * Phase 1: credit the parent for a rolling-only error-log
+     * candidate. Tracked separately from the event-crash and weak
+     * structured slices so Phase 1 routing changes show up distinctly
+     * in {@code seed_lifecycle_summary.csv}.
+     */
+    public void recordDownstreamWeakErrorLogCandidateHit(int childTestId) {
+        SeedLifecycle record = resolveLifecycleForCredit(childTestId);
+        if (record != null) {
+            record.descendantWeakErrorLogCandidateHits.incrementAndGet();
+        }
+    }
+
+    /**
      * Credit the parent for a weak rolling-upgrade candidate (event-crash
-     * rolling-only, error-log rolling-only). Tracked separately so that
-     * Phase 5 candidate-routing cleanup is measurable without corrupting
-     * the structured signal.
+     * rolling-only, error-log rolling-only, or Phase 1 unstable
+     * structured divergence). Tracked separately so that Phase 1
+     * candidate-routing cleanup is measurable without corrupting the
+     * strong structured signal.
      */
     public void recordDownstreamWeakCandidateHit(int childTestId) {
-        if (!enabled || childTestId < 0) {
-            return;
-        }
-        int rootId = resolveRootLifecycleId(childTestId);
-        if (rootId == NO_PARENT) {
-            return;
-        }
-        SeedLifecycle record = seedLifecycles.get(rootId);
+        SeedLifecycle record = resolveLifecycleForCredit(childTestId);
         if (record != null) {
             record.descendantWeakCandidateHits.incrementAndGet();
         }
+    }
+
+    private SeedLifecycle resolveLifecycleForCredit(int childTestId) {
+        if (!enabled || childTestId < 0) {
+            return null;
+        }
+        int rootId = resolveRootLifecycleId(childTestId);
+        if (rootId == NO_PARENT) {
+            return null;
+        }
+        return seedLifecycles.get(rootId);
     }
 
     // === Artifact writers ===
