@@ -25,6 +25,7 @@ public final class AdmissionSummaryRow {
     public final boolean triDiffMissingFired;
     public final boolean windowSimFired;
     public final boolean aggregateSimFired;
+    public final boolean traceSignatureSuppressed;
     public final boolean structuredCandidate;
     public final boolean weakCandidate;
     public final int windowsEvaluated;
@@ -34,6 +35,7 @@ public final class AdmissionSummaryRow {
     public final long cumulativeTraceOnlyWindowSim;
     public final long cumulativeTraceOnlyTriDiffExclusive;
     public final long cumulativeTraceOnlyTriDiffMissing;
+    public final long cumulativeTraceSignatureSuppressions;
 
     public AdmissionSummaryRow(
             long executionIndex,
@@ -46,6 +48,7 @@ public final class AdmissionSummaryRow {
             boolean triDiffMissingFired,
             boolean windowSimFired,
             boolean aggregateSimFired,
+            boolean traceSignatureSuppressed,
             boolean structuredCandidate,
             boolean weakCandidate,
             int windowsEvaluated,
@@ -54,7 +57,8 @@ public final class AdmissionSummaryRow {
             long cumulativeBranchAndTrace,
             long cumulativeTraceOnlyWindowSim,
             long cumulativeTraceOnlyTriDiffExclusive,
-            long cumulativeTraceOnlyTriDiffMissing) {
+            long cumulativeTraceOnlyTriDiffMissing,
+            long cumulativeTraceSignatureSuppressions) {
         this.executionIndex = executionIndex;
         this.testPacketId = testPacketId;
         this.admitted = admitted;
@@ -67,6 +71,7 @@ public final class AdmissionSummaryRow {
         this.triDiffMissingFired = triDiffMissingFired;
         this.windowSimFired = windowSimFired;
         this.aggregateSimFired = aggregateSimFired;
+        this.traceSignatureSuppressed = traceSignatureSuppressed;
         this.structuredCandidate = structuredCandidate;
         this.weakCandidate = weakCandidate;
         this.windowsEvaluated = windowsEvaluated;
@@ -76,6 +81,7 @@ public final class AdmissionSummaryRow {
         this.cumulativeTraceOnlyWindowSim = cumulativeTraceOnlyWindowSim;
         this.cumulativeTraceOnlyTriDiffExclusive = cumulativeTraceOnlyTriDiffExclusive;
         this.cumulativeTraceOnlyTriDiffMissing = cumulativeTraceOnlyTriDiffMissing;
+        this.cumulativeTraceSignatureSuppressions = cumulativeTraceSignatureSuppressions;
     }
 
     public static String csvHeader() {
@@ -90,6 +96,7 @@ public final class AdmissionSummaryRow {
                 "tri_diff_missing_fired",
                 "window_sim_fired",
                 "aggregate_sim_fired",
+                "trace_signature_suppressed",
                 "structured_candidate",
                 "weak_candidate",
                 "windows_evaluated",
@@ -98,7 +105,8 @@ public final class AdmissionSummaryRow {
                 "cumulative_branch_and_trace",
                 "cumulative_trace_only_window_sim",
                 "cumulative_trace_only_tridiff_exclusive",
-                "cumulative_trace_only_tridiff_missing");
+                "cumulative_trace_only_tridiff_missing",
+                "cumulative_trace_signature_suppressions");
     }
 
     public String toCsvRow() {
@@ -113,6 +121,7 @@ public final class AdmissionSummaryRow {
         sb.append(triDiffMissingFired).append(',');
         sb.append(windowSimFired).append(',');
         sb.append(aggregateSimFired).append(',');
+        sb.append(traceSignatureSuppressed).append(',');
         sb.append(structuredCandidate).append(',');
         sb.append(weakCandidate).append(',');
         sb.append(windowsEvaluated).append(',');
@@ -121,7 +130,8 @@ public final class AdmissionSummaryRow {
         sb.append(cumulativeBranchAndTrace).append(',');
         sb.append(cumulativeTraceOnlyWindowSim).append(',');
         sb.append(cumulativeTraceOnlyTriDiffExclusive).append(',');
-        sb.append(cumulativeTraceOnlyTriDiffMissing);
+        sb.append(cumulativeTraceOnlyTriDiffMissing).append(',');
+        sb.append(cumulativeTraceSignatureSuppressions);
         return sb.toString();
     }
 

@@ -324,8 +324,10 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
                 // comparison (Checker D) in FuzzingServer instead.
 
                 try {
+                    String finalCoverageVersion = executor
+                            .getCurrentCoverageVersionLabel();
                     ExecutionDataStore[] upCoverages = executor
-                            .collectCoverageSeparate("upgraded");
+                            .collectCoverageSeparate(finalCoverageVersion);
                     if (upCoverages != null) {
                         int coverageBound = Math.min(nodeNum,
                                 upCoverages.length);

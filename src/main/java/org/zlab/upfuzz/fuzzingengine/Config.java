@@ -361,6 +361,30 @@ public class Config {
         // over-fragments in cross-version campaigns.
         public CanonicalKeyMode canonicalKeyMode = CanonicalKeyMode.SEMANTIC_SHAPE_SUMMARY;
 
+        // --- Phase 4 trace-signature dedup ---
+        // Suppress trace-only admissions whose interesting-window
+        // signatures are already saturated in a bounded recent-signature
+        // index. Branch-backed admissions are exempt.
+        public boolean useTraceSignatureDedup = true;
+
+        // Number of prior trace-only admissions with the same compact
+        // trace signature required before later trace-only admissions are
+        // suppressed.
+        public int traceSignatureSaturationThreshold = 2;
+
+        // Sliding round window for the recent-signature index. Entries
+        // older than this many completed rounds are forgotten.
+        public int traceSignatureLookbackRounds = 100;
+
+        // Hard cap on the total recorded signature entries kept in the
+        // recent-signature index. Oldest entries are evicted first once
+        // the cap is reached.
+        public int traceSignatureIndexCapacity = 256;
+
+        // Maximum number of rolling-exclusive / rolling-missing canonical
+        // buckets retained in each compact per-window trace signature.
+        public int traceSignatureTopBucketLimit = 3;
+
         // Debug
         public boolean useCompressedOrderDebug = false;
 

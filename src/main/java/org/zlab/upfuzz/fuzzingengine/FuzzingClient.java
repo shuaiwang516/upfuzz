@@ -88,7 +88,9 @@ public class FuzzingClient {
             }
         }
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            executor.teardown();
+            if (executor != null) {
+                executor.teardown();
+            }
         }));
         if (Config.getConf().nyxMode) {
             this.libnyx = createLibnyxInterface();

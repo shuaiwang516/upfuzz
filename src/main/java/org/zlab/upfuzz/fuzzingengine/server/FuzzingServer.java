@@ -88,6 +88,7 @@ public class FuzzingServer {
     public TestPlanCorpus testPlanCorpus = new TestPlanCorpus();
     public FullStopCorpus fullStopCorpus = new FullStopCorpus();
     public RollingSeedCorpus rollingSeedCorpus;
+    public final RecentTraceSignatureIndex traceSignatureIndex;
 
     // Phase 0 observability
     public final ObservabilityMetrics observabilityMetrics;
@@ -257,6 +258,10 @@ public class FuzzingServer {
                 Config.getConf().traceProbationRediscoveryThreshold,
                 Config.getConf().branchBackedSelectionWeight,
                 new java.util.Random(Config.getConf().seed ^ 0xC0FFEEL));
+        this.traceSignatureIndex = new RecentTraceSignatureIndex(
+                Config.getConf().traceSignatureSaturationThreshold,
+                Config.getConf().traceSignatureLookbackRounds,
+                Config.getConf().traceSignatureIndexCapacity);
 
         if (Config.getConf().useVersionDelta) {
             corpus = new CorpusVersionDeltaFiveQueueWithBoundary();
@@ -1939,6 +1944,7 @@ public class FuzzingServer {
         boolean anyWindowSimFired = false;
         boolean aggregateSimFired = false;
         int windowsEvaluatedThisRound = 0;
+        List<TraceSignature> interestingTraceSignatures = new ArrayList<>();
 
         boolean allLanesOk = normalizeLaneStatus(
                 testPlanFeedbackPackets[0]) == TestPlanFeedbackPacket.LaneStatus.OK
@@ -2022,6 +2028,10 @@ public class FuzzingServer {
                     int totalAllThreeCount = 0;
                     double rollingExclusiveFraction = 0.0;
                     double rollingMissingFraction = 0.0;
+                    Map<String, Integer> rollingExclusiveBuckets = Collections
+                            .emptyMap();
+                    Map<String, Integer> rollingMissingBuckets = Collections
+                            .emptyMap();
                     if (windowHasEnoughEvents
                             && Config
                                     .getConf().useCanonicalMessageIdentityDiff) {
@@ -2037,6 +2047,8 @@ public class FuzzingServer {
                                 .rollingExclusiveFraction();
                         rollingMissingFraction = triDiff
                                 .rollingMissingFraction();
+                        rollingExclusiveBuckets = triDiff.only1;
+                        rollingMissingBuckets = triDiff.in02Only;
 
                         // Phase 1 invariant: both fractions must stay in
                         // [0, 1]. The accessors guarantee this by
@@ -2173,6 +2185,16 @@ public class FuzzingServer {
                     }
 
                     if (windowInteresting || triDiffInteresting) {
+                        interestingTraceSignatures.add(TraceSignature
+                                .fromWindow(
+                                        aw.rolling,
+                                        keyMode,
+                                        rollingExclusiveBuckets,
+                                        rollingMissingBuckets,
+                                        windowInteresting,
+                                        rollingMinSimilarity,
+                                        rollingDivergenceMargin,
+                                        Config.getConf().traceSignatureTopBucketLimit));
                         traceInteresting = true;
                         logger.info(
                                 "[TRACE] Window {} interesting: windowSim={}, triDiff={}",
@@ -2362,6 +2384,29 @@ public class FuzzingServer {
             // noisy to drive retention.
         }
 
+        boolean traceSignatureSuppressed = false;
+        boolean isRollingMode = Config.getConf().testingMode == 5
+                || Config.getConf().testingMode == 6;
+        if (addToCorpus
+                && isRollingMode
+                && traceInteresting
+                && Config.getConf().useTraceSignatureDedup
+                && shouldSuppressTraceOnlyBySignature(
+                        newBranchCoverage,
+                        interestingTraceSignatures,
+                        finishedTestID,
+                        traceSignatureIndex)) {
+            traceSignatureSuppressed = true;
+            addToCorpus = false;
+            logger.info(
+                    "Phase 4 signature dedup suppressed trace-only admission "
+                            + "(signatures={}, totalSuppressed={}, live={}, recentEntries={})",
+                    interestingTraceSignatures,
+                    traceSignatureIndex.getTotalSuppressedDuplicates(),
+                    traceSignatureIndex.liveSignatureCount(),
+                    traceSignatureIndex.recentEntryCount());
+        }
+
         // Mode-3/mode-5 rolling differential paths no longer persist the
         // old-old lane results as validationReadResultsOracle. Checker D
         // (cross-cluster structured comparison) runs at verdict time and
@@ -2443,6 +2488,12 @@ public class FuzzingServer {
                                     testPlanDiffFeedbackPacket.testPacketID));
 
                     testPlanCorpus.addTestPlan(testPlan);
+                    if (isModeFive && !newBranchCoverage
+                            && Config.getConf().useTraceSignatureDedup) {
+                        traceSignatureIndex.recordAdmitted(
+                                interestingTraceSignatures,
+                                finishedTestID);
+                    }
                     if (isModeFive) {
                         logger.info(
                                 "Mode 5 rollingSeedCorpus updated from interesting test plan, "
@@ -2678,6 +2729,7 @@ public class FuzzingServer {
                 anyTriDiffMissingFired,
                 anyWindowSimFired,
                 aggregateSimFired,
+                traceSignatureSuppressed,
                 structuredCandidate,
                 weakCandidate,
                 windowsEvaluatedThisRound,
@@ -2691,7 +2743,8 @@ public class FuzzingServer {
                 observabilityMetrics.getAdmissionCount(
                         AdmissionReason.TRACE_ONLY_TRIDIFF_EXCLUSIVE),
                 observabilityMetrics.getAdmissionCount(
-                        AdmissionReason.TRACE_ONLY_TRIDIFF_MISSING)));
+                        AdmissionReason.TRACE_ONLY_TRIDIFF_MISSING),
+                traceSignatureIndex.getTotalSuppressedDuplicates()));
 
         // --- Cleanup and status update ---
         testID2TestPlan.remove(testPlanDiffFeedbackPacket.testPacketID);
@@ -4067,6 +4120,18 @@ public class FuzzingServer {
                             + rollingLaneCollectionFailureNum + "/"
                             + newNewLaneCollectionFailureNum,
                     "");
+            System.out.format("|%30s|%30s|%30s|\n",
+                    "trace sig live/recent : "
+                            + traceSignatureIndex.liveSignatureCount() + "/"
+                            + traceSignatureIndex.recentEntryCount(),
+                    "trace sig suppress : "
+                            + traceSignatureIndex
+                                    .getTotalSuppressedDuplicates(),
+                    "trace sig evict look/cap : "
+                            + traceSignatureIndex.getTotalLookbackEvictions()
+                            + "/"
+                            + traceSignatureIndex
+                                    .getTotalCapacityEvictions());
         }
 
         System.out.println(
@@ -4319,6 +4384,24 @@ public class FuzzingServer {
             return AdmissionReason.TRACE_ONLY_WINDOW_SIM;
         }
         return AdmissionReason.UNKNOWN;
+    }
+
+    /**
+     * Phase 4 dedup gate. Branch-backed admissions are always exempt; trace-
+     * only admissions are suppressed only when every interesting-window
+     * signature for the round is already saturated in the recent-signature
+     * index.
+     */
+    static boolean shouldSuppressTraceOnlyBySignature(
+            boolean newBranchCoverage,
+            List<TraceSignature> interestingTraceSignatures,
+            long round,
+            RecentTraceSignatureIndex recentTraceSignatureIndex) {
+        if (newBranchCoverage || recentTraceSignatureIndex == null) {
+            return false;
+        }
+        return recentTraceSignatureIndex.shouldSuppress(
+                interestingTraceSignatures, round);
     }
 
     // === Phase 4: Canonical trace scoring helpers ===

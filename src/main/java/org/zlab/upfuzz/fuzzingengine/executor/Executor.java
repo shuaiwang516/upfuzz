@@ -198,6 +198,18 @@ public abstract class Executor implements IExecutor {
     }
 
     /**
+     * Returns the session-group label that currently owns the live daemon set
+     * for this lane. old-old runs stay on "original"; rolling and new-new runs
+     * end on "upgraded".
+     */
+    public String getCurrentCoverageVersionLabel() {
+        if (direction == 1) {
+            return "upgraded";
+        }
+        return currentRawUpgradedNodeSet.isEmpty() ? "original" : "upgraded";
+    }
+
+    /**
      * Rebuild the legacy flat trace[] from collected windows.
      * This should be used instead of updateTrace() after windowed execute(),
      * because the runtime buffers have already been snapshot-cleared.
