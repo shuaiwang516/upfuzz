@@ -192,14 +192,14 @@ class TraceSignatureDedupTest {
         assertEquals(0L, server.traceSignatureIndex
                 .getTotalSuppressedDuplicates());
         assertEquals(1, server.traceSignatureIndex.liveSignatureCount());
-        assertEquals(1, server.testPlanCorpus.queue.size());
+        assertEquals(1, server.testPlanCorpus.size());
 
         server.updateStatus(repeatedTraceOnlyPacket(1));
         assertEquals(1L, server.traceSignatureIndex
                 .getTotalSuppressedDuplicates());
         assertEquals(1, server.traceSignatureIndex.liveSignatureCount());
         assertEquals(1, server.traceSignatureIndex.recentEntryCount());
-        assertEquals(1, server.testPlanCorpus.queue.size());
+        assertEquals(1, server.testPlanCorpus.size());
 
         Path summaryCsv = verificationDir.resolve("observability")
                 .resolve("trace_admission_summary.csv");

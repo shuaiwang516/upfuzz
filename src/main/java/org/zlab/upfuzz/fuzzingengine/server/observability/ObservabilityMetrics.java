@@ -23,22 +23,26 @@ import org.apache.logging.log4j.Logger;
  * server thread (under {@code FuzzingServer}'s monitor), but data structures
  * are concurrent so offline readers (e.g. status threads) can sample safely.
  *
- * <p>Four CSVs are produced under {@code <failureDir>/observability/}:
+ * <p>Six CSVs are produced under {@code <failureDir>/observability/}:
  * <ul>
  *   <li>{@code trace_admission_summary.csv} — one row per completed
  *       differential execution, with the rule-fired flags, the primary
- *       admission reason, and cumulative counts after the row. This is the
- *       per-round artifact the Phase 0 plan calls for.</li>
+ *       admission reason, cumulative counts, and (Phase 0 v2) the
+ *       confidence labels and trace-support counters.</li>
  *   <li>{@code trace_admission_totals.csv} — a small aggregate
- *       {@code reason,count} snapshot, refreshed every flush. Redundant
- *       with the per-round CSV but cheap and useful for quick eyeballing
- *       in the status line.</li>
- *   <li>{@code seed_lifecycle_summary.csv} — one row per saved seed, with
- *       parent-selection counts and downstream branch / structured
+ *       {@code reason,count} snapshot, refreshed every flush.</li>
+ *   <li>{@code seed_lifecycle_summary.csv} — one row per saved seed,
+ *       with parent-selection counts and downstream branch / structured
  *       candidate / weak candidate payoff counters.</li>
  *   <li>{@code trace_window_summary.csv} — one row per window evaluated
- *       by the canonical-trace scoring pass, regardless of whether it
- *       fired.</li>
+ *       by the canonical-trace scoring pass, including the Phase 0 v2
+ *       support counters.</li>
+ *   <li>{@code queue_activity_summary.csv} — one row per enqueue or
+ *       dequeue on the short-term test plan queue. Phase 0 telemetry
+ *       only — Phase 3 will consume the labels on this CSV.</li>
+ *   <li>{@code branch_novelty_summary.csv} — per-round branch novelty
+ *       source attribution (baseline-only / rolling-only / shared) for
+ *       both the old-version and new-version probe sets.</li>
  * </ul>
  *
  * <p>Writes are atomic: CSVs are staged in {@code .tmp} files and renamed in
@@ -56,6 +60,8 @@ public final class ObservabilityMetrics {
     private static final String ADMISSION_TOTALS_CSV_NAME = "trace_admission_totals.csv";
     private static final String LIFECYCLE_CSV_NAME = "seed_lifecycle_summary.csv";
     private static final String WINDOW_CSV_NAME = "trace_window_summary.csv";
+    private static final String QUEUE_CSV_NAME = "queue_activity_summary.csv";
+    private static final String BRANCH_NOVELTY_CSV_NAME = "branch_novelty_summary.csv";
 
     private final EnumMap<AdmissionReason, AtomicLong> admissionCounts = new EnumMap<>(
             AdmissionReason.class);
@@ -65,6 +71,8 @@ public final class ObservabilityMetrics {
 
     private final List<WindowTriggerRow> windowRows = new ArrayList<>();
     private final List<AdmissionSummaryRow> admissionRows = new ArrayList<>();
+    private final List<QueueActivityRow> queueActivityRows = new ArrayList<>();
+    private final List<BranchNoveltyRow> branchNoveltyRows = new ArrayList<>();
 
     private volatile boolean enabled = true;
     private final Path outputDir;
@@ -136,6 +144,40 @@ public final class ObservabilityMetrics {
     public int windowRowCount() {
         synchronized (windowRows) {
             return windowRows.size();
+        }
+    }
+
+    // === Queue activity rows ===
+
+    public void recordQueueActivity(QueueActivityRow row) {
+        if (!enabled || row == null) {
+            return;
+        }
+        synchronized (queueActivityRows) {
+            queueActivityRows.add(row);
+        }
+    }
+
+    public int queueActivityRowCount() {
+        synchronized (queueActivityRows) {
+            return queueActivityRows.size();
+        }
+    }
+
+    // === Branch novelty rows ===
+
+    public void recordBranchNovelty(BranchNoveltyRow row) {
+        if (!enabled || row == null) {
+            return;
+        }
+        synchronized (branchNoveltyRows) {
+            branchNoveltyRows.add(row);
+        }
+    }
+
+    public int branchNoveltyRowCount() {
+        synchronized (branchNoveltyRows) {
+            return branchNoveltyRows.size();
         }
     }
 
@@ -276,6 +318,8 @@ public final class ObservabilityMetrics {
                 writeAdmissionTotalsCsv();
                 writeLifecycleCsv();
                 writeWindowCsv();
+                writeQueueActivityCsv();
+                writeBranchNoveltyCsv();
             } catch (IOException e) {
                 logger.warn("Failed to write observability artifacts", e);
             }
@@ -357,6 +401,46 @@ public final class ObservabilityMetrics {
             w.write(WindowTriggerRow.csvHeader());
             w.newLine();
             for (WindowTriggerRow row : snapshot) {
+                w.write(row.toCsvRow());
+                w.newLine();
+            }
+        }
+        Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.ATOMIC_MOVE);
+    }
+
+    private void writeQueueActivityCsv() throws IOException {
+        Path target = outputDir.resolve(QUEUE_CSV_NAME);
+        Path tmp = outputDir.resolve(QUEUE_CSV_NAME + ".tmp");
+        List<QueueActivityRow> snapshot;
+        synchronized (queueActivityRows) {
+            snapshot = new ArrayList<>(queueActivityRows);
+        }
+        try (BufferedWriter w = Files.newBufferedWriter(tmp,
+                StandardCharsets.UTF_8)) {
+            w.write(QueueActivityRow.csvHeader());
+            w.newLine();
+            for (QueueActivityRow row : snapshot) {
+                w.write(row.toCsvRow());
+                w.newLine();
+            }
+        }
+        Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.ATOMIC_MOVE);
+    }
+
+    private void writeBranchNoveltyCsv() throws IOException {
+        Path target = outputDir.resolve(BRANCH_NOVELTY_CSV_NAME);
+        Path tmp = outputDir.resolve(BRANCH_NOVELTY_CSV_NAME + ".tmp");
+        List<BranchNoveltyRow> snapshot;
+        synchronized (branchNoveltyRows) {
+            snapshot = new ArrayList<>(branchNoveltyRows);
+        }
+        try (BufferedWriter w = Files.newBufferedWriter(tmp,
+                StandardCharsets.UTF_8)) {
+            w.write(BranchNoveltyRow.csvHeader());
+            w.newLine();
+            for (BranchNoveltyRow row : snapshot) {
                 w.write(row.toCsvRow());
                 w.newLine();
             }

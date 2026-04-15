@@ -1,12 +1,20 @@
 package org.zlab.upfuzz.utils;
 
+import org.jacoco.core.data.ExecutionData;
+import org.jacoco.core.data.ExecutionDataStore;
 import org.junit.jupiter.api.Test;
 import org.zlab.upfuzz.docker.DockerMeta;
 
+import java.util.BitSet;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class UtilitiesTest {
 
@@ -125,5 +133,100 @@ public class UtilitiesTest {
         assert changedClasses.contains("E");
         assert changedClasses.contains("F");
         assert !changedClasses.contains("D");
+    }
+
+    /**
+     * Phase 0 regression: two class ids that differ only in their high
+     * bits must not collide in
+     * {@link Utilities#collectNewProbeIds(ExecutionDataStore, ExecutionDataStore)}.
+     * The pre-fix implementation encoded probes as
+     * {@code (classId << 20) | probeIndex} which drops the top 20 bits
+     * of the 64-bit JaCoCo class id, so distinct classes that differed
+     * above bit 44 silently merged into one probe set. This test picks
+     * two class ids which collide under that encoding and verifies
+     * that the new API keeps them separate.
+     */
+    @Test
+    public void testCollectNewProbeIdsNoHighBitCollision() {
+        long classIdA = 0x0000_1234_5678_9ABCL;
+        long classIdB = 0x1000_1234_5678_9ABCL; // differs only above bit 44
+        // Sanity check the old lossy encoding collides.
+        assertEquals(classIdA << 20, classIdB << 20);
+
+        ExecutionDataStore store = new ExecutionDataStore();
+        ExecutionData probesA = new ExecutionData(classIdA, "ClassA",
+                new int[] { 1, 0, 1, 0 });
+        ExecutionData probesB = new ExecutionData(classIdB, "ClassB",
+                new int[] { 0, 1, 0, 0 });
+        store.put(probesA);
+        store.put(probesB);
+
+        Map<Long, BitSet> newProbes = Utilities.collectNewProbeIds(null,
+                store);
+
+        assertTrue(newProbes.containsKey(classIdA));
+        assertTrue(newProbes.containsKey(classIdB));
+        assertEquals(2, newProbes.size());
+
+        BitSet bitsA = newProbes.get(classIdA);
+        BitSet bitsB = newProbes.get(classIdB);
+        assertTrue(bitsA.get(0));
+        assertFalse(bitsA.get(1));
+        assertTrue(bitsA.get(2));
+        assertFalse(bitsB.get(0));
+        assertTrue(bitsB.get(1));
+        assertFalse(bitsB.get(2));
+
+        assertEquals(3, Utilities.countProbes(newProbes));
+        // No probe index overlaps between the two classes.
+        assertEquals(0,
+                Utilities.intersectProbeCount(
+                        Collections.singletonMap(classIdA, bitsA),
+                        Collections.singletonMap(classIdB, bitsB)));
+    }
+
+    /**
+     * Phase 0 regression: {@link Utilities#intersectProbeCount} counts
+     * only probes that are set in both maps for the same class id.
+     * This guards against future optimizations from accidentally
+     * bucketing two classes with the same {@code classId.hashCode()}
+     * together.
+     */
+    @Test
+    public void testIntersectProbeCount() {
+        long classA = 42L;
+        long classB = 99L;
+
+        BitSet a0 = new BitSet();
+        a0.set(1);
+        a0.set(3);
+        a0.set(5);
+
+        BitSet a1 = new BitSet();
+        a1.set(1);
+        a1.set(2);
+        a1.set(5);
+
+        BitSet b = new BitSet();
+        b.set(3);
+
+        Map<Long, BitSet> lhs = new HashMap<>();
+        lhs.put(classA, a0);
+        lhs.put(classB, b);
+
+        Map<Long, BitSet> rhs = new HashMap<>();
+        rhs.put(classA, a1);
+        // classB intentionally missing on rhs.
+
+        // classA: shared = {1, 5} -> 2 probes. classB: no overlap -> 0.
+        assertEquals(2, Utilities.intersectProbeCount(lhs, rhs));
+
+        // Order-independence.
+        assertEquals(2, Utilities.intersectProbeCount(rhs, lhs));
+
+        // Empty maps.
+        assertEquals(0,
+                Utilities.intersectProbeCount(new HashMap<>(), rhs));
+        assertEquals(0, Utilities.intersectProbeCount(lhs, null));
     }
 }

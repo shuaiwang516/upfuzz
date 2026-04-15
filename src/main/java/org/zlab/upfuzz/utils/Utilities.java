@@ -337,6 +337,108 @@ public class Utilities {
         }
     }
 
+    /**
+     * Phase 0: collect the set of probes that are covered in
+     * {@code testSequenceCoverage} but not yet in {@code curCoverage},
+     * grouped by JaCoCo class id with the new probe indices as a
+     * {@link BitSet}. JaCoCo class ids are 64-bit CRC-derived so any
+     * truncation into a single {@code long} would collide between
+     * unrelated classes — keeping the class id as the map key avoids
+     * that. The BitSet values are cheap to intersect per-class in
+     * {@link #intersectProbeCount(Map, Map)}.
+     *
+     * <p>Treats the same "new bit" predicate the boolean
+     * {@link #hasNewBitsBoolean(ExecutionDataStore, ExecutionDataStore)}
+     * variant uses: a probe is new when the baseline is zero and the
+     * candidate is non-zero. The accumulating hit-count variant is
+     * intentionally not re-used here because Phase 0 novelty
+     * attribution only needs class-level boolean novelty to reason
+     * about baseline-vs-rolling lane sources.
+     */
+    public static Map<Long, BitSet> collectNewProbeIds(
+            ExecutionDataStore curCoverage,
+            ExecutionDataStore testSequenceCoverage) {
+        Map<Long, BitSet> newProbes = new HashMap<>();
+        if (testSequenceCoverage == null) {
+            return newProbes;
+        }
+        for (final ExecutionData testSequenceData : testSequenceCoverage
+                .getContents()) {
+            final long classId = testSequenceData.getId();
+            final int[] testSequenceProbes = testSequenceData.getProbes();
+            BitSet classBits = new BitSet(testSequenceProbes.length);
+            final ExecutionData curData = curCoverage == null ? null
+                    : curCoverage.get(classId);
+            if (curData == null) {
+                for (int i = 0; i < testSequenceProbes.length; i++) {
+                    if (testSequenceProbes[i] != 0) {
+                        classBits.set(i);
+                    }
+                }
+            } else {
+                int[] curProbes = curData.getProbes();
+                int shared = Math.min(curProbes.length,
+                        testSequenceProbes.length);
+                for (int i = 0; i < shared; i++) {
+                    if (curProbes[i] == 0 && testSequenceProbes[i] != 0) {
+                        classBits.set(i);
+                    }
+                }
+                // Extra probes past the baseline length are always "new".
+                for (int i = shared; i < testSequenceProbes.length; i++) {
+                    if (testSequenceProbes[i] != 0) {
+                        classBits.set(i);
+                    }
+                }
+            }
+            if (!classBits.isEmpty()) {
+                newProbes.put(classId, classBits);
+            }
+        }
+        return newProbes;
+    }
+
+    /**
+     * Total number of new probes across all classes in a map returned
+     * by {@link #collectNewProbeIds}.
+     */
+    public static int countProbes(Map<Long, BitSet> probes) {
+        if (probes == null || probes.isEmpty()) {
+            return 0;
+        }
+        int total = 0;
+        for (BitSet bs : probes.values()) {
+            total += bs.cardinality();
+        }
+        return total;
+    }
+
+    /**
+     * Count probes that are present in both {@code a} and {@code b}.
+     * Per-class intersection via {@link BitSet#and(BitSet)} so the
+     * result is collision-free even for JaCoCo class ids that use the
+     * full 64-bit range.
+     */
+    public static int intersectProbeCount(Map<Long, BitSet> a,
+            Map<Long, BitSet> b) {
+        if (a == null || b == null || a.isEmpty() || b.isEmpty()) {
+            return 0;
+        }
+        Map<Long, BitSet> smaller = a.size() <= b.size() ? a : b;
+        Map<Long, BitSet> larger = smaller == a ? b : a;
+        int count = 0;
+        for (Map.Entry<Long, BitSet> entry : smaller.entrySet()) {
+            BitSet otherBits = larger.get(entry.getKey());
+            if (otherBits == null) {
+                continue;
+            }
+            BitSet tmp = (BitSet) entry.getValue().clone();
+            tmp.and(otherBits);
+            count += tmp.cardinality();
+        }
+        return count;
+    }
+
     public static int mergeMax(ExecutionDataStore curCoverage,
             ExecutionDataStore testSequenceCoverage) {
         int score = 0;

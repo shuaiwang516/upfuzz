@@ -11,6 +11,7 @@ import org.zlab.net.tracker.Trace;
 import org.zlab.net.tracker.diff.DiffComputeMessageTriDiff;
 import org.zlab.upfuzz.fuzzingengine.server.FuzzingServer.TriDiffWindowDecision;
 import org.zlab.upfuzz.fuzzingengine.server.observability.AdmissionReason;
+import org.zlab.upfuzz.fuzzingengine.server.observability.TraceEvidenceStrength;
 import org.zlab.upfuzz.fuzzingengine.trace.TraceWindow;
 
 /**
@@ -274,6 +275,96 @@ class FuzzingServerTriDiffDecisionTest {
                 }
             }
         }
+    }
+
+    // ---------------------------------------------------------------
+    // Phase 0 support-gate regression
+    // ---------------------------------------------------------------
+
+    /**
+     * Phase 0 regression: the support gate must require three-way shared
+     * support ({@code total_all_three_count > 0}), not merely baseline
+     * overlap. {@code baseline_shared_count} in
+     * {@link DiffComputeMessageTriDiff} equals
+     * {@code totalAllThreeCount + rollingMissingCount}, so the two
+     * counters diverge exactly when rolling is the lane that dropped
+     * the baseline-shared messages. That is the Apr15 "unsupported
+     * window" pattern: old-old and new-new agree on a set of messages
+     * but rolling never saw them. A window like that would still look
+     * "supported" under a {@code baseline_shared_count > 0} gate.
+     */
+    @Test
+    void supportGateRejectsBaselineSharedWithoutAllThree() {
+        // Both baselines share m1..m5; rolling lane is completely
+        // disjoint (r1..r3). baseline_shared_count = 5 via the
+        // accessor, but total_all_three_count = 0 because rolling has
+        // no overlap with either baseline.
+        DiffComputeMessageTriDiff.MessageTriDiffResult triDiff = compute(
+                traceOf("m1", "m2", "m3", "m4", "m5"),
+                traceOf("r1", "r2", "r3"),
+                traceOf("m1", "m2", "m3", "m4", "m5"));
+
+        assertEquals(0, triDiff.totalAllThreeCount(),
+                "rolling has no overlap with the baselines");
+        assertEquals(5, triDiff.baselineSharedCount(),
+                "baselineSharedCount counts the baseline-only messages too");
+        assertTrue(triDiff.baselineSharedCount() > 0
+                && triDiff.totalAllThreeCount() == 0,
+                "precondition for the Apr15 unsupported-window pattern");
+
+        // The window-level classifier must return UNSUPPORTED when
+        // supportGatePassed is false, regardless of corroborating
+        // changed-message or upgraded-boundary signals. This is the
+        // label the admission summary row will carry.
+        TraceEvidenceStrength strength = FuzzingServer
+                .classifyWindowTraceEvidenceStrength(
+                        /* windowFired */ true,
+                        /* supportGatePassed */ false,
+                        TraceWindow.StageKind.POST_STAGE,
+                        /* changedMessageCount */ 3,
+                        /* upgradedBoundaryEventCount */ 1);
+        assertEquals(TraceEvidenceStrength.UNSUPPORTED, strength);
+    }
+
+    /**
+     * Phase 0 regression: mirror of the above — when
+     * {@code total_all_three_count > 0} the classifier can promote
+     * past UNSUPPORTED. Corroboration still has to be present to
+     * reach STRONG (stage must be mixed-version-relevant and at
+     * least one changed-message or upgraded-boundary event).
+     */
+    @Test
+    void supportGateAcceptsWindowsWithThreeWayOverlap() {
+        DiffComputeMessageTriDiff.MessageTriDiffResult triDiff = compute(
+                traceOf("m1", "m2", "m3", "m4", "m5"),
+                traceOf("m1", "m2", "m3"),
+                traceOf("m1", "m2", "m3", "m4", "m5"));
+
+        assertEquals(3, triDiff.totalAllThreeCount());
+        assertTrue(triDiff.totalAllThreeCount() > 0);
+
+        TraceEvidenceStrength strong = FuzzingServer
+                .classifyWindowTraceEvidenceStrength(
+                        /* windowFired */ true,
+                        /* supportGatePassed */ triDiff
+                                .totalAllThreeCount() > 0,
+                        TraceWindow.StageKind.POST_STAGE,
+                        /* changedMessageCount */ 1,
+                        /* upgradedBoundaryEventCount */ 1);
+        assertEquals(TraceEvidenceStrength.STRONG, strong);
+
+        TraceEvidenceStrength weak = FuzzingServer
+                .classifyWindowTraceEvidenceStrength(
+                        /* windowFired */ true,
+                        /* supportGatePassed */ triDiff
+                                .totalAllThreeCount() > 0,
+                        // PRE_UPGRADE is not a mixed-version-relevant
+                        // stage; even with support the window should
+                        // only reach WEAK.
+                        TraceWindow.StageKind.PRE_UPGRADE,
+                        /* changedMessageCount */ 1,
+                        /* upgradedBoundaryEventCount */ 1);
+        assertEquals(TraceEvidenceStrength.WEAK, weak);
     }
 
     @Test

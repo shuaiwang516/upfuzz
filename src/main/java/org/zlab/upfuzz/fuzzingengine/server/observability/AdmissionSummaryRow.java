@@ -13,6 +13,11 @@ package org.zlab.upfuzz.fuzzingengine.server.observability;
  * were evaluated but not admitted — those rounds are still useful because
  * they reveal which rule fired even when branch coverage gated out the
  * addition.
+ *
+ * <p>Phase 0 appended — but did not remove — columns for confidence
+ * labels and per-round trace support accounting. Existing CSV parsers can
+ * ignore the trailing columns until they are updated; the canonical order
+ * is {@link #csvHeader()}.
  */
 public final class AdmissionSummaryRow {
     public final long executionIndex;
@@ -36,6 +41,13 @@ public final class AdmissionSummaryRow {
     public final long cumulativeTraceOnlyTriDiffExclusive;
     public final long cumulativeTraceOnlyTriDiffMissing;
     public final long cumulativeTraceSignatureSuppressions;
+    // --- Phase 0 appended columns (confidence labels + trace support) ---
+    public final StructuredCandidateStrength structuredCandidateStrength;
+    public final WeakCandidateKind weakCandidateKind;
+    public final TraceEvidenceStrength traceEvidenceStrength;
+    public final int unsupportedTraceWindowCount;
+    public final int supportBackedTraceWindowCount;
+    public final QueuePriorityClass queuePriorityClass;
 
     public AdmissionSummaryRow(
             long executionIndex,
@@ -58,7 +70,13 @@ public final class AdmissionSummaryRow {
             long cumulativeTraceOnlyWindowSim,
             long cumulativeTraceOnlyTriDiffExclusive,
             long cumulativeTraceOnlyTriDiffMissing,
-            long cumulativeTraceSignatureSuppressions) {
+            long cumulativeTraceSignatureSuppressions,
+            StructuredCandidateStrength structuredCandidateStrength,
+            WeakCandidateKind weakCandidateKind,
+            TraceEvidenceStrength traceEvidenceStrength,
+            int unsupportedTraceWindowCount,
+            int supportBackedTraceWindowCount,
+            QueuePriorityClass queuePriorityClass) {
         this.executionIndex = executionIndex;
         this.testPacketId = testPacketId;
         this.admitted = admitted;
@@ -82,6 +100,20 @@ public final class AdmissionSummaryRow {
         this.cumulativeTraceOnlyTriDiffExclusive = cumulativeTraceOnlyTriDiffExclusive;
         this.cumulativeTraceOnlyTriDiffMissing = cumulativeTraceOnlyTriDiffMissing;
         this.cumulativeTraceSignatureSuppressions = cumulativeTraceSignatureSuppressions;
+        this.structuredCandidateStrength = structuredCandidateStrength == null
+                ? StructuredCandidateStrength.NONE
+                : structuredCandidateStrength;
+        this.weakCandidateKind = weakCandidateKind == null
+                ? WeakCandidateKind.NONE
+                : weakCandidateKind;
+        this.traceEvidenceStrength = traceEvidenceStrength == null
+                ? TraceEvidenceStrength.NONE
+                : traceEvidenceStrength;
+        this.unsupportedTraceWindowCount = unsupportedTraceWindowCount;
+        this.supportBackedTraceWindowCount = supportBackedTraceWindowCount;
+        this.queuePriorityClass = queuePriorityClass == null
+                ? QueuePriorityClass.UNKNOWN
+                : queuePriorityClass;
     }
 
     public static String csvHeader() {
@@ -106,7 +138,13 @@ public final class AdmissionSummaryRow {
                 "cumulative_trace_only_window_sim",
                 "cumulative_trace_only_tridiff_exclusive",
                 "cumulative_trace_only_tridiff_missing",
-                "cumulative_trace_signature_suppressions");
+                "cumulative_trace_signature_suppressions",
+                "structured_candidate_strength",
+                "weak_candidate_kind",
+                "trace_evidence_strength",
+                "unsupported_trace_window_count",
+                "support_backed_trace_window_count",
+                "queue_priority_class");
     }
 
     public String toCsvRow() {
@@ -131,7 +169,13 @@ public final class AdmissionSummaryRow {
         sb.append(cumulativeTraceOnlyWindowSim).append(',');
         sb.append(cumulativeTraceOnlyTriDiffExclusive).append(',');
         sb.append(cumulativeTraceOnlyTriDiffMissing).append(',');
-        sb.append(cumulativeTraceSignatureSuppressions);
+        sb.append(cumulativeTraceSignatureSuppressions).append(',');
+        sb.append(structuredCandidateStrength.name()).append(',');
+        sb.append(weakCandidateKind.name()).append(',');
+        sb.append(traceEvidenceStrength.name()).append(',');
+        sb.append(unsupportedTraceWindowCount).append(',');
+        sb.append(supportBackedTraceWindowCount).append(',');
+        sb.append(queuePriorityClass.name());
         return sb.toString();
     }
 

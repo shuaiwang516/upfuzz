@@ -42,7 +42,12 @@ import org.zlab.upfuzz.fuzzingengine.packet.*;
 import org.zlab.upfuzz.fuzzingengine.executor.Executor;
 import org.zlab.upfuzz.fuzzingengine.server.observability.AdmissionReason;
 import org.zlab.upfuzz.fuzzingengine.server.observability.AdmissionSummaryRow;
+import org.zlab.upfuzz.fuzzingengine.server.observability.BranchNoveltyRow;
 import org.zlab.upfuzz.fuzzingengine.server.observability.ObservabilityMetrics;
+import org.zlab.upfuzz.fuzzingengine.server.observability.QueuePriorityClass;
+import org.zlab.upfuzz.fuzzingengine.server.observability.StructuredCandidateStrength;
+import org.zlab.upfuzz.fuzzingengine.server.observability.TraceEvidenceStrength;
+import org.zlab.upfuzz.fuzzingengine.server.observability.WeakCandidateKind;
 import org.zlab.upfuzz.fuzzingengine.server.observability.WindowTriggerRow;
 import org.zlab.upfuzz.fuzzingengine.server.testtracker.TestTrackerGraph;
 import org.zlab.upfuzz.fuzzingengine.testplan.TestPlan;
@@ -85,7 +90,7 @@ public class FuzzingServer {
     // Corpus
     public Corpus corpus;
 
-    public TestPlanCorpus testPlanCorpus = new TestPlanCorpus();
+    public TestPlanCorpus testPlanCorpus;
     public FullStopCorpus fullStopCorpus = new FullStopCorpus();
     public RollingSeedCorpus rollingSeedCorpus;
     public final RecentTraceSignatureIndex traceSignatureIndex;
@@ -243,6 +248,12 @@ public class FuzzingServer {
         this.observabilityMetrics
                 .setEnabled(Config.getConf().enableObservabilityArtifacts);
         this.observabilityMetrics.writeAllArtifacts();
+
+        // Phase 0: the short-term queue emits enqueue/dequeue rows through
+        // the observability metrics instance, so it cannot be initialized
+        // at field declaration time — ObservabilityMetrics is only
+        // available after Config is loaded.
+        this.testPlanCorpus = new TestPlanCorpus(this.observabilityMetrics);
 
         // Phase 2: construct the tiered rolling corpus from the current
         // Config snapshot. The long-term pools and admission caps depend on
@@ -1004,7 +1015,7 @@ public class FuzzingServer {
 
     private boolean fuzzTestPlan() {
         int MAX_MUTATION_RETRY = 50;
-        TestPlan testPlan = testPlanCorpus.getTestPlan();
+        TestPlan testPlan = testPlanCorpus.getTestPlan(finishedTestID);
 
         if (testPlan == null) {
             FullStopSeed fullStopSeed = fullStopCorpus.getSeed();
@@ -1019,7 +1030,7 @@ public class FuzzingServer {
 
     private boolean fuzzRollingTestPlan() {
         int MAX_MUTATION_RETRY = 50;
-        TestPlan testPlan = testPlanCorpus.getTestPlan();
+        TestPlan testPlan = testPlanCorpus.getTestPlan(finishedTestID);
 
         if (testPlan == null) {
             RollingSeed rollingSeed = rollingSeedCorpus.getSeed();
@@ -1893,7 +1904,47 @@ public class FuzzingServer {
         boolean newOriBC = false;
         boolean newUpgradeBC = false;
 
+        // Phase 0 branch novelty source attribution. The new probe sets
+        // must be collected before any merge because the merges commit
+        // this round's coverage into the running aggregate.
+        int oldVersionBaselineOnlyProbes = 0;
+        int oldVersionRollingOnlyProbes = 0;
+        int oldVersionSharedProbes = 0;
+        int newVersionBaselineOnlyProbes = 0;
+        int newVersionRollingOnlyProbes = 0;
+        int newVersionSharedProbes = 0;
+
         if (Config.getConf().useBranchCoverage) {
+            java.util.Map<Long, java.util.BitSet> oldVersionBaselineNew = Utilities
+                    .collectNewProbeIds(curOriCoverage,
+                            fbOld.originalCodeCoverage);
+            java.util.Map<Long, java.util.BitSet> oldVersionRollingNew = Utilities
+                    .collectNewProbeIds(curOriCoverage,
+                            fbRolling.originalCodeCoverage);
+            java.util.Map<Long, java.util.BitSet> newVersionRollingNew = Utilities
+                    .collectNewProbeIds(curUpCoverageAfterUpgrade,
+                            fbRolling.upgradedCodeCoverage);
+            java.util.Map<Long, java.util.BitSet> newVersionBaselineNew = Utilities
+                    .collectNewProbeIds(curUpCoverageAfterUpgrade,
+                            fbNew.originalCodeCoverage);
+
+            oldVersionSharedProbes = Utilities.intersectProbeCount(
+                    oldVersionBaselineNew, oldVersionRollingNew);
+            oldVersionBaselineOnlyProbes = Utilities
+                    .countProbes(oldVersionBaselineNew)
+                    - oldVersionSharedProbes;
+            oldVersionRollingOnlyProbes = Utilities
+                    .countProbes(oldVersionRollingNew)
+                    - oldVersionSharedProbes;
+            newVersionSharedProbes = Utilities.intersectProbeCount(
+                    newVersionBaselineNew, newVersionRollingNew);
+            newVersionBaselineOnlyProbes = Utilities
+                    .countProbes(newVersionBaselineNew)
+                    - newVersionSharedProbes;
+            newVersionRollingOnlyProbes = Utilities
+                    .countProbes(newVersionRollingNew)
+                    - newVersionSharedProbes;
+
             // Merge old version coverage into curOriCoverage
             if (Utilities.hasNewBits(curOriCoverage,
                     fbOld.originalCodeCoverage)) {
@@ -1944,6 +1995,14 @@ public class FuzzingServer {
         boolean anyWindowSimFired = false;
         boolean aggregateSimFired = false;
         int windowsEvaluatedThisRound = 0;
+        // Phase 0 observability: per-round trace support accounting so the
+        // admission summary row can distinguish support-backed trace
+        // evidence from unsupported {@code all3=0} windows.
+        int unsupportedTraceWindowCount = 0;
+        int supportBackedTraceWindowCount = 0;
+        int firingStrongWindowCount = 0;
+        int firingWeakWindowCount = 0;
+        int firingUnsupportedWindowCount = 0;
         List<TraceSignature> interestingTraceSignatures = new ArrayList<>();
 
         boolean allLanesOk = normalizeLaneStatus(
@@ -2026,6 +2085,7 @@ public class FuzzingServer {
                     int rollingMissing = 0;
                     int totalMessages = 0;
                     int totalAllThreeCount = 0;
+                    int baselineSharedCount = 0;
                     double rollingExclusiveFraction = 0.0;
                     double rollingMissingFraction = 0.0;
                     Map<String, Integer> rollingExclusiveBuckets = Collections
@@ -2043,6 +2103,7 @@ public class FuzzingServer {
                         rollingMissing = triDiff.rollingMissingCount();
                         totalMessages = triDiff.rollingLaneSize();
                         totalAllThreeCount = triDiff.totalAllThreeCount();
+                        baselineSharedCount = triDiff.baselineSharedCount();
                         rollingExclusiveFraction = triDiff
                                 .rollingExclusiveFraction();
                         rollingMissingFraction = triDiff
@@ -2097,6 +2158,31 @@ public class FuzzingServer {
                         triDiffInteresting = decision.triDiffInteresting;
                     }
 
+                    // Phase 0 per-window support accounting. A window is
+                    // "support-backed" when it has three-way shared support:
+                    // at least one canonical message appears in all three
+                    // lanes (old-old ∩ rolling ∩ new-new). baselineShared
+                    // alone is not enough — it equals
+                    // {@code totalAllThreeCount + rollingMissingCount}, so
+                    // a window where rolling is completely missing would
+                    // otherwise still look "supported". The Apr15
+                    // diagnostics specifically flagged the all3=0 case as
+                    // the unreliable one, so gate on all3>0.
+                    boolean supportGatePassed = totalAllThreeCount > 0;
+                    int changedMessageCount = countChangedMessages(mergedRO);
+                    int upgradedBoundaryEventCount = aw.rolling.rawUpgradedNodeSet == null
+                            ? 0
+                            : aw.rolling.rawUpgradedNodeSet.size();
+
+                    boolean windowFired = windowInteresting
+                            || triDiffExclusiveFired;
+                    TraceEvidenceStrength windowStrength = classifyWindowTraceEvidenceStrength(
+                            windowFired,
+                            supportGatePassed,
+                            aw.rolling.stageKind,
+                            changedMessageCount,
+                            upgradedBoundaryEventCount);
+
                     // Phase 0: emit a window row for every evaluated window
                     // (regardless of whether it fires) so offline re-scoring
                     // can reproduce admission decisions. Use finishedTestID
@@ -2123,8 +2209,35 @@ public class FuzzingServer {
                                     windowHasEnoughEvents,
                                     windowInteresting,
                                     triDiffExclusiveFired,
-                                    triDiffMissingFired));
+                                    triDiffMissingFired,
+                                    baselineSharedCount,
+                                    changedMessageCount,
+                                    upgradedBoundaryEventCount,
+                                    windowStrength,
+                                    supportGatePassed));
                     windowsEvaluatedThisRound++;
+                    if (windowHasEnoughEvents) {
+                        if (supportGatePassed) {
+                            supportBackedTraceWindowCount++;
+                        } else {
+                            unsupportedTraceWindowCount++;
+                        }
+                    }
+                    if (windowFired) {
+                        switch (windowStrength) {
+                        case STRONG:
+                            firingStrongWindowCount++;
+                            break;
+                        case WEAK:
+                            firingWeakWindowCount++;
+                            break;
+                        case UNSUPPORTED:
+                            firingUnsupportedWindowCount++;
+                            break;
+                        default:
+                            break;
+                        }
+                    }
                     if (windowInteresting) {
                         anyWindowSimFired = true;
                     }
@@ -2355,6 +2468,23 @@ public class FuzzingServer {
         boolean weakCandidate = !structuredCandidate
                 && (eventVerdict == DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE
                         || errorLogVerdict == DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE);
+
+        // Phase 0 confidence labels. The labels only feed observability in
+        // this phase — admission and routing are unchanged. Later phases
+        // will read them directly from the admission summary row.
+        TraceEvidenceStrength traceEvidenceStrength = classifyRoundTraceEvidenceStrength(
+                traceInteresting,
+                firingStrongWindowCount,
+                firingWeakWindowCount,
+                firingUnsupportedWindowCount,
+                aggregateSimFired);
+        StructuredCandidateStrength structuredCandidateStrength = classifyStructuredCandidateStrength(
+                structuredCandidate, testPlanFeedbackPackets);
+        WeakCandidateKind weakCandidateKind = classifyWeakCandidateKind(
+                structuredCandidate,
+                structuredCandidateStrength,
+                eventVerdict,
+                errorLogVerdict);
         // Phase 2: the corpus needs the same root-lineage lookup that the
         // observability layer already performs so promotion credits land on
         // the rolling-corpus seed that fathered this round's mutation.
@@ -2412,6 +2542,7 @@ public class FuzzingServer {
         // (cross-cluster structured comparison) runs at verdict time and
         // does not depend on a stored per-seed oracle.
         AdmissionReason admissionReasonForRow = AdmissionReason.UNKNOWN;
+        QueuePriorityClass queuePriorityClassForRow = QueuePriorityClass.UNKNOWN;
         boolean admittedThisRound = false;
         RollingSeedCorpus.AdmissionOutcome rollingCorpusOutcome = null;
         if (addToCorpus) {
@@ -2487,7 +2618,16 @@ public class FuzzingServer {
                             observabilityMetrics.resolveRootLifecycleId(
                                     testPlanDiffFeedbackPacket.testPacketID));
 
-                    testPlanCorpus.addTestPlan(testPlan);
+                    queuePriorityClassForRow = classifyQueuePriorityClass(
+                            admissionReason, traceEvidenceStrength);
+                    testPlanCorpus.addTestPlan(
+                            testPlan,
+                            finishedTestID,
+                            parentLineageRoot,
+                            admissionReason,
+                            traceEvidenceStrength,
+                            structuredCandidateStrength,
+                            queuePriorityClassForRow);
                     if (isModeFive && !newBranchCoverage
                             && Config.getConf().useTraceSignatureDedup) {
                         traceSignatureIndex.recordAdmitted(
@@ -2744,7 +2884,26 @@ public class FuzzingServer {
                         AdmissionReason.TRACE_ONLY_TRIDIFF_EXCLUSIVE),
                 observabilityMetrics.getAdmissionCount(
                         AdmissionReason.TRACE_ONLY_TRIDIFF_MISSING),
-                traceSignatureIndex.getTotalSuppressedDuplicates()));
+                traceSignatureIndex.getTotalSuppressedDuplicates(),
+                structuredCandidateStrength,
+                weakCandidateKind,
+                traceEvidenceStrength,
+                unsupportedTraceWindowCount,
+                supportBackedTraceWindowCount,
+                queuePriorityClassForRow));
+
+        // Phase 0: round-level branch novelty source attribution. Emitted
+        // every round (including rounds with no new probes) so offline
+        // parsers can use missing rows as a failure signal.
+        observabilityMetrics.recordBranchNovelty(new BranchNoveltyRow(
+                finishedTestID,
+                testPlanDiffFeedbackPacket.testPacketID,
+                oldVersionBaselineOnlyProbes,
+                oldVersionRollingOnlyProbes,
+                oldVersionSharedProbes,
+                newVersionBaselineOnlyProbes,
+                newVersionRollingOnlyProbes,
+                newVersionSharedProbes));
 
         // --- Cleanup and status update ---
         testID2TestPlan.remove(testPlanDiffFeedbackPacket.testPacketID);
@@ -4091,7 +4250,7 @@ public class FuzzingServer {
             System.out.format("|%30s|%30s|%30s|\n",
                     "trace : "
                             + Config.getConf().useTrace,
-                    "testPlanCorpus : " + testPlanCorpus.queue.size(),
+                    "testPlanCorpus : " + testPlanCorpus.size(),
                     "rollingSeedCorpus : " + rollingSeedCorpus.size());
             // Phase 2: tiered pool sizes and cap-rejection counters
             System.out.format("|%30s|%30s|%30s|\n",
@@ -4384,6 +4543,193 @@ public class FuzzingServer {
             return AdmissionReason.TRACE_ONLY_WINDOW_SIM;
         }
         return AdmissionReason.UNKNOWN;
+    }
+
+    // === Phase 0: confidence label classifiers ===
+
+    /**
+     * Count {@code changedMessage=true} entries in a merged rolling-lane
+     * trace. Returns 0 for a null trace. A non-zero result means the
+     * rolling lane carried at least one payload whose class changed
+     * between versions — a secondary signal of mixed-version relevance.
+     */
+    private static int countChangedMessages(Trace mergedTrace) {
+        if (mergedTrace == null) {
+            return 0;
+        }
+        int count = 0;
+        for (TraceEntry entry : mergedTrace.getTraceEntries()) {
+            if (entry != null && entry.changedMessage) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Phase 0 per-window trace evidence strength classifier. A window is
+     * STRONG only when (a) it fired at least one trace rule, (b) the
+     * support gate passed (three-way baseline shared support exists),
+     * (c) the stage is a mixed-version-relevant stage (not
+     * {@code PRE_UPGRADE} or lifecycle-only), and (d) at least one
+     * corroborating upgrade-boundary event or changed-message payload
+     * is visible. Windows that fire with support but without
+     * corroboration are WEAK; windows that fire without support at all
+     * are UNSUPPORTED. Non-firing windows are NONE.
+     */
+    static TraceEvidenceStrength classifyWindowTraceEvidenceStrength(
+            boolean windowFired,
+            boolean supportGatePassed,
+            TraceWindow.StageKind stageKind,
+            int changedMessageCount,
+            int upgradedBoundaryEventCount) {
+        if (!windowFired) {
+            return TraceEvidenceStrength.NONE;
+        }
+        if (!supportGatePassed) {
+            return TraceEvidenceStrength.UNSUPPORTED;
+        }
+        boolean mixedVersionStage = stageKind == TraceWindow.StageKind.POST_STAGE
+                || stageKind == TraceWindow.StageKind.POST_FINAL_STAGE
+                || stageKind == TraceWindow.StageKind.FAULT_RECOVERY;
+        boolean hasCorroboration = changedMessageCount > 0
+                || upgradedBoundaryEventCount > 0;
+        if (mixedVersionStage && hasCorroboration) {
+            return TraceEvidenceStrength.STRONG;
+        }
+        return TraceEvidenceStrength.WEAK;
+    }
+
+    /**
+     * Aggregate per-window labels into a single round-level label. The
+     * strongest window wins; aggregate-sim-only rounds without any
+     * window firing are classified as WEAK because there is no per-window
+     * support evidence to upgrade them.
+     */
+    static TraceEvidenceStrength classifyRoundTraceEvidenceStrength(
+            boolean traceInteresting,
+            int strongFiringWindows,
+            int weakFiringWindows,
+            int unsupportedFiringWindows,
+            boolean aggregateSimFired) {
+        if (!traceInteresting) {
+            return TraceEvidenceStrength.NONE;
+        }
+        if (strongFiringWindows > 0) {
+            return TraceEvidenceStrength.STRONG;
+        }
+        if (weakFiringWindows > 0) {
+            return TraceEvidenceStrength.WEAK;
+        }
+        if (unsupportedFiringWindows > 0) {
+            return TraceEvidenceStrength.UNSUPPORTED;
+        }
+        if (aggregateSimFired) {
+            return TraceEvidenceStrength.WEAK;
+        }
+        return TraceEvidenceStrength.NONE;
+    }
+
+    /**
+     * Structured candidate strength classifier. STRONG requires Checker
+     * D to have fired AND every lane to have a stable structured
+     * outcome (no UNKNOWN / DAEMON_ERROR {@code failureClass} across
+     * the three packets). Otherwise the structured divergence is WEAK
+     * because at least one lane produced an unstable outcome, which is
+     * the Apr15 Cassandra checker-D noise pattern.
+     */
+    static StructuredCandidateStrength classifyStructuredCandidateStrength(
+            boolean structuredCandidate,
+            TestPlanFeedbackPacket[] packets) {
+        if (!structuredCandidate) {
+            return StructuredCandidateStrength.NONE;
+        }
+        if (packets == null || packets.length < 3) {
+            return StructuredCandidateStrength.WEAK;
+        }
+        for (int i = 0; i < 3; i++) {
+            TestPlanFeedbackPacket packet = packets[i];
+            if (packet == null) {
+                return StructuredCandidateStrength.WEAK;
+            }
+            if (packet.validationResults == null) {
+                return StructuredCandidateStrength.WEAK;
+            }
+            for (org.zlab.upfuzz.fuzzingengine.packet.ValidationResult vr : packet.validationResults) {
+                if (vr == null) {
+                    continue;
+                }
+                String fc = vr.failureClass;
+                if (fc == null) {
+                    continue;
+                }
+                if ("UNKNOWN".equals(fc) || "DAEMON_ERROR".equals(fc)) {
+                    return StructuredCandidateStrength.WEAK;
+                }
+            }
+        }
+        return StructuredCandidateStrength.STRONG;
+    }
+
+    /**
+     * Weak-candidate subclassifier. STRUCTURED rounds that did not
+     * make the STRONG bar are labeled
+     * {@link WeakCandidateKind#UNSTABLE_STRUCTURED_DIVERGENCE}; the
+     * other weak subclasses come from rolling-only event failures and
+     * rolling-only error logs. Plain NONE is returned when the round
+     * is not a weak candidate at all.
+     */
+    static WeakCandidateKind classifyWeakCandidateKind(
+            boolean structuredCandidate,
+            StructuredCandidateStrength structuredCandidateStrength,
+            DiffVerdict eventVerdict,
+            DiffVerdict errorLogVerdict) {
+        if (structuredCandidate
+                && structuredCandidateStrength != StructuredCandidateStrength.STRONG) {
+            return WeakCandidateKind.UNSTABLE_STRUCTURED_DIVERGENCE;
+        }
+        if (!structuredCandidate
+                && eventVerdict == DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE) {
+            return WeakCandidateKind.ROLLING_ONLY_EVENT_FAILURE;
+        }
+        if (!structuredCandidate
+                && errorLogVerdict == DiffVerdict.ROLLING_UPGRADE_BUG_CANDIDATE) {
+            return WeakCandidateKind.ROLLING_ONLY_ERROR_LOG;
+        }
+        return WeakCandidateKind.NONE;
+    }
+
+    /**
+     * Map an admission reason and round-level trace evidence strength
+     * onto a queue priority class. Trace-only admissions inherit the
+     * round-level trace strength; branch-backed admissions pick up
+     * {@link QueuePriorityClass#BRANCH_AND_STRONG_TRACE} when the
+     * trace evidence is STRONG, otherwise
+     * {@link QueuePriorityClass#BRANCH_AND_WEAK_TRACE}.
+     */
+    static QueuePriorityClass classifyQueuePriorityClass(
+            AdmissionReason admissionReason,
+            TraceEvidenceStrength traceEvidenceStrength) {
+        if (admissionReason == null) {
+            return QueuePriorityClass.UNKNOWN;
+        }
+        switch (admissionReason) {
+        case BRANCH_ONLY:
+            return QueuePriorityClass.BRANCH_ONLY;
+        case BRANCH_AND_TRACE:
+            return traceEvidenceStrength == TraceEvidenceStrength.STRONG
+                    ? QueuePriorityClass.BRANCH_AND_STRONG_TRACE
+                    : QueuePriorityClass.BRANCH_AND_WEAK_TRACE;
+        case TRACE_ONLY_TRIDIFF_EXCLUSIVE:
+        case TRACE_ONLY_WINDOW_SIM:
+        case TRACE_ONLY_TRIDIFF_MISSING:
+            return traceEvidenceStrength == TraceEvidenceStrength.STRONG
+                    ? QueuePriorityClass.TRACE_ONLY_STRONG
+                    : QueuePriorityClass.TRACE_ONLY_WEAK;
+        case UNKNOWN:
+        default:
+            return QueuePriorityClass.UNKNOWN;
+        }
     }
 
     /**
