@@ -360,9 +360,18 @@ def cmd_monitor(assignments: List[MachineAssignment], args):
             f"log={REMOTE_REPO}/logs/upfuzz_server.log; "
             f"int=$(grep -c 'traceInteresting=true' \"$log\" 2>/dev/null || echo 0); "
             f"corp=$(grep -c 'Added test plan to corpus' \"$log\" 2>/dev/null || echo 0); "
-            f"cand=$(ls -d {REMOTE_REPO}/failure/candidate/failure_* 2>/dev/null | wc -l); "
+            f"strong=$(ls -d {REMOTE_REPO}/failure/candidate/strong/failure_* 2>/dev/null | wc -l); "
+            f"weak=$(ls -d {REMOTE_REPO}/failure/candidate/weak/failure_* 2>/dev/null | wc -l); "
+            f"same=$(ls -d {REMOTE_REPO}/failure/same_version/failure_* 2>/dev/null | wc -l); "
             f"noise=$(ls -d {REMOTE_REPO}/failure/noise/failure_* 2>/dev/null | wc -l); "
-            f"echo \"alive=$alive rounds=${{rounds:-0}} int=$int corpus=$corp cand=$cand noise=$noise\""
+            f"obs=0; od={REMOTE_REPO}/failure/observability; "
+            f"for c in trace_admission_summary.csv trace_window_summary.csv "
+            f"seed_lifecycle_summary.csv queue_activity_summary.csv "
+            f"scheduler_metrics_summary.csv branch_novelty_summary.csv "
+            f"stage_novelty_summary.csv; do "
+            f"[ -f $od/$c ] && obs=$((obs+1)); done; "
+            f"echo \"alive=$alive rounds=${{rounds:-0}} int=$int corpus=$corp "
+            f"strong=$strong weak=$weak same=$same noise=$noise obs=$obs\""
         )
 
     if args.continuous:

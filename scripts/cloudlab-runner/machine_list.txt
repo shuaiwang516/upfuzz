@@ -1,6 +1,22 @@
-ssh swang516@clnode270.clemson.cloudlab.us 		
-ssh swang516@clnode264.clemson.cloudlab.us 		
-ssh swang516@clnode262.clemson.cloudlab.us 		
-ssh swang516@clnode275.clemson.cloudlab.us 		
-ssh swang516@clnode282.clemson.cloudlab.us 		
-ssh swang516@clnode265.clemson.cloudlab.us 		
+# Phase 6 default 6-machine mapping.
+# Order matters: distributed launch maps job-id 1..6 to this file order.
+# All six Phase 6 verification jobs are testingMode=5 smoke runs first.
+# Do not start verification from this list until the script changes are reviewed.
+
+# 1 -> cassandra  apache-cassandra-3.11.19 -> apache-cassandra-4.1.10
+ssh swang516@pc768.emulab.net
+
+# 2 -> cassandra  apache-cassandra-4.1.10 -> apache-cassandra-5.0.6
+ssh swang516@pc860.emulab.net
+
+# 3 -> hbase      hbase-2.5.13 -> hbase-2.6.4
+ssh swang516@pc857.emulab.net
+
+# 4 -> hbase      hbase-2.6.4 -> hbase-4.0.0-alpha-1-SNAPSHOT
+ssh swang516@pc711.emulab.net
+
+# 5 -> hdfs       hadoop-2.10.2 -> hadoop-3.3.6
+ssh swang516@pc704.emulab.net
+
+# 6 -> hdfs       hadoop-3.3.6 -> hadoop-3.4.2
+ssh swang516@pc855.emulab.net

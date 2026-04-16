@@ -327,14 +327,72 @@ count_bucket_delta() {
         echo 0
         return
     fi
+    if [[ "${bucket}" == "candidate" ]]; then
+        find "${dir}" -mindepth 2 -maxdepth 2 -type d -name 'failure_*' -newermt "${start_ts}" 2>/dev/null | wc -l | tr -d ' '
+    else
+        find "${dir}" -mindepth 1 -maxdepth 1 -type d -name 'failure_*' -newermt "${start_ts}" 2>/dev/null | wc -l | tr -d ' '
+    fi
+}
+
+count_sub_bucket_delta() {
+    local sub_path="$1"
+    local start_ts="$2"
+    local dir="${repo}/failure/${sub_path}"
+    if [[ -z "${start_ts}" || ! -d "${dir}" ]]; then
+        echo 0
+        return
+    fi
     find "${dir}" -mindepth 1 -maxdepth 1 -type d -name 'failure_*' -newermt "${start_ts}" 2>/dev/null | wc -l | tr -d ' '
 }
 
 delta_candidate="$(count_bucket_delta candidate "${run_start_ts}")"
 delta_same_version="$(count_bucket_delta same_version "${run_start_ts}")"
 delta_noise="$(count_bucket_delta noise "${run_start_ts}")"
+delta_strong_cand="$(count_sub_bucket_delta candidate/strong "${run_start_ts}")"
+delta_weak_cand="$(count_sub_bucket_delta candidate/weak "${run_start_ts}")"
 
-printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
+obs_csv_count=0
+obs_dir="${run_dir}/observability"
+obs_files=""
+if [[ -d "${obs_dir}" ]]; then
+    for csv_name in trace_admission_summary.csv trace_window_summary.csv \
+                    seed_lifecycle_summary.csv queue_activity_summary.csv \
+                    scheduler_metrics_summary.csv branch_novelty_summary.csv \
+                    stage_novelty_summary.csv; do
+        short="${csv_name%%_summary.csv}"
+        if [[ -f "${obs_dir}/${csv_name}" ]]; then
+            obs_csv_count=$((obs_csv_count + 1))
+            obs_files="${obs_files:+${obs_files},}${short}"
+        fi
+    done
+fi
+obs_files="${obs_files:-none}"
+
+strong_total=0
+weak_total=0
+cand_dir="${repo}/failure/candidate"
+if [[ -d "${cand_dir}/strong" ]]; then
+    strong_total="$(find "${cand_dir}/strong" -mindepth 1 -maxdepth 1 -type d -name 'failure_*' 2>/dev/null | wc -l | tr -d ' ')"
+fi
+if [[ -d "${cand_dir}/weak" ]]; then
+    weak_total="$(find "${cand_dir}/weak" -mindepth 1 -maxdepth 1 -type d -name 'failure_*' 2>/dev/null | wc -l | tr -d ' ')"
+fi
+
+csv_data_rows() {
+    local f="$1"
+    if [[ -f "$f" ]]; then
+        local lines
+        lines="$(wc -l < "$f" | tr -d ' ')"
+        echo $((lines > 0 ? lines - 1 : 0))
+    else
+        echo 0
+    fi
+}
+sched_rows="$(csv_data_rows "${obs_dir}/scheduler_metrics_summary.csv")"
+bn_rows="$(csv_data_rows "${obs_dir}/branch_novelty_summary.csv")"
+sn_rows="$(csv_data_rows "${obs_dir}/stage_novelty_summary.csv")"
+
+printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
     "${run_name}" "${state}" \
     "${executions}" "${diff_feedback_packets}" "${diff_ok}" \
     "3" \
@@ -347,18 +405,24 @@ printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t
     "${old_timeout}" "${rolling_timeout}" "${new_timeout}" \
     "${candidate}" "${same_version}" "${noise}" \
     "${delta_candidate}" "${delta_same_version}" "${delta_noise}" \
+    "${delta_strong_cand}" "${delta_weak_cand}" "${obs_csv_count}" \
+    "${strong_total}" "${weak_total}" "${obs_files}" \
+    "${sched_rows}" "${bn_rows}" "${sn_rows}" \
     "${run_start_ts}" "${monitor_server_alive}" "${run_dir}"
 REMOTE
     then
         remote_line="$(tail -n1 "${tmpf}")"
         if [[ "${remote_line}" == "ERROR_NO_RUN" ]]; then
-            printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
+            printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
                 "${host_token}" "-" "-" "NO_RUN" \
-                "0" "0" "NO" "3" \
+                "NOT_FOUND" "0" "0" "NO" "3" \
                 "0" "0" "0" "0" "0" "0" \
                 "0" "0" "0" "0" "0" "0" \
                 "0" "0" "0" \
                 "0" "0" "0" \
+                "0" "0" "0" \
+                "0" "0" "0" \
+                "0" "0" "none" \
                 "0" "0" "0" \
                 "" "-1" "" >> "${DATA_TSV}"
         else
@@ -367,13 +431,16 @@ REMOTE
         fi
     else
         err="$(tr '\n' ';' < "${tmpf}")"
-        printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
+        printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
             "${host_token}" "-" "-" "SSH_FAIL" \
-            "0" "0" "NO" "3" \
+            "NOT_FOUND" "0" "0" "NO" "3" \
             "0" "0" "0" "0" "0" "0" \
             "0" "0" "0" "0" "0" "0" \
             "0" "0" "0" \
             "0" "0" "0" \
+            "0" "0" "0" \
+            "0" "0" "0" \
+            "0" "0" "none" \
             "0" "0" "0" \
             "" "-1" "${err}" >> "${DATA_TSV}"
     fi
@@ -388,7 +455,7 @@ wait
 sort -t $'\t' -k1,1 "${DATA_TSV}" -o "${DATA_TSV}"
 
 {
-    echo -e "machine\tjob_id\tdispatch_status\trun_name\tstate\texecutions\tdiff_feedback_packets\tdiff_ok\tlane_count\told_old_pass\told_old_fail\trolling_pass\trolling_fail\tnew_new_pass\tnew_new_fail\told_old_err_pass\told_old_err_fail\trolling_err_pass\trolling_err_fail\tnew_new_err_pass\tnew_new_err_fail\told_old_timeout\trolling_timeout\tnew_new_timeout\tcandidate\tsame_version\tnoise\tdelta_candidate\tdelta_same_version\tdelta_noise\trun_start_ts\tmonitor_server_alive\trun_dir"
+    echo -e "machine\tjob_id\tdispatch_status\trun_name\tstate\texecutions\tdiff_feedback_packets\tdiff_ok\tlane_count\told_old_pass\told_old_fail\trolling_pass\trolling_fail\tnew_new_pass\tnew_new_fail\told_old_err_pass\told_old_err_fail\trolling_err_pass\trolling_err_fail\tnew_new_err_pass\tnew_new_err_fail\told_old_timeout\trolling_timeout\tnew_new_timeout\tcandidate\tsame_version\tnoise\tdelta_candidate\tdelta_same_version\tdelta_noise\tdelta_strong_cand\tdelta_weak_cand\tobs_csv_count\tstrong_total\tweak_total\tobs_files\tsched_rows\tbn_rows\tsn_rows\trun_start_ts\tmonitor_server_alive\trun_dir"
     cat "${DATA_TSV}"
 } > "${OUTPUT_TSV}"
 
@@ -397,27 +464,31 @@ printf "machine_list: %s\n" "${MACHINE_LIST}"
 printf "remote_repo: %s\n" "${REMOTE_REPO}"
 printf "raw_tsv: %s\n\n" "${OUTPUT_TSV}"
 
-printf "%-34s %-9s %7s %7s %8s %9s %9s %9s %9s %9s %9s %9s %9s %9s %9s %9s %9s %9s %9s\n" \
+printf "%-34s %-9s %7s %7s %8s %9s %9s %9s %9s %9s %9s %9s %9s %9s %9s %10s %10s %9s %9s %5s %6s %6s %6s\n" \
     "machine" "state" "exec" "fb_pass" "diff_ok" \
     "fb_old_f" "fb_roll_f" "fb_new_f" \
     "err_old_f" "err_roll_f" "err_new_f" \
-    "candidate" "same_ver" "noise" \
-    "delta_cand" "delta_same" "delta_noise" \
-    "to_roll" "alive"
+    "str_cand" "wk_cand" "same_ver" "noise" \
+    "d_str_cand" "d_wk_cand" "delta_same" "delta_noise" \
+    "obs" "sched" "bn" "sn"
 
 while IFS=$'\t' read -r host _j1 _j2 run_name state executions diff_feedback diff_ok lanes \
     old_pass old_fail rolling_pass rolling_fail new_pass new_fail \
     old_err_pass old_err_fail rolling_err_pass rolling_err_fail new_err_pass new_err_fail \
     old_timeout rolling_timeout new_timeout \
     candidate same_version noise \
-    delta_candidate delta_same delta_noise run_start_ts monitor_alive run_dir; do
-    printf "%-34s %-9s %7s %7s %8s %9s %9s %9s %9s %9s %9s %9s %9s %9s %9s %9s %9s %9s %9s\n" \
+    delta_candidate delta_same delta_noise \
+    delta_strong delta_weak obs_csvs \
+    strong_total weak_total obs_files \
+    sched_rows bn_rows sn_rows \
+    run_start_ts monitor_alive run_dir; do
+    printf "%-34s %-9s %7s %7s %8s %9s %9s %9s %9s %9s %9s %9s %9s %9s %9s %10s %10s %9s %9s %5s %6s %6s %6s\n" \
         "${host#*@}" "${state}" "${executions}" "${diff_feedback}" "${diff_ok}" \
         "${old_fail}" "${rolling_fail}" "${new_fail}" \
         "${old_err_fail}" "${rolling_err_fail}" "${new_err_fail}" \
-        "${candidate}" "${same_version}" "${noise}" \
-        "${delta_candidate}" "${delta_same}" "${delta_noise}" \
-        "${rolling_timeout}" "${monitor_alive}"
+        "${strong_total}" "${weak_total}" "${same_version}" "${noise}" \
+        "${delta_strong}" "${delta_weak}" "${delta_same}" "${delta_noise}" \
+        "${obs_csvs}" "${sched_rows}" "${bn_rows}" "${sn_rows}"
 done < "${DATA_TSV}"
 
 total_pass="$(awk -F $'\t' '{s+=$7} END{print s+0}' "${DATA_TSV}")"
@@ -428,14 +499,38 @@ total_fb_new_fail="$(awk -F $'\t' '{s+=$15} END{print s+0}' "${DATA_TSV}")"
 total_err_old_fail="$(awk -F $'\t' '{s+=$17} END{print s+0}' "${DATA_TSV}")"
 total_err_roll_fail="$(awk -F $'\t' '{s+=$19} END{print s+0}' "${DATA_TSV}")"
 total_err_new_fail="$(awk -F $'\t' '{s+=$21} END{print s+0}' "${DATA_TSV}")"
-total_cand="$(awk -F $'\t' '{s+=$25} END{print s+0}' "${DATA_TSV}")"
 total_same="$(awk -F $'\t' '{s+=$26} END{print s+0}' "${DATA_TSV}")"
 total_noise="$(awk -F $'\t' '{s+=$27} END{print s+0}' "${DATA_TSV}")"
-total_delta_cand="$(awk -F $'\t' '{s+=$28} END{print s+0}' "${DATA_TSV}")"
+total_delta_strong="$(awk -F $'\t' '{s+=$31} END{print s+0}' "${DATA_TSV}")"
+total_delta_weak="$(awk -F $'\t' '{s+=$32} END{print s+0}' "${DATA_TSV}")"
 total_delta_same="$(awk -F $'\t' '{s+=$29} END{print s+0}' "${DATA_TSV}")"
 total_delta_noise="$(awk -F $'\t' '{s+=$30} END{print s+0}' "${DATA_TSV}")"
+total_strong="$(awk -F $'\t' '{s+=$34} END{print s+0}' "${DATA_TSV}")"
+total_weak="$(awk -F $'\t' '{s+=$35} END{print s+0}' "${DATA_TSV}")"
+total_sched_rows="$(awk -F $'\t' '{s+=$37} END{print s+0}' "${DATA_TSV}")"
+total_bn_rows="$(awk -F $'\t' '{s+=$38} END{print s+0}' "${DATA_TSV}")"
+total_sn_rows="$(awk -F $'\t' '{s+=$39} END{print s+0}' "${DATA_TSV}")"
 
 echo
-echo "totals: exec=${total_exec} fb_pass=${total_pass} fb_fail(old/roll/new)=${total_fb_old_fail}/${total_fb_roll_fail}/${total_fb_new_fail} err_fail(old/roll/new)=${total_err_old_fail}/${total_err_roll_fail}/${total_err_new_fail} candidate=${total_cand} same_version=${total_same} noise=${total_noise} delta_candidate=${total_delta_cand} delta_same_version=${total_delta_same} delta_noise=${total_delta_noise}"
+echo "totals: exec=${total_exec} fb_pass=${total_pass} fb_fail(old/roll/new)=${total_fb_old_fail}/${total_fb_roll_fail}/${total_fb_new_fail} err_fail(old/roll/new)=${total_err_old_fail}/${total_err_roll_fail}/${total_err_new_fail}"
+echo "  candidates: strong=${total_strong} weak=${total_weak} same_version=${total_same} noise=${total_noise}"
+echo "  deltas: strong=${total_delta_strong} weak=${total_delta_weak} same=${total_delta_same} noise=${total_delta_noise}"
+echo "  obs rows: scheduler=${total_sched_rows} branch_novelty=${total_bn_rows} stage_novelty=${total_sn_rows}"
+
+echo
+echo "per-host observability:"
+while IFS=$'\t' read -r _h _j1 _j2 _rn _st _ex _df _do _lc \
+    _op _of _rp _rf _np _nf \
+    _oep _oef _rep _ref _nep _nef \
+    _ot _rt _nt \
+    _c _sv _n \
+    _dc _ds _dn \
+    _dsc _dwc _oc \
+    _stot _wtot obs_files_val \
+    _sr _br _snr \
+    _ts _al _rd; do
+    printf "  %-34s obs_files=%s sched=%s bn=%s sn=%s\n" \
+        "${_h#*@}" "${obs_files_val}" "${_sr}" "${_br}" "${_snr}"
+done < "${DATA_TSV}"
 
 rm -f "${DATA_TSV}"

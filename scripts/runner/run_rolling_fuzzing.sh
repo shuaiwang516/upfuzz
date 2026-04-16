@@ -6,6 +6,8 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 RESULTS_ROOT="${SCRIPT_DIR}/results"
 mkdir -p "${RESULTS_ROOT}"
 
+GIT_SHA="$(cd "${ROOT_DIR}" && git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
+
 SYSTEM="cassandra"
 ORIGINAL_VERSION="apache-cassandra-4.1.10"
 UPGRADED_VERSION="apache-cassandra-5.0.6"
@@ -238,6 +240,49 @@ count_diff_feedback_packets() {
     rg -c --no-filename 'TestPlanDiffFeedbackPacket received' "${logfile}" 2>/dev/null || echo 0
 }
 
+# Phase 2-5 config knobs materialized explicitly so the run artifact
+# records which policy was active. Values match Java-side defaults in
+# Config.Configuration as of Phase 5.
+PHASE_25_CONFIG='  "strongTraceMinAllThreeCount" : 3,
+  "strongTraceMinBaselineSharedCount" : 3,
+  "strongTraceMinBaselineSimilarity" : 0.70,
+  "strongTraceMinChangedMessageCount" : 0,
+  "strongTraceMinUpgradedBoundaryCount" : 0,
+  "preUpgradeTraceCanStrengthenBranch" : false,
+  "strongTraceFallbackMinAllThreeCount" : 20,
+  "strongTraceFallbackMaxRollingMinSimilarity" : 0.40,
+  "usePriorityTestPlanScheduler" : true,
+  "mainExploitMutationEpoch" : 30,
+  "branchScoutMutationEpoch" : 10,
+  "shadowEvalMutationEpoch" : 4,
+  "reproConfirmMutationEpoch" : 50,
+  "reproConfirmQueueWeight" : 4,
+  "mainExploitQueueWeight" : 8,
+  "branchScoutQueueWeight" : 3,
+  "shadowEvalQueueWeight" : 1,
+  "mainExploitQueueMaxSize" : 256,
+  "branchScoutQueueMaxSize" : 256,
+  "shadowEvalQueueMaxSize" : 128,
+  "reproConfirmQueueMaxSize" : 64,
+  "enableTestPlanCompactDedup" : true,
+  "testPlanDequeueDecayThreshold" : 3,
+  "enableStageFocusedMutation" : true,
+  "stageAwareMutationProbability" : 0.65,
+  "stageAwareMutationMaxAttempts" : 3,
+  "enableStageTemplates" : true,
+  "stageTemplateProbability" : 0.25,
+  "preUpgradeOnlyDownrank" : true,
+  "preUpgradeOnlyMutationEpochCap" : 6,
+  "strongCandidateConfirmationBudget" : 6,
+  "weakCandidateConfirmationBudget" : 2,
+  "enableCoverageGuidance" : true,
+  "rollingPostUpgradeScoreBoost" : 3.0,
+  "rollingPreUpgradeScoreBoost" : 0.5,
+  "sharedNoveltyScoreBoost" : 1.0,
+  "baselineOnlyScoreBoost" : 0.5,
+  "branchScoutMinOccupancy" : 5,
+  "enableStageCoverageSnapshots" : false'
+
 write_config_json() {
     local path="$1"
     local system="$2"
@@ -318,7 +363,8 @@ write_config_json() {
   "enable_ORDERBY_IN_SELECT" : true,
   "cassandraEnableTimeoutCheck" : false,
   "differentialLaneTimeoutSec" : ${DIFF_LANE_TIMEOUT_SEC},
-  "CASSANDRA_RETRY_TIMEOUT" : ${CASSANDRA_RETRY_TIMEOUT}
+  "CASSANDRA_RETRY_TIMEOUT" : ${CASSANDRA_RETRY_TIMEOUT},
+${PHASE_25_CONFIG}
 }
 JSON
             ;;
@@ -369,7 +415,8 @@ JSON
   "useFixedCommand" : false,
   "prepareImageFirst" : true,
   "enable_fsimage" : true,
-  "differentialLaneTimeoutSec" : ${DIFF_LANE_TIMEOUT_SEC}
+  "differentialLaneTimeoutSec" : ${DIFF_LANE_TIMEOUT_SEC},
+${PHASE_25_CONFIG}
 }
 JSON
             ;;
@@ -421,7 +468,8 @@ JSON
   "enableHBaseReadResultComparison" : true,
   "enable_IS_DISABLED" : true,
   "hbaseDaemonRetryTimes" : ${HBASE_DAEMON_RETRY_TIMES},
-  "differentialLaneTimeoutSec" : ${DIFF_LANE_TIMEOUT_SEC}
+  "differentialLaneTimeoutSec" : ${DIFF_LANE_TIMEOUT_SEC},
+${PHASE_25_CONFIG}
 }
 JSON
             ;;
@@ -753,6 +801,7 @@ SERVER_START_TIMEOUT_SEC=${SERVER_START_TIMEOUT_SEC}
 RUN_NAME=${RUN_NAME}
 RUN_DIR=${RUN_DIR}
 REQUIRE_TRACE_SIGNAL=${REQUIRE_TRACE_SIGNAL}
+GIT_SHA=${GIT_SHA}
 META
 
 if [[ "${SKIP_PRE_CLEAN}" == false ]]; then
@@ -966,6 +1015,7 @@ fi
 
 cat > "${SUMMARY_PATH}" <<SUMMARY
 run_name: ${RUN_NAME}
+git_sha: ${GIT_SHA}
 system: ${SYSTEM}
 original_version: ${ORIGINAL_VERSION}
 upgraded_version: ${UPGRADED_VERSION}

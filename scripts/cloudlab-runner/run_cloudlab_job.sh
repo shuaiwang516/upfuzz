@@ -429,6 +429,17 @@ if [[ "${SYSTEM}" == "hbase" && -n "${HBASE_DAEMON_RETRY_TIMES}" ]]; then
     RUNNER_CMD+=(--hbase-daemon-retry-times "${HBASE_DAEMON_RETRY_TIMES}")
 fi
 
+# Snapshot candidate counts before runner so phase6_summary reflects this run only
+_cand_dir="${ROOT_DIR}/failure/candidate"
+_strong_before=0
+_weak_before=0
+if [[ -d "${_cand_dir}/strong" ]]; then
+    _strong_before="$(find "${_cand_dir}/strong" -mindepth 1 -maxdepth 1 -type d -name 'failure_*' 2>/dev/null | wc -l | tr -d ' ')"
+fi
+if [[ -d "${_cand_dir}/weak" ]]; then
+    _weak_before="$(find "${_cand_dir}/weak" -mindepth 1 -maxdepth 1 -type d -name 'failure_*' 2>/dev/null | wc -l | tr -d ' ')"
+fi
+
 log "Launching: ${RUNNER_CMD[*]}" | tee -a "${LAUNCH_LOG}"
 set +e
 (
@@ -446,6 +457,55 @@ if [[ -f "${SUMMARY_FILE}" ]]; then
     for f in config.json server_stdout.log client_launcher_stdout.log upfuzz_server.log upfuzz_client_1.log monitor.log server_key_markers.log client_key_markers.log; do
         [[ -f "${RUNNER_RESULT_DIR}/${f}" ]] && cp -f "${RUNNER_RESULT_DIR}/${f}" "${LAUNCH_DIR}/${f}"
     done
+
+    # Phase 6: copy observability artifacts
+    if [[ -d "${RUNNER_RESULT_DIR}/observability" ]]; then
+        mkdir -p "${LAUNCH_DIR}/observability"
+        cp -f "${RUNNER_RESULT_DIR}/observability/"*.csv "${LAUNCH_DIR}/observability/" 2>/dev/null || true
+    fi
+
+    # Phase 6: count run-local strong/weak candidates (after - before snapshot)
+    _strong_after=0
+    _weak_after=0
+    if [[ -d "${_cand_dir}/strong" ]]; then
+        _strong_after="$(find "${_cand_dir}/strong" -mindepth 1 -maxdepth 1 -type d -name 'failure_*' 2>/dev/null | wc -l | tr -d ' ')"
+    fi
+    if [[ -d "${_cand_dir}/weak" ]]; then
+        _weak_after="$(find "${_cand_dir}/weak" -mindepth 1 -maxdepth 1 -type d -name 'failure_*' 2>/dev/null | wc -l | tr -d ' ')"
+    fi
+    _strong_cand=$((_strong_after - _strong_before))
+    _weak_cand=$((_weak_after - _weak_before))
+    (( _strong_cand < 0 )) && _strong_cand=0
+    (( _weak_cand < 0 )) && _weak_cand=0
+
+    _obs_dir="${LAUNCH_DIR}/observability"
+    _obs_present=""
+    _obs_missing=""
+    for _csv in trace_admission_summary.csv trace_window_summary.csv \
+                seed_lifecycle_summary.csv queue_activity_summary.csv \
+                scheduler_metrics_summary.csv branch_novelty_summary.csv \
+                stage_novelty_summary.csv; do
+        if [[ -f "${_obs_dir}/${_csv}" ]]; then
+            _obs_present="${_obs_present:+${_obs_present}, }${_csv}"
+        else
+            _obs_missing="${_obs_missing:+${_obs_missing}, }${_csv}"
+        fi
+    done
+
+    _git_sha="$(cd "${ROOT_DIR}" && git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
+
+    cat > "${LAUNCH_DIR}/phase6_summary.txt" <<P6SUM
+git_sha: ${_git_sha}
+testing_mode: ${TESTING_MODE}
+system: ${SYSTEM}
+original_version: ${ORIGINAL_VERSION}
+upgraded_version: ${UPGRADED_VERSION}
+strong_candidates: ${_strong_cand}
+weak_candidates: ${_weak_cand}
+candidate_dir: ${_cand_dir}
+observability_present: ${_obs_present:-none}
+observability_missing: ${_obs_missing:-none}
+P6SUM
 
     log "Run complete. Summary: ${SUMMARY_FILE}" | tee -a "${LAUNCH_LOG}"
     egrep "^(system:|original_version:|upgraded_version:|observed_rounds:|diff_feedback_packets:|stop_reason:|trace_signal_ok:|trace_len_positive_count:|trace_len_zero_count:|trace_merged_old_nonzero_count:|trace_merged_rolling_nonzero_count:|trace_merged_new_nonzero_count:|trace_merged_zero_count:|message_tri_diff_count:|trace_connect_refused_count:)" \

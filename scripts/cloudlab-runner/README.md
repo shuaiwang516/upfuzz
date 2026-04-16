@@ -42,6 +42,9 @@ scripts/setup-cloudlab/setup_env.sh
 
 ## Minimal Run Commands (6 Machines)
 
+All Phase 6 verification jobs use `testingMode=5` (rolling + trace). The default
+`--testing-mode` is already 5, so no extra flag is needed.
+
 On each CloudLab machine:
 
 ```bash
@@ -130,10 +133,23 @@ Primary output:
 
 - `scripts/cloudlab-runner/results/<run_name>/launch.log`
 - `scripts/cloudlab-runner/results/<run_name>/summary.txt`
+- `scripts/cloudlab-runner/results/<run_name>/phase6_summary.txt` — git SHA, run-local strong/weak candidate counts, observability file inventory
 - `scripts/cloudlab-runner/results/<run_name>/upfuzz_server.log`
 - `scripts/cloudlab-runner/results/<run_name>/upfuzz_client_1.log`
 - `scripts/cloudlab-runner/results/<run_name>/server_key_markers.log`
 - `scripts/cloudlab-runner/results/<run_name>/client_key_markers.log`
+- `scripts/cloudlab-runner/results/<run_name>/observability/` — Phase 0-5 per-round CSVs:
+  - `trace_admission_summary.csv`, `trace_window_summary.csv`
+  - `seed_lifecycle_summary.csv`, `queue_activity_summary.csv`
+  - `scheduler_metrics_summary.csv`, `branch_novelty_summary.csv`
+  - `stage_novelty_summary.csv` (when `enableStageCoverageSnapshots=true`)
+
+Candidate reports (under `failure/`):
+
+- `failure/candidate/strong/failure_N/` — strong structured divergences (payload mismatch between stable results)
+- `failure/candidate/weak/failure_N/` — weak structured divergences (involves UNKNOWN, DAEMON_ERROR, or transient failures)
+- `failure/same_version/failure_N/` — same-version bugs
+- `failure/noise/failure_N/` — noise
 
 Runner-native output (full details):
 
