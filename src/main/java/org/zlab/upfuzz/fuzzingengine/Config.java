@@ -200,6 +200,52 @@ public class Config {
         // decay entirely.
         public int testPlanDequeueDecayThreshold = 3;
 
+        // --- Phase 4 stage-focused mutation ---
+        // Master switch for the Phase 4 stage-aware mutator and
+        // confirmation-oriented child generation. When false, the
+        // test plan scheduler and mutator fall back to the Phase 3
+        // generic path (no stage hints, no confirmation reservation,
+        // no pre-upgrade-only caps). Kept true by default so Phase 4
+        // is the live mode-5 configuration but can be rolled back
+        // without a rebuild.
+        public boolean enableStageFocusedMutation = true;
+
+        // Phase 4 stage-aware mutator controls. {@code
+        // stageAwareMutationProbability} is the chance that a single
+        // mutation epoch uses the stage-focused mutator instead of the
+        // generic {@code TestPlan.mutate(...)} fallback. Set to 0 to
+        // rely only on generic mutation while still populating hints
+        // for offline analysis.
+        public double stageAwareMutationProbability = 0.65;
+        // Maximum number of stage-aware mutator families tried per
+        // parent dequeue before falling back to the generic mutator.
+        public int stageAwareMutationMaxAttempts = 3;
+
+        // Phase 4 reusable plan templates. Disabled by default so
+        // first-wave rollout exercises the stage-aware mutator only;
+        // templates can be flipped on in a second wave.
+        public boolean enableStageTemplates = true;
+        // Probability that a template is applied instead of a
+        // stage-aware mutator on any given mutation epoch where a
+        // usable hint is present.
+        public double stageTemplateProbability = 0.25;
+
+        // Phase 4 pre-upgrade-only parent cap. When true, a parent
+        // whose stage hint reports firing only in PRE_UPGRADE windows
+        // is down-ranked one scheduler lane and its mutation epoch is
+        // capped at {@code preUpgradeOnlyMutationEpochCap}.
+        public boolean preUpgradeOnlyDownrank = true;
+        public int preUpgradeOnlyMutationEpochCap = 6;
+
+        // Phase 4 confirmation budgets. A strong-structured candidate
+        // parent gets {@code strongCandidateConfirmationBudget}
+        // low-edit-distance / replay / minimization children emitted
+        // outside the normal exploration queue; weak structured
+        // divergences get the smaller {@code weakCandidateConfirmationBudget}.
+        // 0 disables confirmation generation for that tier.
+        public int strongCandidateConfirmationBudget = 6;
+        public int weakCandidateConfirmationBudget = 2;
+
         public int intervalMin = 10; // ms
         public int intervalMax = 200; // ms
 

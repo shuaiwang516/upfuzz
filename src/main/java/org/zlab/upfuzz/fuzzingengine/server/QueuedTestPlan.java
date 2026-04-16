@@ -118,6 +118,31 @@ public final class QueuedTestPlan {
      */
     public double score;
 
+    /**
+     * Phase 4 stage-focused mutation hint. Captured at admission time
+     * in {@code FuzzingServer.updateStatus(...)} from the aligned
+     * trace windows that drove the admission and consumed by the
+     * {@link StageAwareTestPlanMutator}. Never {@code null} —
+     * admissions without any firing window store {@link StageMutationHint#empty()}
+     * so the mutator falls back to generic
+     * {@link org.zlab.upfuzz.fuzzingengine.testplan.TestPlan#mutate mutate}.
+     * Mutable so compact-signature dedup can overwrite the hint with
+     * the stronger re-admission's information (same promotion semantics
+     * as the admission labels).
+     */
+    public StageMutationHint stageMutationHint;
+
+    /**
+     * Phase 4 per-parent confirmation budget. When the queued entry
+     * carries {@code needsConfirmation=true}, Phase 4 reserves a small
+     * number of low-edit-distance / replay / minimization children
+     * that are generated through
+     * {@code FuzzingServer.spendConfirmationBudget(...)} instead of
+     * going through the normal mutation epoch. Decremented each time
+     * a confirmation child is emitted.
+     */
+    public int confirmationBudgetRemaining;
+
     public QueuedTestPlan(
             TestPlan plan,
             int enqueueTestId,
@@ -131,6 +156,28 @@ public final class QueuedTestPlan {
             int plannedMutationBudget,
             String compactSignature,
             double initialScore) {
+        this(plan, enqueueTestId, lineageRoot, admissionReason,
+                traceEvidenceStrength, candidateStrength, priorityClass,
+                schedulerClass, enqueueRound, plannedMutationBudget,
+                compactSignature, initialScore,
+                StageMutationHint.empty(), 0);
+    }
+
+    public QueuedTestPlan(
+            TestPlan plan,
+            int enqueueTestId,
+            int lineageRoot,
+            AdmissionReason admissionReason,
+            TraceEvidenceStrength traceEvidenceStrength,
+            StructuredCandidateStrength candidateStrength,
+            QueuePriorityClass priorityClass,
+            SchedulerClass schedulerClass,
+            long enqueueRound,
+            int plannedMutationBudget,
+            String compactSignature,
+            double initialScore,
+            StageMutationHint stageMutationHint,
+            int confirmationBudgetRemaining) {
         this.plan = plan;
         this.enqueueTestId = enqueueTestId;
         this.lineageRoot = lineageRoot;
@@ -157,6 +204,11 @@ public final class QueuedTestPlan {
         this.dequeueCount = 0;
         this.payoffCredits = 0;
         this.score = initialScore;
+        this.stageMutationHint = stageMutationHint == null
+                ? StageMutationHint.empty()
+                : stageMutationHint;
+        this.confirmationBudgetRemaining = Math.max(0,
+                confirmationBudgetRemaining);
     }
 
     /** Bump score on a dedup collision so popular skeletons rise. */
@@ -182,6 +234,30 @@ public final class QueuedTestPlan {
             TraceEvidenceStrength newTraceEvidenceStrength,
             StructuredCandidateStrength newCandidateStrength,
             double incomingScore) {
+        promoteTo(newSchedulerClass, newPlannedMutationBudget,
+                newPriorityClass, newAdmissionReason,
+                newTraceEvidenceStrength, newCandidateStrength,
+                incomingScore, null, 0);
+    }
+
+    /**
+     * Phase 4 overload: a stronger re-admission also carries a fresh
+     * {@link StageMutationHint} and a new confirmation budget.
+     * Hints are replaced (not merged) because the stronger round's
+     * stage information is the more useful target for exploitation
+     * mutation. Confirmation budget takes the max of the two so we
+     * never lose a candidate parent's confirmation allocation to a
+     * weaker later admission.
+     */
+    public void promoteTo(SchedulerClass newSchedulerClass,
+            int newPlannedMutationBudget,
+            QueuePriorityClass newPriorityClass,
+            AdmissionReason newAdmissionReason,
+            TraceEvidenceStrength newTraceEvidenceStrength,
+            StructuredCandidateStrength newCandidateStrength,
+            double incomingScore,
+            StageMutationHint newStageMutationHint,
+            int newConfirmationBudget) {
         if (newSchedulerClass != null) {
             this.schedulerClass = newSchedulerClass;
         }
@@ -201,6 +277,13 @@ public final class QueuedTestPlan {
         if (newCandidateStrength != null && newCandidateStrength
                 .ordinal() > this.candidateStrength.ordinal()) {
             this.candidateStrength = newCandidateStrength;
+        }
+        if (newStageMutationHint != null
+                && newStageMutationHint.hasStageInfo()) {
+            this.stageMutationHint = newStageMutationHint;
+        }
+        if (newConfirmationBudget > this.confirmationBudgetRemaining) {
+            this.confirmationBudgetRemaining = newConfirmationBudget;
         }
         this.score = Math.max(this.score, incomingScore) + 0.5;
     }

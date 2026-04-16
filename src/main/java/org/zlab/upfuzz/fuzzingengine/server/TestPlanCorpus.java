@@ -220,10 +220,12 @@ public class TestPlanCorpus {
     }
 
     /**
-     * Label-aware enqueue. Returns true when the plan is admitted to
-     * the scheduler (including dedup collapse). False means the plan
-     * was dropped because the target queue is full and the new plan
-     * scored lower than every existing entry.
+     * Label-aware enqueue without a Phase 4 stage hint — kept for
+     * callers (e.g. the legacy single-argument add path and tests)
+     * that do not compute the richer hint. Routes through
+     * {@link #addTestPlan(TestPlan, long, int, AdmissionReason,
+     * TraceEvidenceStrength, StructuredCandidateStrength,
+     * QueuePriorityClass, StageMutationHint)} with an empty hint.
      */
     public boolean addTestPlan(TestPlan testPlan,
             long roundId,
@@ -232,7 +234,27 @@ public class TestPlanCorpus {
             TraceEvidenceStrength traceEvidenceStrength,
             StructuredCandidateStrength structuredCandidateStrength,
             QueuePriorityClass queuePriorityClass) {
+        return addTestPlan(testPlan, roundId, lineageRoot, admissionReason,
+                traceEvidenceStrength, structuredCandidateStrength,
+                queuePriorityClass, StageMutationHint.empty());
+    }
+
+    /**
+     * Phase 4 label- and hint-aware enqueue. Returns true when the
+     * plan is admitted to the scheduler (including dedup collapse).
+     * False means the plan was dropped because the target queue is
+     * full and the new plan scored lower than every existing entry.
+     */
+    public boolean addTestPlan(TestPlan testPlan,
+            long roundId,
+            int lineageRoot,
+            AdmissionReason admissionReason,
+            TraceEvidenceStrength traceEvidenceStrength,
+            StructuredCandidateStrength structuredCandidateStrength,
+            QueuePriorityClass queuePriorityClass,
+            StageMutationHint stageMutationHint) {
         SchedulerClass schedClass = mapToSchedulerClass(queuePriorityClass);
+        schedClass = applyPhase4LaneCap(schedClass, stageMutationHint);
         return enqueue(testPlan,
                 roundId,
                 lineageRoot,
@@ -241,7 +263,8 @@ public class TestPlanCorpus {
                 structuredCandidateStrength,
                 queuePriorityClass,
                 schedClass,
-                false);
+                false,
+                stageMutationHint);
     }
 
     /**
@@ -258,6 +281,20 @@ public class TestPlanCorpus {
             TraceEvidenceStrength traceEvidenceStrength,
             StructuredCandidateStrength structuredCandidateStrength,
             QueuePriorityClass queuePriorityClass) {
+        return addCandidateParent(testPlan, roundId, lineageRoot,
+                admissionReason, traceEvidenceStrength,
+                structuredCandidateStrength, queuePriorityClass,
+                StageMutationHint.empty());
+    }
+
+    public boolean addCandidateParent(TestPlan testPlan,
+            long roundId,
+            int lineageRoot,
+            AdmissionReason admissionReason,
+            TraceEvidenceStrength traceEvidenceStrength,
+            StructuredCandidateStrength structuredCandidateStrength,
+            QueuePriorityClass queuePriorityClass,
+            StageMutationHint stageMutationHint) {
         return enqueue(testPlan,
                 roundId,
                 lineageRoot,
@@ -266,7 +303,8 @@ public class TestPlanCorpus {
                 structuredCandidateStrength,
                 queuePriorityClass,
                 SchedulerClass.REPRO_CONFIRM,
-                true);
+                true,
+                stageMutationHint);
     }
 
     private boolean enqueue(TestPlan testPlan,
@@ -277,7 +315,8 @@ public class TestPlanCorpus {
             StructuredCandidateStrength structuredCandidateStrength,
             QueuePriorityClass queuePriorityClass,
             SchedulerClass schedClass,
-            boolean candidateParent) {
+            boolean candidateParent,
+            StageMutationHint stageMutationHint) {
         int testPacketId = testPlan != null ? testPlan.lineageTestId : -1;
         boolean phase3Enabled = Config.getConf() == null
                 || Config.getConf().usePriorityTestPlanScheduler;
@@ -292,6 +331,14 @@ public class TestPlanCorpus {
                 ? testPlan.compactSignature(lineageRoot)
                 : ("pkt:" + testPacketId);
         int plannedBudget = resolveMutationBudget(schedClass);
+        // Phase 4: pre-upgrade-only parents get their exploitation
+        // budget capped so they stay in the scout lane's rotation but
+        // cannot dominate post-upgrade search. The cap is applied even
+        // when we decided not to demote the scheduler lane.
+        plannedBudget = applyPhase4BudgetCap(schedClass, plannedBudget,
+                stageMutationHint);
+        int confirmationBudget = resolvePhase4ConfirmationBudget(
+                schedClass, stageMutationHint, candidateParent);
         double initialScore = candidateParent
                 ? 10.0
                 : initialScoreFor(schedClass, traceEvidenceStrength,
@@ -309,7 +356,9 @@ public class TestPlanCorpus {
                 roundId,
                 plannedBudget,
                 signature,
-                initialScore);
+                initialScore,
+                stageMutationHint,
+                confirmationBudget);
 
         // Legacy rollback: pure FIFO, no dedup, no class routing.
         // Rollback must reproduce Phase 0 behavior exactly, so a
@@ -422,13 +471,17 @@ public class TestPlanCorpus {
             oldQueue.remove(existing);
         }
 
-        int newBudget = resolveMutationBudget(incomingClass);
+        int newBudget = applyPhase4BudgetCap(incomingClass,
+                resolveMutationBudget(incomingClass),
+                incoming.stageMutationHint);
         existing.promoteTo(incomingClass, newBudget,
                 incoming.priorityClass,
                 incoming.admissionReason,
                 incoming.traceEvidenceStrength,
                 incoming.candidateStrength,
-                incoming.score);
+                incoming.score,
+                incoming.stageMutationHint,
+                incoming.confirmationBudgetRemaining);
 
         if (oldQueue != newQueue) {
             newQueue.add(existing);
@@ -597,7 +650,10 @@ public class TestPlanCorpus {
                 }
                 it.remove();
                 entry.schedulerClass = demoted;
-                entry.plannedMutationBudget = resolveMutationBudget(demoted);
+                entry.plannedMutationBudget = applyPhase4BudgetCap(
+                        demoted,
+                        resolveMutationBudget(demoted),
+                        entry.stageMutationHint);
                 entry.score = Math.max(0.0, entry.score - 1.0);
                 queues.get(demoted).add(entry);
                 if (observabilityMetrics != null) {
@@ -889,6 +945,115 @@ public class TestPlanCorpus {
         case SHADOW_EVAL:
         default:
             return null;
+        }
+    }
+
+    // === Phase 4: hint-driven lane + budget caps ===
+
+    /**
+     * Phase 4 lane cap for pre-upgrade-only parents. A plan whose
+     * stage hint says it <em>only</em> ever fired in PRE_UPGRADE
+     * windows (and carries no strong structured evidence) is demoted
+     * one lane on admission so post-upgrade exploitation budget is
+     * not spent on pre-upgrade churn. Strong structured candidates
+     * are never demoted — their confirmation value is independent of
+     * which stage fired.
+     */
+    private static SchedulerClass applyPhase4LaneCap(
+            SchedulerClass desired,
+            StageMutationHint hint) {
+        Config.Configuration cfg = Config.getConf();
+        if (cfg == null || !cfg.enableStageFocusedMutation) {
+            return desired;
+        }
+        if (!cfg.preUpgradeOnlyDownrank) {
+            return desired;
+        }
+        if (hint == null || !hint.preUpgradeOnly) {
+            return desired;
+        }
+        if (hint.signalType == StageMutationHint.SignalType.STRONG_STRUCTURED) {
+            return desired;
+        }
+        switch (desired) {
+        case REPRO_CONFIRM:
+            // Never demote a candidate-parent lane — REPRO_CONFIRM is
+            // reserved for strong structured candidates, which we
+            // already excluded above. If some caller routes a
+            // pre-upgrade-only plan here anyway, let the lane stand.
+            return desired;
+        case MAIN_EXPLOIT:
+            return SchedulerClass.BRANCH_SCOUT;
+        case BRANCH_SCOUT:
+        case SHADOW_EVAL:
+        default:
+            return desired;
+        }
+    }
+
+    /**
+     * Phase 4 mutation-epoch cap for pre-upgrade-only parents. Even
+     * after the lane cap, we shrink the effective mutation epoch
+     * toward the {@code preUpgradeOnlyMutationEpochCap} value so
+     * pre-upgrade churn consumes less rolling campaign budget than
+     * post-upgrade or mixed-version admissions.
+     */
+    private static int applyPhase4BudgetCap(SchedulerClass schedClass,
+            int baseBudget,
+            StageMutationHint hint) {
+        Config.Configuration cfg = Config.getConf();
+        if (cfg == null || !cfg.enableStageFocusedMutation) {
+            return baseBudget;
+        }
+        if (!cfg.preUpgradeOnlyDownrank) {
+            return baseBudget;
+        }
+        if (hint == null || !hint.preUpgradeOnly) {
+            return baseBudget;
+        }
+        if (hint.signalType == StageMutationHint.SignalType.STRONG_STRUCTURED) {
+            return baseBudget;
+        }
+        int cap = cfg.preUpgradeOnlyMutationEpochCap;
+        if (cap <= 0) {
+            return baseBudget;
+        }
+        return Math.min(baseBudget, cap);
+    }
+
+    /**
+     * Phase 4 confirmation budget resolver. Strong structured
+     * candidates and weak structured divergences get a small number
+     * of confirmation-oriented children reserved; other admissions
+     * get none so mainline mutation energy stays intact.
+     */
+    private static int resolvePhase4ConfirmationBudget(
+            SchedulerClass schedClass,
+            StageMutationHint hint,
+            boolean candidateParent) {
+        Config.Configuration cfg = Config.getConf();
+        if (cfg == null || !cfg.enableStageFocusedMutation) {
+            return 0;
+        }
+        if (hint == null) {
+            return 0;
+        }
+        if (!hint.needsConfirmation && !candidateParent) {
+            return 0;
+        }
+        switch (hint.signalType) {
+        case STRONG_STRUCTURED:
+            return Math.max(0, cfg.strongCandidateConfirmationBudget);
+        case WEAK_STRUCTURED:
+            return Math.max(0, cfg.weakCandidateConfirmationBudget);
+        default:
+            // Candidate parents without explicit strong/weak signal
+            // (REPRO_CONFIRM lane routed via addCandidateParent) still
+            // get the strong bucket so they have a confirmation path.
+            if (candidateParent) {
+                return Math.max(0, cfg.strongCandidateConfirmationBudget);
+            }
+            return 0;
         }
     }
 }

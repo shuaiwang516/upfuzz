@@ -1056,12 +1056,29 @@ public class FuzzingServer {
         int mutationEpoch = queuedTestPlan.plannedMutationBudget > 0
                 ? queuedTestPlan.plannedMutationBudget
                 : Config.getConf().testPlanMutationEpoch;
+        StageMutationHint stageHint = queuedTestPlan.stageMutationHint != null
+                ? queuedTestPlan.stageMutationHint
+                : StageMutationHint.empty();
         logger.info(
                 "Phase 3 dequeue: schedulerClass={}, priorityClass={}, "
-                        + "budget={}, lineageRoot={}, dequeueCount={}",
+                        + "budget={}, lineageRoot={}, dequeueCount={}, "
+                        + "stageHint={}",
                 queuedTestPlan.schedulerClass,
                 queuedTestPlan.priorityClass, mutationEpoch,
-                queuedTestPlan.lineageRoot, queuedTestPlan.dequeueCount);
+                queuedTestPlan.lineageRoot, queuedTestPlan.dequeueCount,
+                stageHint);
+
+        // Phase 4: confirmation-oriented children are emitted first
+        // when the queued parent carries a confirmation budget. They
+        // are deliberately generated outside the normal mutation
+        // epoch loop so the strong-candidate path does not dilute the
+        // exploration budget.
+        int confirmationEmitted = emitConfirmationChildren(testPlan,
+                queuedTestPlan, stageHint, parentLineageId);
+        if (confirmationEmitted > 0) {
+            anyEnqueued = true;
+        }
+
         for (int i = 0; i < mutationEpoch; i++) {
             TestPlan mutateTestPlan = null;
             int j = 0;
@@ -1069,7 +1086,8 @@ public class FuzzingServer {
                 mutateTestPlan = SerializationUtils.clone(testPlan);
                 boolean mutationSuccess;
                 try {
-                    mutationSuccess = mutateTestPlan.mutate(commandPool,
+                    mutationSuccess = StageAwareTestPlanMutator.mutate(
+                            mutateTestPlan, stageHint, commandPool,
                             stateClass);
                 } catch (Exception | AssertionError e) {
                     logger.error(
@@ -1106,6 +1124,130 @@ public class FuzzingServer {
             anyEnqueued = true;
         }
         return anyEnqueued;
+    }
+
+    /**
+     * Phase 4 confirmation path. Emits a small number of
+     * low-edit-distance / replay / minimization children for queued
+     * parents that carry {@code needsConfirmation=true}. Confirmation
+     * children are deliberately cheaper variants — they exist to
+     * reproduce strong or weak structured divergence without spending
+     * exploration budget on mainline mutation families.
+     *
+     * <ol>
+     *   <li>replay: clone the parent unchanged — the rolling-lane
+     *       execution is non-deterministic enough that a pure replay
+     *       can confirm or reject a candidate.</li>
+     *   <li>low-edit-distance: tighten intervals near the hotspot
+     *       <em>only</em>, so timing churn near the boundary is the
+     *       only difference vs the parent.</li>
+     *   <li>minimization: drop a single non-lifecycle event (shell
+     *       command / fault / validation appendix) so the reduced
+     *       plan still reproduces the candidate if the minimized
+     *       event was irrelevant.</li>
+     * </ol>
+     *
+     * <p>Returns the number of confirmation children successfully
+     * enqueued so the caller can factor them into its epoch budget.
+     */
+    private int emitConfirmationChildren(TestPlan parent,
+            QueuedTestPlan queuedTestPlan, StageMutationHint hint,
+            int parentLineageId) {
+        if (queuedTestPlan.confirmationBudgetRemaining <= 0) {
+            return 0;
+        }
+        int emitted = 0;
+        int budget = queuedTestPlan.confirmationBudgetRemaining;
+        for (int c = 0; c < budget; c++) {
+            TestPlan child = SerializationUtils.clone(parent);
+            boolean ok;
+            switch (c % 3) {
+            case 0: // replay
+                ok = true;
+                break;
+            case 1: // low-edit-distance: tighten intervals
+                ok = StageAwareTestPlanMutator
+                        .adjustIntervalAroundHotspot(child, hint);
+                break;
+            case 2: // minimization: drop a non-lifecycle event
+                ok = minimizeOneNonLifecycleEvent(child, hint);
+                break;
+            default:
+                ok = true;
+                break;
+            }
+            if (!ok) {
+                continue;
+            }
+            if (!testPlanVerifier(child.getEvents(), parent.nodeNum)) {
+                continue;
+            }
+            child.lineageTestId = -1;
+            testID2TestPlan.put(testID, child);
+            if (parentLineageId >= 0) {
+                observabilityMetrics.linkChildToParent(testID,
+                        parentLineageId);
+            }
+            int configIdx = configGen.generateConfig();
+            String configFileName = "test" + configIdx;
+            testPlanPackets.add(new TestPlanPacket(
+                    Config.getConf().system, testID++, configFileName,
+                    child));
+            emitted++;
+        }
+        queuedTestPlan.confirmationBudgetRemaining = Math.max(0,
+                budget - emitted);
+        if (emitted > 0) {
+            logger.info(
+                    "Phase 4 emitted {} confirmation children (budgetLeft={}, "
+                            + "signal={}, lineageRoot={})",
+                    emitted, queuedTestPlan.confirmationBudgetRemaining,
+                    hint.signalType, queuedTestPlan.lineageRoot);
+        }
+        return emitted;
+    }
+
+    /**
+     * Minimize the cloned test plan in place by removing a single
+     * non-lifecycle event near the hotspot. Never removes
+     * {@link UpgradeOp} / {@link FinalizeUpgrade} / {@link PrepareUpgrade}
+     * or a fault without its recover counterpart, so the upgrade
+     * skeleton stays intact.
+     */
+    private static boolean minimizeOneNonLifecycleEvent(TestPlan plan,
+            StageMutationHint hint) {
+        List<Event> events = plan.events;
+        if (events == null || events.size() <= 1) {
+            return false;
+        }
+        int hotspot = StageAwareTestPlanMutator.locateHotspotAnchor(events,
+                hint);
+        if (hotspot < 0) {
+            hotspot = events.size() / 2;
+        }
+        // Search outward from the hotspot for the first deletable event.
+        for (int radius = 0; radius < events.size(); radius++) {
+            for (int sign : new int[] { 1, -1 }) {
+                int idx = hotspot + sign * radius;
+                if (idx < 0 || idx >= events.size()) {
+                    continue;
+                }
+                Event e = events.get(idx);
+                if (e instanceof UpgradeOp
+                        || e instanceof FinalizeUpgrade
+                        || e instanceof PrepareUpgrade) {
+                    continue;
+                }
+                if (e instanceof Fault || e instanceof FaultRecover) {
+                    // Skip: dropping one half of a fault pair would
+                    // leave the plan in an inconsistent fault state.
+                    continue;
+                }
+                events.remove(idx);
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean generateAndEnqueueTestPlansFromFullStopSeed(
@@ -2018,6 +2160,21 @@ public class FuzzingServer {
         int firingUnsupportedWindowCount = 0;
         List<TraceSignature> interestingTraceSignatures = new ArrayList<>();
 
+        // Phase 4: capture the first firing window's stage so the
+        // stage-aware mutator knows where to concentrate effort, and
+        // union every firing window's rolling upgraded node set so
+        // the mutator can target the boundary hotspots. "Firing"
+        // here means either the per-window similarity check or the
+        // tri-diff exclusive check fired on that window.
+        String phase4HotStageId = "";
+        TraceWindow.StageKind phase4HotStageKind = null;
+        int phase4HotWindowOrdinal = -1;
+        Set<Integer> phase4HotNodeSet = new LinkedHashSet<>();
+        boolean phase4AnyPreUpgradeFired = false;
+        boolean phase4AnyNonPreUpgradeFired = false;
+        boolean phase4AnyPostUpgradeFired = false;
+        boolean phase4AnyFaultRecoveryFired = false;
+
         boolean allLanesOk = normalizeLaneStatus(
                 testPlanFeedbackPackets[0]) == TestPlanFeedbackPacket.LaneStatus.OK
                 && normalizeLaneStatus(
@@ -2364,6 +2521,36 @@ public class FuzzingServer {
                                 "[TRACE] Window {} interesting: windowSim={}, triDiff={}",
                                 aw.rolling.ordinal, windowInteresting,
                                 triDiffInteresting);
+                    }
+                    // Phase 4: every firing window (trace OR triDiff)
+                    // contributes to the stage hint. The first firing
+                    // window becomes the hot stage; the node set is
+                    // the union across all firings so the stage-aware
+                    // mutator sees every upgraded boundary that
+                    // corroborated this round.
+                    if (windowInteresting || triDiffExclusiveFired) {
+                        if (phase4HotWindowOrdinal < 0) {
+                            phase4HotWindowOrdinal = aw.rolling.ordinal;
+                            phase4HotStageId = aw.rolling.comparisonStageId;
+                            phase4HotStageKind = aw.rolling.stageKind;
+                        }
+                        if (aw.rolling.rawUpgradedNodeSet != null) {
+                            phase4HotNodeSet
+                                    .addAll(aw.rolling.rawUpgradedNodeSet);
+                        }
+                        TraceWindow.StageKind firedKind = aw.rolling.stageKind;
+                        if (firedKind == TraceWindow.StageKind.PRE_UPGRADE) {
+                            phase4AnyPreUpgradeFired = true;
+                        } else {
+                            phase4AnyNonPreUpgradeFired = true;
+                        }
+                        if (firedKind == TraceWindow.StageKind.POST_STAGE
+                                || firedKind == TraceWindow.StageKind.POST_FINAL_STAGE) {
+                            phase4AnyPostUpgradeFired = true;
+                        }
+                        if (firedKind == TraceWindow.StageKind.FAULT_RECOVERY) {
+                            phase4AnyFaultRecoveryFired = true;
+                        }
                     }
                 }
 
@@ -2785,6 +2972,28 @@ public class FuzzingServer {
 
                     queuePriorityClassForRow = classifyQueuePriorityClass(
                             admissionReason, traceEvidenceStrength);
+                    // Phase 4: build the stage-focused mutation hint
+                    // from the per-window accumulators we captured
+                    // during trace scoring. A missing hot window
+                    // (e.g. a pure-branch admission with no firing
+                    // trace window) yields {@link StageMutationHint#empty()}
+                    // and the mutator falls back to generic mutation.
+                    StageMutationHint stageMutationHint = buildStageMutationHint(
+                            phase4HotStageId,
+                            phase4HotStageKind,
+                            phase4HotWindowOrdinal,
+                            phase4HotNodeSet,
+                            phase4AnyPreUpgradeFired,
+                            phase4AnyNonPreUpgradeFired,
+                            phase4AnyPostUpgradeFired,
+                            phase4AnyFaultRecoveryFired,
+                            newBranchCoverage,
+                            traceEvidenceStrength,
+                            testLevelCandidateStrength,
+                            rollingOnlyEventCandidate
+                                    || rollingOnlyErrorLogCandidate,
+                            strongStructuredCandidate
+                                    || weakStructuredCandidate);
                     // Phase 3: when this admission also produced a
                     // strong structured candidate, promote the plan
                     // into the repro_confirm lane so the scheduler
@@ -2799,7 +3008,8 @@ public class FuzzingServer {
                                 admissionReason,
                                 traceEvidenceStrength,
                                 structuredCandidateStrength,
-                                queuePriorityClassForRow);
+                                queuePriorityClassForRow,
+                                stageMutationHint);
                     } else {
                         testPlanCorpus.addTestPlan(
                                 testPlan,
@@ -2808,7 +3018,8 @@ public class FuzzingServer {
                                 admissionReason,
                                 traceEvidenceStrength,
                                 structuredCandidateStrength,
-                                queuePriorityClassForRow);
+                                queuePriorityClassForRow,
+                                stageMutationHint);
                     }
                     if (isModeFive && !newBranchCoverage
                             && Config.getConf().useTraceSignatureDedup) {
@@ -5176,6 +5387,69 @@ public class FuzzingServer {
         }
         return recentTraceSignatureIndex.shouldSuppress(
                 interestingTraceSignatures, round);
+    }
+
+    // === Phase 4 (Apr15): stage-focused mutation hint builder ===
+
+    /**
+     * Phase 4 stage-focused mutation hint builder. Aggregates the
+     * per-window accumulators captured during canonical trace
+     * scoring into a single immutable hint that the stage-aware
+     * mutator and confirmation-oriented child generator consume.
+     *
+     * <p>The hint is deliberately compact so the serialized
+     * {@link QueuedTestPlan} stays small — only the first firing
+     * window's stage id / ordinal, the union of every firing window's
+     * rolling upgraded node set, and a closed set of booleans.
+     */
+    static StageMutationHint buildStageMutationHint(
+            String hotStageId,
+            TraceWindow.StageKind hotStageKind,
+            int hotWindowOrdinal,
+            Set<Integer> hotNodeSet,
+            boolean anyPreUpgradeFired,
+            boolean anyNonPreUpgradeFired,
+            boolean anyPostUpgradeFired,
+            boolean anyFaultRecoveryFired,
+            boolean newBranchCoverage,
+            TraceEvidenceStrength traceEvidenceStrength,
+            StructuredCandidateStrength testLevelCandidateStrength,
+            boolean rollingOnlyEventOrErrorLog,
+            boolean anyStructuredDivergence) {
+        StageMutationHint.SignalType signalType = StageMutationHint
+                .classifySignal(newBranchCoverage, traceEvidenceStrength,
+                        testLevelCandidateStrength,
+                        rollingOnlyEventOrErrorLog);
+        boolean preUpgradeOnly = anyPreUpgradeFired
+                && !anyNonPreUpgradeFired
+                && signalType != StageMutationHint.SignalType.STRONG_STRUCTURED;
+        boolean faultInfluenced = anyFaultRecoveryFired;
+        // Confirmation is reserved for actual structured candidates
+        // (checker-D divergence). Rolling-only event/error log
+        // candidates are too noisy to warrant confirmation children.
+        boolean needsConfirmation = anyStructuredDivergence
+                && (signalType == StageMutationHint.SignalType.STRONG_STRUCTURED
+                        || signalType == StageMutationHint.SignalType.WEAK_STRUCTURED);
+        // Upgrade order matters when the firing windows span a
+        // POST_STAGE boundary with multiple upgraded nodes — the
+        // specific node upgrade sequence may have contributed to the
+        // divergence. This gates the optional SHUFFLE_UPGRADE_ORDER
+        // mutator.
+        boolean upgradeOrderMattered = anyPostUpgradeFired
+                && hotNodeSet != null && hotNodeSet.size() >= 2;
+        StageMutationHint.StageKindHint hotKindHint = StageMutationHint.StageKindHint
+                .from(hotStageKind);
+        return new StageMutationHint(
+                hotStageId,
+                hotKindHint,
+                hotWindowOrdinal,
+                hotNodeSet,
+                signalType,
+                anyPostUpgradeFired,
+                preUpgradeOnly,
+                faultInfluenced,
+                needsConfirmation,
+                upgradeOrderMattered);
     }
 
     // === Phase 4: Canonical trace scoring helpers ===
