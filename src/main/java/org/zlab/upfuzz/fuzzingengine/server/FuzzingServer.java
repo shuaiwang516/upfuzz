@@ -42,9 +42,11 @@ import org.zlab.upfuzz.fuzzingengine.packet.*;
 import org.zlab.upfuzz.fuzzingengine.executor.Executor;
 import org.zlab.upfuzz.fuzzingengine.server.observability.AdmissionReason;
 import org.zlab.upfuzz.fuzzingengine.server.observability.AdmissionSummaryRow;
+import org.zlab.upfuzz.fuzzingengine.server.observability.BranchNoveltyClass;
 import org.zlab.upfuzz.fuzzingengine.server.observability.BranchNoveltyRow;
 import org.zlab.upfuzz.fuzzingengine.server.observability.ObservabilityMetrics;
 import org.zlab.upfuzz.fuzzingengine.server.observability.QueuePriorityClass;
+import org.zlab.upfuzz.fuzzingengine.server.observability.StageNoveltyRow;
 import org.zlab.upfuzz.fuzzingengine.server.observability.StructuredCandidateStrength;
 import org.zlab.upfuzz.fuzzingengine.server.observability.TraceEvidenceStrength;
 import org.zlab.upfuzz.fuzzingengine.server.observability.WeakCandidateKind;
@@ -1321,6 +1323,13 @@ public class FuzzingServer {
                 fb.originalCodeCoverage.merge(feedBack.originalCodeCoverage);
             if (feedBack.upgradedCodeCoverage != null)
                 fb.upgradedCodeCoverage.merge(feedBack.upgradedCodeCoverage);
+            // Phase 5: carry stage snapshots from the first non-empty slot
+            if (feedBack.stageCoverageSnapshots != null
+                    && !feedBack.stageCoverageSnapshots.isEmpty()
+                    && fb.stageCoverageSnapshots.isEmpty()) {
+                fb.stageCoverageSnapshots
+                        .putAll(feedBack.stageCoverageSnapshots);
+            }
         }
         return fb;
     }
@@ -2125,6 +2134,85 @@ public class FuzzingServer {
             }
         }
 
+        // Phase 5: classify the round's branch novelty from the probe
+        // counts computed above. This label feeds the scheduler score
+        // boost and is recorded on BranchNoveltyRow and SeedLifecycle.
+        BranchNoveltyClass branchNoveltyClass = CoverageDeltaUtil
+                .classifyNovelty(
+                        oldVersionBaselineOnlyProbes,
+                        oldVersionRollingOnlyProbes,
+                        oldVersionSharedProbes,
+                        newVersionBaselineOnlyProbes,
+                        newVersionRollingOnlyProbes,
+                        newVersionSharedProbes);
+        // Phase 5: per-version novelty source labels for observability
+        String oldVersionNoveltySource = CoverageDeltaUtil
+                .classifyVersionNoveltySource(
+                        oldVersionBaselineOnlyProbes,
+                        oldVersionRollingOnlyProbes,
+                        oldVersionSharedProbes);
+        String newVersionNoveltySource = CoverageDeltaUtil
+                .classifyVersionNoveltySource(
+                        newVersionBaselineOnlyProbes,
+                        newVersionRollingOnlyProbes,
+                        newVersionSharedProbes);
+
+        // Phase 5: stage-level novelty attribution from optional
+        // ordered snapshots. Keys are AFTER_UPGRADE_0, AFTER_UPGRADE_1,
+        // ..., AFTER_FINALIZE. We extract the first-upgrade snapshot,
+        // the last-upgrade snapshot, and the finalize snapshot to
+        // determine when novelty first appeared.
+        if (Config.getConf().enableStageCoverageSnapshots
+                && fbRolling.stageCoverageSnapshots != null
+                && !fbRolling.stageCoverageSnapshots.isEmpty()) {
+            org.jacoco.core.data.ExecutionDataStore firstUpgrade = null;
+            org.jacoco.core.data.ExecutionDataStore lastUpgrade = null;
+            org.jacoco.core.data.ExecutionDataStore afterFinalize = fbRolling.stageCoverageSnapshots
+                    .get("AFTER_FINALIZE");
+            int upgradeCount = 0;
+            for (java.util.Map.Entry<String, org.jacoco.core.data.ExecutionDataStore> e : fbRolling.stageCoverageSnapshots
+                    .entrySet()) {
+                if (e.getKey().startsWith("AFTER_UPGRADE_")) {
+                    if (firstUpgrade == null) {
+                        firstUpgrade = e.getValue();
+                    }
+                    lastUpgrade = e.getValue();
+                    upgradeCount++;
+                }
+            }
+            int probesTotal = Utilities
+                    .countProbes(Utilities.collectNewProbeIds(
+                            curUpCoverageAfterUpgrade,
+                            fbRolling.upgradedCodeCoverage));
+            int probesAtFirst = firstUpgrade != null
+                    ? Utilities.countProbes(Utilities.collectNewProbeIds(
+                            curUpCoverageAfterUpgrade, firstUpgrade))
+                    : -1;
+            int probesAtLast = lastUpgrade != null
+                    ? Utilities.countProbes(Utilities.collectNewProbeIds(
+                            curUpCoverageAfterUpgrade, lastUpgrade))
+                    : -1;
+            int probesAtFin = afterFinalize != null
+                    ? Utilities.countProbes(Utilities.collectNewProbeIds(
+                            curUpCoverageAfterUpgrade, afterFinalize))
+                    : -1;
+            logger.info(
+                    "[Phase5-STAGE] new-version novelty: firstUpgrade={}, "
+                            + "lastUpgrade={}, finalize={}, total={}, "
+                            + "upgradeSnapshots={}",
+                    probesAtFirst, probesAtLast, probesAtFin,
+                    probesTotal, upgradeCount);
+            observabilityMetrics
+                    .recordStageNovelty(new StageNoveltyRow(
+                            finishedTestID,
+                            testPlanDiffFeedbackPacket.testPacketID,
+                            probesTotal,
+                            probesAtFirst,
+                            probesAtLast,
+                            probesAtFin,
+                            upgradeCount));
+        }
+
         // --- Compressed order debug signal (Phase 6) ---
         if (Config.getConf().useCompressedOrderDebug
                 && Config.getConf().useTrace
@@ -2822,6 +2910,14 @@ public class FuzzingServer {
                 testPlanCorpus.notifyBranchPayoff(parentLineageRoot);
             }
         }
+        // Phase 5: credit the parent when this round produced STRONG
+        // trace evidence. This is independent of candidate payoff — a
+        // seed can produce strong trace patterns without triggering a
+        // structured divergence.
+        if (traceEvidenceStrength == TraceEvidenceStrength.STRONG) {
+            observabilityMetrics.recordDownstreamStrongTraceHit(
+                    testPlanDiffFeedbackPacket.testPacketID);
+        }
         // Phase 1: only strong structured candidates are allowed to
         // promote a probationary seed. Weak structured candidates are
         // still tracked for review via
@@ -2968,7 +3064,8 @@ public class FuzzingServer {
                             finishedTestID,
                             admissionReason,
                             observabilityMetrics.resolveRootLifecycleId(
-                                    testPlanDiffFeedbackPacket.testPacketID));
+                                    testPlanDiffFeedbackPacket.testPacketID),
+                            branchNoveltyClass);
 
                     queuePriorityClassForRow = classifyQueuePriorityClass(
                             admissionReason, traceEvidenceStrength);
@@ -3009,7 +3106,8 @@ public class FuzzingServer {
                                 traceEvidenceStrength,
                                 structuredCandidateStrength,
                                 queuePriorityClassForRow,
-                                stageMutationHint);
+                                stageMutationHint,
+                                branchNoveltyClass);
                     } else {
                         testPlanCorpus.addTestPlan(
                                 testPlan,
@@ -3019,7 +3117,8 @@ public class FuzzingServer {
                                 traceEvidenceStrength,
                                 structuredCandidateStrength,
                                 queuePriorityClassForRow,
-                                stageMutationHint);
+                                stageMutationHint,
+                                branchNoveltyClass);
                     }
                     if (isModeFive && !newBranchCoverage
                             && Config.getConf().useTraceSignatureDedup) {
@@ -3296,9 +3395,10 @@ public class FuzzingServer {
                 supportBackedTraceWindowCount,
                 queuePriorityClassForRow));
 
-        // Phase 0: round-level branch novelty source attribution. Emitted
-        // every round (including rounds with no new probes) so offline
-        // parsers can use missing rows as a failure signal.
+        // Phase 0/5: round-level branch novelty source attribution. Phase 5
+        // adds the per-version novelty source labels and the round-level
+        // classification so offline parsers can directly see which rounds
+        // produced rolling-post-upgrade novelty without re-deriving it.
         observabilityMetrics.recordBranchNovelty(new BranchNoveltyRow(
                 finishedTestID,
                 testPlanDiffFeedbackPacket.testPacketID,
@@ -3307,7 +3407,10 @@ public class FuzzingServer {
                 oldVersionSharedProbes,
                 newVersionBaselineOnlyProbes,
                 newVersionRollingOnlyProbes,
-                newVersionSharedProbes));
+                newVersionSharedProbes,
+                oldVersionNoveltySource,
+                newVersionNoveltySource,
+                branchNoveltyClass));
 
         // Phase 3: run the decay sweep once per round so plans that
         // have been dequeued repeatedly without any payoff decay to a

@@ -1,6 +1,7 @@
 package org.zlab.upfuzz.fuzzingengine.server;
 
 import org.zlab.upfuzz.fuzzingengine.server.observability.AdmissionReason;
+import org.zlab.upfuzz.fuzzingengine.server.observability.BranchNoveltyClass;
 import org.zlab.upfuzz.fuzzingengine.server.observability.QueuePriorityClass;
 import org.zlab.upfuzz.fuzzingengine.server.observability.SchedulerClass;
 import org.zlab.upfuzz.fuzzingengine.server.observability.StructuredCandidateStrength;
@@ -143,6 +144,16 @@ public final class QueuedTestPlan {
      */
     public int confirmationBudgetRemaining;
 
+    /**
+     * Phase 5 branch novelty classification at admission time. Records
+     * whether this plan was admitted with rolling-post-upgrade novelty,
+     * rolling-pre-upgrade-only, shared, baseline-only, or no branch
+     * novelty. The scheduler uses this to boost the score of plans
+     * with rolling-post-upgrade novelty so they get more mutation
+     * energy.
+     */
+    public BranchNoveltyClass branchNoveltyClass;
+
     public QueuedTestPlan(
             TestPlan plan,
             int enqueueTestId,
@@ -160,7 +171,7 @@ public final class QueuedTestPlan {
                 traceEvidenceStrength, candidateStrength, priorityClass,
                 schedulerClass, enqueueRound, plannedMutationBudget,
                 compactSignature, initialScore,
-                StageMutationHint.empty(), 0);
+                StageMutationHint.empty(), 0, BranchNoveltyClass.NONE);
     }
 
     public QueuedTestPlan(
@@ -178,6 +189,30 @@ public final class QueuedTestPlan {
             double initialScore,
             StageMutationHint stageMutationHint,
             int confirmationBudgetRemaining) {
+        this(plan, enqueueTestId, lineageRoot, admissionReason,
+                traceEvidenceStrength, candidateStrength, priorityClass,
+                schedulerClass, enqueueRound, plannedMutationBudget,
+                compactSignature, initialScore,
+                stageMutationHint, confirmationBudgetRemaining,
+                BranchNoveltyClass.NONE);
+    }
+
+    public QueuedTestPlan(
+            TestPlan plan,
+            int enqueueTestId,
+            int lineageRoot,
+            AdmissionReason admissionReason,
+            TraceEvidenceStrength traceEvidenceStrength,
+            StructuredCandidateStrength candidateStrength,
+            QueuePriorityClass priorityClass,
+            SchedulerClass schedulerClass,
+            long enqueueRound,
+            int plannedMutationBudget,
+            String compactSignature,
+            double initialScore,
+            StageMutationHint stageMutationHint,
+            int confirmationBudgetRemaining,
+            BranchNoveltyClass branchNoveltyClass) {
         this.plan = plan;
         this.enqueueTestId = enqueueTestId;
         this.lineageRoot = lineageRoot;
@@ -209,6 +244,9 @@ public final class QueuedTestPlan {
                 : stageMutationHint;
         this.confirmationBudgetRemaining = Math.max(0,
                 confirmationBudgetRemaining);
+        this.branchNoveltyClass = branchNoveltyClass == null
+                ? BranchNoveltyClass.NONE
+                : branchNoveltyClass;
     }
 
     /** Bump score on a dedup collision so popular skeletons rise. */

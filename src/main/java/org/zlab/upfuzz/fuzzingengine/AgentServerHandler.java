@@ -224,4 +224,30 @@ public class AgentServerHandler
             }
         }
     }
+
+    /**
+     * Phase 5: non-destructive coverage snapshot. Dumps the agent's
+     * current execution data WITHOUT resetting it, so the final
+     * round-end {@link #collect()} still sees the full cumulative
+     * coverage. Used by stage boundary snapshots so they do not
+     * drain probes from the end-of-round collection.
+     */
+    public void collectSnapshot() {
+        logger.debug("snapshot coverage for " + sessionId + "...");
+        try {
+            writer.visitDumpCommand(true, false);
+        } catch (IOException e) {
+            logger.debug("agent connection " + sessionId + " closed");
+            return;
+        }
+        okCMD = new CountDownLatch(1);
+        synchronized (okCMD) {
+            try {
+                okCMD.await(1000, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                logger.error(
+                        "handler snapshot " + sessionId + "... timeout");
+            }
+        }
+    }
 }

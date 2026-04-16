@@ -38,6 +38,14 @@ public final class BranchNoveltyRow {
     public final int newVersionRollingOnlyProbes;
     public final int newVersionSharedProbes;
 
+    /** Phase 5: per-version novelty source label (ROLLING_ONLY, BASELINE_ONLY, MIXED, SHARED, NONE). */
+    public final String oldVersionNoveltySource;
+    /** Phase 5: per-version novelty source label. */
+    public final String newVersionNoveltySource;
+    /** Phase 5: round-level novelty classification for scheduling. */
+    public final BranchNoveltyClass branchNoveltyClass;
+
+    /** Phase 0 constructor — derives Phase 5 labels automatically. */
     public BranchNoveltyRow(
             long roundId,
             int testPacketId,
@@ -47,6 +55,26 @@ public final class BranchNoveltyRow {
             int newVersionBaselineOnlyProbes,
             int newVersionRollingOnlyProbes,
             int newVersionSharedProbes) {
+        this(roundId, testPacketId,
+                oldVersionBaselineOnlyProbes, oldVersionRollingOnlyProbes,
+                oldVersionSharedProbes,
+                newVersionBaselineOnlyProbes, newVersionRollingOnlyProbes,
+                newVersionSharedProbes,
+                null, null, null);
+    }
+
+    public BranchNoveltyRow(
+            long roundId,
+            int testPacketId,
+            int oldVersionBaselineOnlyProbes,
+            int oldVersionRollingOnlyProbes,
+            int oldVersionSharedProbes,
+            int newVersionBaselineOnlyProbes,
+            int newVersionRollingOnlyProbes,
+            int newVersionSharedProbes,
+            String oldVersionNoveltySource,
+            String newVersionNoveltySource,
+            BranchNoveltyClass branchNoveltyClass) {
         this.roundId = roundId;
         this.testPacketId = testPacketId;
         this.oldVersionBaselineOnlyProbes = oldVersionBaselineOnlyProbes;
@@ -55,6 +83,15 @@ public final class BranchNoveltyRow {
         this.newVersionBaselineOnlyProbes = newVersionBaselineOnlyProbes;
         this.newVersionRollingOnlyProbes = newVersionRollingOnlyProbes;
         this.newVersionSharedProbes = newVersionSharedProbes;
+        this.oldVersionNoveltySource = oldVersionNoveltySource != null
+                ? oldVersionNoveltySource
+                : "NONE";
+        this.newVersionNoveltySource = newVersionNoveltySource != null
+                ? newVersionNoveltySource
+                : "NONE";
+        this.branchNoveltyClass = branchNoveltyClass != null
+                ? branchNoveltyClass
+                : BranchNoveltyClass.NONE;
     }
 
     public int totalNewProbes() {
@@ -73,7 +110,14 @@ public final class BranchNoveltyRow {
                 "new_version_baseline_only_probes",
                 "new_version_rolling_only_probes",
                 "new_version_shared_probes",
-                "total_new_probes");
+                "total_new_probes",
+                "old_version_novelty_source",
+                "new_version_novelty_source",
+                "branch_novelty_class",
+                "rolling_only_old_probe_count",
+                "rolling_only_new_probe_count",
+                "baseline_only_probe_count",
+                "shared_probe_count");
     }
 
     public String toCsvRow() {
@@ -86,7 +130,15 @@ public final class BranchNoveltyRow {
         sb.append(newVersionBaselineOnlyProbes).append(',');
         sb.append(newVersionRollingOnlyProbes).append(',');
         sb.append(newVersionSharedProbes).append(',');
-        sb.append(totalNewProbes());
+        sb.append(totalNewProbes()).append(',');
+        sb.append(oldVersionNoveltySource).append(',');
+        sb.append(newVersionNoveltySource).append(',');
+        sb.append(branchNoveltyClass.name()).append(',');
+        sb.append(oldVersionRollingOnlyProbes).append(',');
+        sb.append(newVersionRollingOnlyProbes).append(',');
+        sb.append(oldVersionBaselineOnlyProbes
+                + newVersionBaselineOnlyProbes).append(',');
+        sb.append(oldVersionSharedProbes + newVersionSharedProbes);
         return sb.toString();
     }
 }

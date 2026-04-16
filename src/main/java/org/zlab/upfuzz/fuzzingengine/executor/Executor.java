@@ -3,6 +3,7 @@ package org.zlab.upfuzz.fuzzingengine.executor;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.LinkedHashMap;
 
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -50,6 +51,13 @@ public abstract class Executor implements IExecutor {
 
     // Test plan coverage
     public ExecutionDataStore[] oriCoverage;
+
+    // Phase 5: ordered stage coverage snapshots keyed by boundary label
+    // (AFTER_UPGRADE_0, AFTER_UPGRADE_1, ..., AFTER_FINALIZE).
+    // LinkedHashMap preserves insertion order so the server can iterate
+    // boundaries chronologically.
+    public Map<String, ExecutionDataStore> stageCoverageSnapshots = new LinkedHashMap<>();
+    private int upgradeSnapshotOrdinal = 0;
 
     // Test plan trace
     public Trace[] trace;
@@ -555,6 +563,22 @@ public abstract class Executor implements IExecutor {
                 }
                 return false;
             }
+            if (Config.getConf().enableStageCoverageSnapshots) {
+                try {
+                    ExecutionDataStore snap = collectSnapshot("upgraded");
+                    if (snap != null) {
+                        stageCoverageSnapshots.put(
+                                "AFTER_UPGRADE_"
+                                        + upgradeSnapshotOrdinal,
+                                snap);
+                        upgradeSnapshotOrdinal++;
+                    }
+                } catch (Exception e) {
+                    logger.warn(
+                            "[Phase5] stage snapshot after UpgradeOp failed",
+                            e);
+                }
+            }
             if (Config.getConf().debug) {
                 testPlanExecutionLog += "(Upgrade) operation in "
                         + (System.currentTimeMillis() - initTime) + " ms, ";
@@ -632,6 +656,19 @@ public abstract class Executor implements IExecutor {
                             + " ms, ";
                 }
                 return false;
+            }
+            if (Config.getConf().enableStageCoverageSnapshots) {
+                try {
+                    ExecutionDataStore snap = collectSnapshot("upgraded");
+                    if (snap != null) {
+                        stageCoverageSnapshots.put("AFTER_FINALIZE",
+                                snap);
+                    }
+                } catch (Exception e) {
+                    logger.warn(
+                            "[Phase5] stage snapshot after FinalizeUpgrade failed",
+                            e);
+                }
             }
             if (Config.getConf().debug) {
                 testPlanExecutionLog += "(Finalize) upgrade event in "
@@ -758,6 +795,42 @@ public abstract class Executor implements IExecutor {
 
             return execStore;
         }
+    }
+
+    /**
+     * Phase 5: non-destructive coverage snapshot. Same as
+     * {@link #collect(String)} but uses
+     * {@link AgentServerHandler#collectSnapshot()} which sends
+     * {@code visitDumpCommand(true, false)} — dump without reset.
+     * The agent keeps its execution data so the final round-end
+     * {@link #collect(String)} still sees the full cumulative
+     * coverage. Returns null when no agents are connected.
+     */
+    public ExecutionDataStore collectSnapshot(String version) {
+        Set<String> agentIdList = sessionGroup
+                .get(executorID + "_" + version);
+        if (agentIdList == null) {
+            return null;
+        }
+        for (String agentId : agentIdList) {
+            if (agentId.split("-")[3].equals("null"))
+                continue;
+            AgentServerHandler conn = agentHandler.get(agentId);
+            if (conn != null) {
+                agentStore.remove(agentId);
+                conn.collectSnapshot();
+            }
+        }
+        ExecutionDataStore execStore = new ExecutionDataStore();
+        for (String agentId : agentIdList) {
+            if (agentId.split("-")[3].equals("null"))
+                continue;
+            ExecutionDataStore astore = agentStore.get(agentId);
+            if (astore != null) {
+                execStore.merge(astore);
+            }
+        }
+        return execStore;
     }
 
     public ExecutionDataStore collectSingleNodeCoverage(int nodeIdx,

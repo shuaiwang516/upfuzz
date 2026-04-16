@@ -63,6 +63,7 @@ public final class ObservabilityMetrics {
     private static final String QUEUE_CSV_NAME = "queue_activity_summary.csv";
     private static final String BRANCH_NOVELTY_CSV_NAME = "branch_novelty_summary.csv";
     private static final String SCHEDULER_CSV_NAME = "scheduler_metrics_summary.csv";
+    private static final String STAGE_NOVELTY_CSV_NAME = "stage_novelty_summary.csv";
 
     private final EnumMap<AdmissionReason, AtomicLong> admissionCounts = new EnumMap<>(
             AdmissionReason.class);
@@ -75,6 +76,7 @@ public final class ObservabilityMetrics {
     private final List<QueueActivityRow> queueActivityRows = new ArrayList<>();
     private final List<BranchNoveltyRow> branchNoveltyRows = new ArrayList<>();
     private final List<SchedulerMetricsRow> schedulerMetricsRows = new ArrayList<>();
+    private final List<StageNoveltyRow> stageNoveltyRows = new ArrayList<>();
 
     // === Phase 3 scheduler counters (cumulative per lane) ===
     // Keyed by SchedulerClass — the internal lane, not the
@@ -212,6 +214,23 @@ public final class ObservabilityMetrics {
     public int branchNoveltyRowCount() {
         synchronized (branchNoveltyRows) {
             return branchNoveltyRows.size();
+        }
+    }
+
+    // === Phase 5 stage novelty rows ===
+
+    public void recordStageNovelty(StageNoveltyRow row) {
+        if (!enabled || row == null) {
+            return;
+        }
+        synchronized (stageNoveltyRows) {
+            stageNoveltyRows.add(row);
+        }
+    }
+
+    public int stageNoveltyRowCount() {
+        synchronized (stageNoveltyRows) {
+            return stageNoveltyRows.size();
         }
     }
 
@@ -387,6 +406,16 @@ public final class ObservabilityMetrics {
             long creationRound,
             AdmissionReason creationReason,
             int parentSeedTestId) {
+        return recordSeedAddition(seedTestId, creationRound, creationReason,
+                parentSeedTestId, BranchNoveltyClass.NONE);
+    }
+
+    public SeedLifecycle recordSeedAddition(
+            int seedTestId,
+            long creationRound,
+            AdmissionReason creationReason,
+            int parentSeedTestId,
+            BranchNoveltyClass branchNoveltyClass) {
         if (!enabled || seedTestId < 0) {
             return null;
         }
@@ -395,7 +424,8 @@ public final class ObservabilityMetrics {
                 creationRound,
                 System.currentTimeMillis(),
                 creationReason,
-                parentSeedTestId);
+                parentSeedTestId,
+                branchNoveltyClass);
         SeedLifecycle existing = seedLifecycles.putIfAbsent(seedTestId,
                 record);
         return existing == null ? record : existing;
@@ -512,6 +542,20 @@ public final class ObservabilityMetrics {
     }
 
     /**
+     * Phase 5: credit the parent for a descendant round that produced
+     * STRONG trace evidence. This is a distinct payoff signal from
+     * structured candidates — it tracks whether seeds lead to strong
+     * mixed-version trace patterns, which correlates with upgrade-
+     * relevant behavior.
+     */
+    public void recordDownstreamStrongTraceHit(int childTestId) {
+        SeedLifecycle record = resolveLifecycleForCredit(childTestId);
+        if (record != null) {
+            record.descendantStrongTraceHits.incrementAndGet();
+        }
+    }
+
+    /**
      * Credit the parent for a weak rolling-upgrade candidate (event-crash
      * rolling-only, error-log rolling-only, or Phase 1 unstable
      * structured divergence). Tracked separately so that Phase 1
@@ -555,6 +599,7 @@ public final class ObservabilityMetrics {
                 writeQueueActivityCsv();
                 writeBranchNoveltyCsv();
                 writeSchedulerMetricsCsv();
+                writeStageNoveltyCsv();
             } catch (IOException e) {
                 logger.warn("Failed to write observability artifacts", e);
             }
@@ -696,6 +741,29 @@ public final class ObservabilityMetrics {
             w.write(SchedulerMetricsRow.csvHeader());
             w.newLine();
             for (SchedulerMetricsRow row : snapshot) {
+                w.write(row.toCsvRow());
+                w.newLine();
+            }
+        }
+        Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.ATOMIC_MOVE);
+    }
+
+    private void writeStageNoveltyCsv() throws IOException {
+        List<StageNoveltyRow> snapshot;
+        synchronized (stageNoveltyRows) {
+            snapshot = new ArrayList<>(stageNoveltyRows);
+        }
+        if (snapshot.isEmpty()) {
+            return;
+        }
+        Path target = outputDir.resolve(STAGE_NOVELTY_CSV_NAME);
+        Path tmp = outputDir.resolve(STAGE_NOVELTY_CSV_NAME + ".tmp");
+        try (BufferedWriter w = Files.newBufferedWriter(tmp,
+                StandardCharsets.UTF_8)) {
+            w.write(StageNoveltyRow.csvHeader());
+            w.newLine();
+            for (StageNoveltyRow row : snapshot) {
                 w.write(row.toCsvRow());
                 w.newLine();
             }

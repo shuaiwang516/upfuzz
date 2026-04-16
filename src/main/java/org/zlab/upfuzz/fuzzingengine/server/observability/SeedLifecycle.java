@@ -58,6 +58,26 @@ public final class SeedLifecycle {
             0);
 
     /**
+     * Phase 5: downstream rounds that produced STRONG trace evidence.
+     * This is a distinct signal from structured candidates — it tracks
+     * whether a seed's descendants triggered strong mixed-version trace
+     * patterns, which correlates with upgrade-relevant behavioral
+     * divergence even when no structured checker-D candidate fires.
+     */
+    public final AtomicLong descendantStrongTraceHits = new AtomicLong(0);
+
+    /**
+     * Phase 5: branch novelty class at creation time. Records whether
+     * this seed was admitted with rolling-post-upgrade novelty,
+     * rolling-pre-upgrade-only novelty, shared novelty, baseline-only
+     * novelty, or no branch novelty (trace-only admission). Offline
+     * analysis uses this to correlate novelty quality with downstream
+     * payoff — "seeds admitted with ROLLING_POST_UPGRADE produced N
+     * strong candidates".
+     */
+    public final BranchNoveltyClass branchNoveltyClass;
+
+    /**
      * Weak candidate umbrella preserving Phase 0 semantics: sum of
      * rolling-only event crash + rolling-only error log hits. Weak
      * <em>structured</em> divergence is NOT rolled into this counter
@@ -76,6 +96,17 @@ public final class SeedLifecycle {
             long creationTimestampMs,
             AdmissionReason creationReason,
             int parentSeedTestId) {
+        this(seedTestId, creationRound, creationTimestampMs, creationReason,
+                parentSeedTestId, BranchNoveltyClass.NONE);
+    }
+
+    public SeedLifecycle(
+            int seedTestId,
+            long creationRound,
+            long creationTimestampMs,
+            AdmissionReason creationReason,
+            int parentSeedTestId,
+            BranchNoveltyClass branchNoveltyClass) {
         this.seedTestId = seedTestId;
         this.creationRound = creationRound;
         this.creationTimestampMs = creationTimestampMs;
@@ -83,6 +114,9 @@ public final class SeedLifecycle {
                 ? AdmissionReason.UNKNOWN
                 : creationReason;
         this.parentSeedTestId = parentSeedTestId;
+        this.branchNoveltyClass = branchNoveltyClass == null
+                ? BranchNoveltyClass.NONE
+                : branchNoveltyClass;
     }
 
     public static String csvHeader() {
@@ -98,7 +132,9 @@ public final class SeedLifecycle {
                 "descendant_weak_candidate_hits",
                 "descendant_weak_structured_candidate_hits",
                 "descendant_weak_event_candidate_hits",
-                "descendant_weak_error_log_candidate_hits");
+                "descendant_weak_error_log_candidate_hits",
+                "descendant_strong_trace_hits",
+                "branch_novelty_class");
     }
 
     public String toCsvRow() {
@@ -114,7 +150,9 @@ public final class SeedLifecycle {
         sb.append(descendantWeakCandidateHits.get()).append(',');
         sb.append(descendantWeakStructuredCandidateHits.get()).append(',');
         sb.append(descendantWeakEventCandidateHits.get()).append(',');
-        sb.append(descendantWeakErrorLogCandidateHits.get());
+        sb.append(descendantWeakErrorLogCandidateHits.get()).append(',');
+        sb.append(descendantStrongTraceHits.get()).append(',');
+        sb.append(branchNoveltyClass.name());
         return sb.toString();
     }
 }

@@ -335,6 +335,14 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
                             testPlanFeedbackPacket.feedBacks[nodeIdx].upgradedCodeCoverage = upCoverages[nodeIdx];
                         }
                     }
+                    // Phase 5: copy stage coverage snapshots from executor
+                    // to the first feedback slot so the server can compute
+                    // per-stage novelty deltas.
+                    if (executor.stageCoverageSnapshots != null
+                            && !executor.stageCoverageSnapshots.isEmpty()) {
+                        testPlanFeedbackPacket.feedBacks[0].stageCoverageSnapshots
+                                .putAll(executor.stageCoverageSnapshots);
+                    }
                 } catch (Exception e) {
                     // Cannot collect code coverage in the upgraded version
                     testPlanFeedbackPacket.isEventFailed = true;

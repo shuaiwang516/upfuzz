@@ -14,6 +14,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.zlab.upfuzz.fuzzingengine.Config;
 import org.zlab.upfuzz.fuzzingengine.server.observability.AdmissionReason;
+import org.zlab.upfuzz.fuzzingengine.server.observability.BranchNoveltyClass;
 import org.zlab.upfuzz.fuzzingengine.server.observability.ObservabilityMetrics;
 import org.zlab.upfuzz.fuzzingengine.server.observability.QueueActivityRow;
 import org.zlab.upfuzz.fuzzingengine.server.observability.QueuePriorityClass;
@@ -253,6 +254,27 @@ public class TestPlanCorpus {
             StructuredCandidateStrength structuredCandidateStrength,
             QueuePriorityClass queuePriorityClass,
             StageMutationHint stageMutationHint) {
+        return addTestPlan(testPlan, roundId, lineageRoot, admissionReason,
+                traceEvidenceStrength, structuredCandidateStrength,
+                queuePriorityClass, stageMutationHint,
+                BranchNoveltyClass.NONE);
+    }
+
+    /**
+     * Phase 5 label-, hint-, and novelty-aware enqueue. The branch
+     * novelty class is threaded through to the QueuedTestPlan so the
+     * scorer and the coverage payoff tracker can see which kind of
+     * novelty drove this admission.
+     */
+    public boolean addTestPlan(TestPlan testPlan,
+            long roundId,
+            int lineageRoot,
+            AdmissionReason admissionReason,
+            TraceEvidenceStrength traceEvidenceStrength,
+            StructuredCandidateStrength structuredCandidateStrength,
+            QueuePriorityClass queuePriorityClass,
+            StageMutationHint stageMutationHint,
+            BranchNoveltyClass branchNoveltyClass) {
         SchedulerClass schedClass = mapToSchedulerClass(queuePriorityClass);
         schedClass = applyPhase4LaneCap(schedClass, stageMutationHint);
         return enqueue(testPlan,
@@ -264,7 +286,8 @@ public class TestPlanCorpus {
                 queuePriorityClass,
                 schedClass,
                 false,
-                stageMutationHint);
+                stageMutationHint,
+                branchNoveltyClass);
     }
 
     /**
@@ -295,6 +318,21 @@ public class TestPlanCorpus {
             StructuredCandidateStrength structuredCandidateStrength,
             QueuePriorityClass queuePriorityClass,
             StageMutationHint stageMutationHint) {
+        return addCandidateParent(testPlan, roundId, lineageRoot,
+                admissionReason, traceEvidenceStrength,
+                structuredCandidateStrength, queuePriorityClass,
+                stageMutationHint, BranchNoveltyClass.NONE);
+    }
+
+    public boolean addCandidateParent(TestPlan testPlan,
+            long roundId,
+            int lineageRoot,
+            AdmissionReason admissionReason,
+            TraceEvidenceStrength traceEvidenceStrength,
+            StructuredCandidateStrength structuredCandidateStrength,
+            QueuePriorityClass queuePriorityClass,
+            StageMutationHint stageMutationHint,
+            BranchNoveltyClass branchNoveltyClass) {
         return enqueue(testPlan,
                 roundId,
                 lineageRoot,
@@ -304,7 +342,8 @@ public class TestPlanCorpus {
                 queuePriorityClass,
                 SchedulerClass.REPRO_CONFIRM,
                 true,
-                stageMutationHint);
+                stageMutationHint,
+                branchNoveltyClass);
     }
 
     private boolean enqueue(TestPlan testPlan,
@@ -317,6 +356,23 @@ public class TestPlanCorpus {
             SchedulerClass schedClass,
             boolean candidateParent,
             StageMutationHint stageMutationHint) {
+        return enqueue(testPlan, roundId, lineageRoot, admissionReason,
+                traceEvidenceStrength, structuredCandidateStrength,
+                queuePriorityClass, schedClass, candidateParent,
+                stageMutationHint, BranchNoveltyClass.NONE);
+    }
+
+    private boolean enqueue(TestPlan testPlan,
+            long roundId,
+            int lineageRoot,
+            AdmissionReason admissionReason,
+            TraceEvidenceStrength traceEvidenceStrength,
+            StructuredCandidateStrength structuredCandidateStrength,
+            QueuePriorityClass queuePriorityClass,
+            SchedulerClass schedClass,
+            boolean candidateParent,
+            StageMutationHint stageMutationHint,
+            BranchNoveltyClass branchNoveltyClass) {
         int testPacketId = testPlan != null ? testPlan.lineageTestId : -1;
         boolean phase3Enabled = Config.getConf() == null
                 || Config.getConf().usePriorityTestPlanScheduler;
@@ -343,6 +399,15 @@ public class TestPlanCorpus {
                 ? 10.0
                 : initialScoreFor(schedClass, traceEvidenceStrength,
                         structuredCandidateStrength);
+        // Phase 5: boost the initial score for rolling-post-upgrade
+        // novelty so seeds that uniquely expand post-upgrade coverage
+        // rise above generic baseline-shared hits.
+        Config.Configuration cfg = Config.getConf();
+        if (cfg != null && cfg.enableCoverageGuidance
+                && branchNoveltyClass != null) {
+            initialScore += CoverageDeltaUtil
+                    .noveltyScoreBoost(branchNoveltyClass);
+        }
 
         QueuedTestPlan entry = new QueuedTestPlan(
                 testPlan,
@@ -358,7 +423,8 @@ public class TestPlanCorpus {
                 signature,
                 initialScore,
                 stageMutationHint,
-                confirmationBudget);
+                confirmationBudget,
+                branchNoveltyClass);
 
         // Legacy rollback: pure FIFO, no dedup, no class routing.
         // Rollback must reproduce Phase 0 behavior exactly, so a
@@ -618,6 +684,11 @@ public class TestPlanCorpus {
         if (!Config.getConf().usePriorityTestPlanScheduler) {
             return;
         }
+        // Phase 5: scout capacity floor — don't decay branch-scout
+        // entries when the queue is at or below the minimum occupancy
+        // so branch-only exploration never collapses.
+        int scoutMinOccupancy = Config.getConf().branchScoutMinOccupancy;
+
         SchedulerClass[] classes = SchedulerClass.values();
         // Reverse order: SHADOW_EVAL, BRANCH_SCOUT, MAIN_EXPLOIT,
         // REPRO_CONFIRM. A demoted entry lands in an already-visited
@@ -631,6 +702,12 @@ public class TestPlanCorpus {
                 int dequeues = dequeuesPerLineage.getOrDefault(
                         entry.lineageRoot, 0);
                 if (entry.payoffCredits > 0 || dequeues < threshold) {
+                    continue;
+                }
+                // Phase 5: protect the branch-scout floor
+                if (source == SchedulerClass.BRANCH_SCOUT
+                        && scoutMinOccupancy > 0
+                        && sourceQueue.size() <= scoutMinOccupancy) {
                     continue;
                 }
                 SchedulerClass demoted = demote(source);

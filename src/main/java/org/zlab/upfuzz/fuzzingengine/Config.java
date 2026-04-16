@@ -246,6 +246,36 @@ public class Config {
         public int strongCandidateConfirmationBudget = 6;
         public int weakCandidateConfirmationBudget = 2;
 
+        // --- Phase 5 useful coverage guidance ---
+        // Master switch for Phase 5 coverage-quality guidance. When
+        // true, branch novelty is classified by source (rolling-only vs
+        // baseline vs shared) and the scheduler boosts seeds with
+        // rolling-post-upgrade novelty. When false, all branch novelty
+        // is treated equally (Phase 3/4 behavior).
+        public boolean enableCoverageGuidance = true;
+
+        // Score boosts applied to the QueuedTestPlan initial score based
+        // on the round's BranchNoveltyClass. Higher boost = more
+        // mutation energy for that novelty type.
+        public double rollingPostUpgradeScoreBoost = 3.0;
+        public double rollingPreUpgradeScoreBoost = 0.5;
+        public double sharedNoveltyScoreBoost = 1.0;
+        public double baselineOnlyScoreBoost = 0.5;
+
+        // When the branch-scout queue occupancy drops below this floor,
+        // the scheduler avoids evicting branch-scout entries and
+        // treats incoming branch-only admissions as high-priority so
+        // branch-only exploration never collapses to near-zero.
+        public int branchScoutMinOccupancy = 5;
+
+        // Phase 5 optional stage coverage snapshots. When true, the
+        // rolling-lane executor captures per-boundary coverage deltas
+        // (after upgrade, after finalize) so the server can attribute
+        // novelty to specific rolling-upgrade stages. Off by default
+        // because round-level attribution is sufficient for the first
+        // wave; enable for deeper temporal analysis.
+        public boolean enableStageCoverageSnapshots = false;
+
         public int intervalMin = 10; // ms
         public int intervalMax = 200; // ms
 
