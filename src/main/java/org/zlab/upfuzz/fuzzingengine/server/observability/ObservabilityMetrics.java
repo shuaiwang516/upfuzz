@@ -62,6 +62,7 @@ public final class ObservabilityMetrics {
     private static final String WINDOW_CSV_NAME = "trace_window_summary.csv";
     private static final String QUEUE_CSV_NAME = "queue_activity_summary.csv";
     private static final String BRANCH_NOVELTY_CSV_NAME = "branch_novelty_summary.csv";
+    private static final String SCHEDULER_CSV_NAME = "scheduler_metrics_summary.csv";
 
     private final EnumMap<AdmissionReason, AtomicLong> admissionCounts = new EnumMap<>(
             AdmissionReason.class);
@@ -73,6 +74,29 @@ public final class ObservabilityMetrics {
     private final List<AdmissionSummaryRow> admissionRows = new ArrayList<>();
     private final List<QueueActivityRow> queueActivityRows = new ArrayList<>();
     private final List<BranchNoveltyRow> branchNoveltyRows = new ArrayList<>();
+    private final List<SchedulerMetricsRow> schedulerMetricsRows = new ArrayList<>();
+
+    // === Phase 3 scheduler counters (cumulative per lane) ===
+    // Keyed by SchedulerClass — the internal lane, not the
+    // admission-facing QueuePriorityClass. This is the source of truth
+    // for "how much did the repro-confirm lane do this round?" so the
+    // scheduler's behavior is explainable from metrics alone.
+    private final EnumMap<SchedulerClass, AtomicLong> schedulerEnqueues = new EnumMap<>(
+            SchedulerClass.class);
+    private final EnumMap<SchedulerClass, AtomicLong> schedulerDequeues = new EnumMap<>(
+            SchedulerClass.class);
+    private final EnumMap<SchedulerClass, AtomicLong> schedulerMutationBudgetSpent = new EnumMap<>(
+            SchedulerClass.class);
+    private final EnumMap<SchedulerClass, AtomicLong> schedulerBranchPayoff = new EnumMap<>(
+            SchedulerClass.class);
+    private final EnumMap<SchedulerClass, AtomicLong> schedulerStrongPayoff = new EnumMap<>(
+            SchedulerClass.class);
+    private final EnumMap<SchedulerClass, AtomicLong> schedulerWeakPayoff = new EnumMap<>(
+            SchedulerClass.class);
+    private final EnumMap<SchedulerClass, AtomicLong> schedulerDedupCollisions = new EnumMap<>(
+            SchedulerClass.class);
+    private final EnumMap<SchedulerClass, AtomicLong> schedulerDecayDemotions = new EnumMap<>(
+            SchedulerClass.class);
 
     private volatile boolean enabled = true;
     private final Path outputDir;
@@ -82,6 +106,16 @@ public final class ObservabilityMetrics {
         this.outputDir = outputDir;
         for (AdmissionReason reason : AdmissionReason.values()) {
             admissionCounts.put(reason, new AtomicLong(0));
+        }
+        for (SchedulerClass c : SchedulerClass.values()) {
+            schedulerEnqueues.put(c, new AtomicLong(0));
+            schedulerDequeues.put(c, new AtomicLong(0));
+            schedulerMutationBudgetSpent.put(c, new AtomicLong(0));
+            schedulerBranchPayoff.put(c, new AtomicLong(0));
+            schedulerStrongPayoff.put(c, new AtomicLong(0));
+            schedulerWeakPayoff.put(c, new AtomicLong(0));
+            schedulerDedupCollisions.put(c, new AtomicLong(0));
+            schedulerDecayDemotions.put(c, new AtomicLong(0));
         }
     }
 
@@ -179,6 +213,166 @@ public final class ObservabilityMetrics {
         synchronized (branchNoveltyRows) {
             return branchNoveltyRows.size();
         }
+    }
+
+    // === Phase 3 scheduler counters ===
+
+    public void recordSchedulerEnqueue(SchedulerClass c) {
+        if (!enabled) {
+            return;
+        }
+        schedulerEnqueues.get(resolveClass(c)).incrementAndGet();
+    }
+
+    public void recordSchedulerDequeue(SchedulerClass c) {
+        if (!enabled) {
+            return;
+        }
+        schedulerDequeues.get(resolveClass(c)).incrementAndGet();
+    }
+
+    public void recordSchedulerMutationBudgetSpent(
+            SchedulerClass c,
+            int budget) {
+        if (!enabled || budget <= 0) {
+            return;
+        }
+        schedulerMutationBudgetSpent.get(resolveClass(c))
+                .addAndGet(budget);
+    }
+
+    public void recordSchedulerBranchPayoff(SchedulerClass c) {
+        if (!enabled) {
+            return;
+        }
+        schedulerBranchPayoff.get(resolveClass(c)).incrementAndGet();
+    }
+
+    public void recordSchedulerStrongPayoff(SchedulerClass c) {
+        if (!enabled) {
+            return;
+        }
+        schedulerStrongPayoff.get(resolveClass(c)).incrementAndGet();
+    }
+
+    public void recordSchedulerWeakPayoff(SchedulerClass c) {
+        if (!enabled) {
+            return;
+        }
+        schedulerWeakPayoff.get(resolveClass(c)).incrementAndGet();
+    }
+
+    public void recordSchedulerDedupCollision(SchedulerClass c) {
+        if (!enabled) {
+            return;
+        }
+        schedulerDedupCollisions.get(resolveClass(c)).incrementAndGet();
+    }
+
+    public void recordSchedulerDecayDemotion(SchedulerClass c) {
+        if (!enabled) {
+            return;
+        }
+        schedulerDecayDemotions.get(resolveClass(c)).incrementAndGet();
+    }
+
+    public long getSchedulerEnqueues(SchedulerClass c) {
+        return schedulerEnqueues.get(resolveClass(c)).get();
+    }
+
+    public long getSchedulerDequeues(SchedulerClass c) {
+        return schedulerDequeues.get(resolveClass(c)).get();
+    }
+
+    public long getSchedulerMutationBudgetSpent(SchedulerClass c) {
+        return schedulerMutationBudgetSpent.get(resolveClass(c)).get();
+    }
+
+    public long getSchedulerBranchPayoff(SchedulerClass c) {
+        return schedulerBranchPayoff.get(resolveClass(c)).get();
+    }
+
+    public long getSchedulerStrongPayoff(SchedulerClass c) {
+        return schedulerStrongPayoff.get(resolveClass(c)).get();
+    }
+
+    public long getSchedulerWeakPayoff(SchedulerClass c) {
+        return schedulerWeakPayoff.get(resolveClass(c)).get();
+    }
+
+    public long getSchedulerDedupCollisions(SchedulerClass c) {
+        return schedulerDedupCollisions.get(resolveClass(c)).get();
+    }
+
+    public long getSchedulerDecayDemotions(SchedulerClass c) {
+        return schedulerDecayDemotions.get(resolveClass(c)).get();
+    }
+
+    public void recordSchedulerSnapshot(SchedulerMetricsRow row) {
+        if (!enabled || row == null) {
+            return;
+        }
+        synchronized (schedulerMetricsRows) {
+            schedulerMetricsRows.add(row);
+        }
+    }
+
+    public int schedulerMetricsRowCount() {
+        synchronized (schedulerMetricsRows) {
+            return schedulerMetricsRows.size();
+        }
+    }
+
+    /**
+     * Build a Phase 3 snapshot of cumulative scheduler counters, merged
+     * with the supplied occupancy map. Occupancy is live state (queue
+     * size right now) so it must be provided by the caller at the
+     * moment the snapshot is emitted. The snapshot is keyed by the
+     * internal {@link SchedulerClass} — the admission-facing
+     * {@link QueuePriorityClass} is still recorded per-row on
+     * {@link AdmissionSummaryRow} and {@link QueueActivityRow}.
+     */
+    public SchedulerMetricsRow buildSchedulerSnapshot(
+            long roundId,
+            int testPacketId,
+            Map<SchedulerClass, Integer> occupancyByClass) {
+        EnumMap<SchedulerClass, Long> enq = new EnumMap<>(
+                SchedulerClass.class);
+        EnumMap<SchedulerClass, Long> deq = new EnumMap<>(
+                SchedulerClass.class);
+        EnumMap<SchedulerClass, Long> budget = new EnumMap<>(
+                SchedulerClass.class);
+        EnumMap<SchedulerClass, Long> branchPayoff = new EnumMap<>(
+                SchedulerClass.class);
+        EnumMap<SchedulerClass, Long> strongPayoff = new EnumMap<>(
+                SchedulerClass.class);
+        EnumMap<SchedulerClass, Long> weakPayoff = new EnumMap<>(
+                SchedulerClass.class);
+        EnumMap<SchedulerClass, Long> dedup = new EnumMap<>(
+                SchedulerClass.class);
+        EnumMap<SchedulerClass, Long> decay = new EnumMap<>(
+                SchedulerClass.class);
+        for (SchedulerClass c : SchedulerClass.values()) {
+            enq.put(c, schedulerEnqueues.get(c).get());
+            deq.put(c, schedulerDequeues.get(c).get());
+            budget.put(c, schedulerMutationBudgetSpent.get(c).get());
+            branchPayoff.put(c, schedulerBranchPayoff.get(c).get());
+            strongPayoff.put(c, schedulerStrongPayoff.get(c).get());
+            weakPayoff.put(c, schedulerWeakPayoff.get(c).get());
+            dedup.put(c, schedulerDedupCollisions.get(c).get());
+            decay.put(c, schedulerDecayDemotions.get(c).get());
+        }
+        return new SchedulerMetricsRow(
+                roundId,
+                testPacketId,
+                occupancyByClass,
+                enq, deq, budget,
+                branchPayoff, strongPayoff, weakPayoff,
+                dedup, decay);
+    }
+
+    private static SchedulerClass resolveClass(SchedulerClass c) {
+        return c == null ? SchedulerClass.BRANCH_SCOUT : c;
     }
 
     // === Seed lifecycle ===
@@ -360,6 +554,7 @@ public final class ObservabilityMetrics {
                 writeWindowCsv();
                 writeQueueActivityCsv();
                 writeBranchNoveltyCsv();
+                writeSchedulerMetricsCsv();
             } catch (IOException e) {
                 logger.warn("Failed to write observability artifacts", e);
             }
@@ -481,6 +676,26 @@ public final class ObservabilityMetrics {
             w.write(BranchNoveltyRow.csvHeader());
             w.newLine();
             for (BranchNoveltyRow row : snapshot) {
+                w.write(row.toCsvRow());
+                w.newLine();
+            }
+        }
+        Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.ATOMIC_MOVE);
+    }
+
+    private void writeSchedulerMetricsCsv() throws IOException {
+        Path target = outputDir.resolve(SCHEDULER_CSV_NAME);
+        Path tmp = outputDir.resolve(SCHEDULER_CSV_NAME + ".tmp");
+        List<SchedulerMetricsRow> snapshot;
+        synchronized (schedulerMetricsRows) {
+            snapshot = new ArrayList<>(schedulerMetricsRows);
+        }
+        try (BufferedWriter w = Files.newBufferedWriter(tmp,
+                StandardCharsets.UTF_8)) {
+            w.write(SchedulerMetricsRow.csvHeader());
+            w.newLine();
+            for (SchedulerMetricsRow row : snapshot) {
                 w.write(row.toCsvRow());
                 w.newLine();
             }

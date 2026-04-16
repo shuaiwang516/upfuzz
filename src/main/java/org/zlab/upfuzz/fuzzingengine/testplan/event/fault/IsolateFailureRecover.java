@@ -9,6 +9,11 @@ public class IsolateFailureRecover extends FaultRecover {
     }
 
     @Override
+    public String compactSignatureFragment() {
+        return "n=" + nodeIndex;
+    }
+
+    @Override
     public String toString() {
         return String.format(
                 "[FaultRecover] IsolateFailureRecover: Node[%d]",

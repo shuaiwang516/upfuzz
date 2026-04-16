@@ -1015,9 +1015,10 @@ public class FuzzingServer {
 
     private boolean fuzzTestPlan() {
         int MAX_MUTATION_RETRY = 50;
-        TestPlan testPlan = testPlanCorpus.getTestPlan(finishedTestID);
+        QueuedTestPlan queuedTestPlan = testPlanCorpus
+                .pollQueuedTestPlan(finishedTestID);
 
-        if (testPlan == null) {
+        if (queuedTestPlan == null) {
             FullStopSeed fullStopSeed = fullStopCorpus.getSeed();
             if (fullStopSeed == null)
                 return false;
@@ -1025,14 +1026,15 @@ public class FuzzingServer {
                     MAX_MUTATION_RETRY);
         }
 
-        return mutateAndEnqueueExistingTestPlan(testPlan);
+        return mutateAndEnqueueExistingTestPlan(queuedTestPlan);
     }
 
     private boolean fuzzRollingTestPlan() {
         int MAX_MUTATION_RETRY = 50;
-        TestPlan testPlan = testPlanCorpus.getTestPlan(finishedTestID);
+        QueuedTestPlan queuedTestPlan = testPlanCorpus
+                .pollQueuedTestPlan(finishedTestID);
 
-        if (testPlan == null) {
+        if (queuedTestPlan == null) {
             RollingSeed rollingSeed = rollingSeedCorpus.getSeed();
             if (rollingSeed == null)
                 return false;
@@ -1040,16 +1042,27 @@ public class FuzzingServer {
                     MAX_MUTATION_RETRY);
         }
 
-        return mutateAndEnqueueExistingTestPlan(testPlan);
+        return mutateAndEnqueueExistingTestPlan(queuedTestPlan);
     }
 
-    private boolean mutateAndEnqueueExistingTestPlan(TestPlan testPlan) {
+    private boolean mutateAndEnqueueExistingTestPlan(
+            QueuedTestPlan queuedTestPlan) {
+        TestPlan testPlan = queuedTestPlan.plan;
         boolean anyEnqueued = false;
         int parentLineageId = testPlan.lineageTestId;
         if (parentLineageId >= 0) {
             observabilityMetrics.recordParentSelection(parentLineageId);
         }
-        for (int i = 0; i < Config.getConf().testPlanMutationEpoch; i++) {
+        int mutationEpoch = queuedTestPlan.plannedMutationBudget > 0
+                ? queuedTestPlan.plannedMutationBudget
+                : Config.getConf().testPlanMutationEpoch;
+        logger.info(
+                "Phase 3 dequeue: schedulerClass={}, priorityClass={}, "
+                        + "budget={}, lineageRoot={}, dequeueCount={}",
+                queuedTestPlan.schedulerClass,
+                queuedTestPlan.priorityClass, mutationEpoch,
+                queuedTestPlan.lineageRoot, queuedTestPlan.dequeueCount);
+        for (int i = 0; i < mutationEpoch; i++) {
             TestPlan mutateTestPlan = null;
             int j = 0;
             for (; j < Config.getConf().testPlanMutationRetry; j++) {
@@ -2616,6 +2629,10 @@ public class FuzzingServer {
                     testPlanDiffFeedbackPacket.testPacketID);
             if (parentLineageRoot >= 0) {
                 rollingSeedCorpus.notifyBranchPayoff(parentLineageRoot);
+                // Phase 3: also credit any queued plans descended from
+                // this lineage so the scheduler prefers parents that
+                // already produced novelty.
+                testPlanCorpus.notifyBranchPayoff(parentLineageRoot);
             }
         }
         // Phase 1: only strong structured candidates are allowed to
@@ -2629,6 +2646,7 @@ public class FuzzingServer {
             if (parentLineageRoot >= 0) {
                 rollingSeedCorpus
                         .notifyStructuredCandidatePayoff(parentLineageRoot);
+                testPlanCorpus.notifyStrongCandidatePayoff(parentLineageRoot);
             }
         }
         if (weakStructuredCandidate) {
@@ -2650,6 +2668,9 @@ public class FuzzingServer {
             // Weak candidates intentionally do not feed Phase 2 promotion
             // until Phase 5 cleans up candidate routing — they are too
             // noisy to drive retention.
+            if (parentLineageRoot >= 0) {
+                testPlanCorpus.notifyWeakCandidatePayoff(parentLineageRoot);
+            }
         }
 
         boolean traceSignatureSuppressed = false;
@@ -2764,14 +2785,31 @@ public class FuzzingServer {
 
                     queuePriorityClassForRow = classifyQueuePriorityClass(
                             admissionReason, traceEvidenceStrength);
-                    testPlanCorpus.addTestPlan(
-                            testPlan,
-                            finishedTestID,
-                            parentLineageRoot,
-                            admissionReason,
-                            traceEvidenceStrength,
-                            structuredCandidateStrength,
-                            queuePriorityClassForRow);
+                    // Phase 3: when this admission also produced a
+                    // strong structured candidate, promote the plan
+                    // into the repro_confirm lane so the scheduler
+                    // allocates extra mutation budget specifically to
+                    // re-observe and stabilize the candidate. Otherwise
+                    // fall through to the normal queue-class mapping.
+                    if (strongStructuredCandidate) {
+                        testPlanCorpus.addCandidateParent(
+                                testPlan,
+                                finishedTestID,
+                                parentLineageRoot,
+                                admissionReason,
+                                traceEvidenceStrength,
+                                structuredCandidateStrength,
+                                queuePriorityClassForRow);
+                    } else {
+                        testPlanCorpus.addTestPlan(
+                                testPlan,
+                                finishedTestID,
+                                parentLineageRoot,
+                                admissionReason,
+                                traceEvidenceStrength,
+                                structuredCandidateStrength,
+                                queuePriorityClassForRow);
+                    }
                     if (isModeFive && !newBranchCoverage
                             && Config.getConf().useTraceSignatureDedup) {
                         traceSignatureIndex.recordAdmitted(
@@ -3059,6 +3097,20 @@ public class FuzzingServer {
                 newVersionBaselineOnlyProbes,
                 newVersionRollingOnlyProbes,
                 newVersionSharedProbes));
+
+        // Phase 3: run the decay sweep once per round so plans that
+        // have been dequeued repeatedly without any payoff decay to a
+        // cheaper class. Then emit a snapshot of scheduler counters
+        // keyed by SchedulerClass (the internal lane, not the
+        // admission-facing priority label) so offline replay can
+        // reason about the scheduler's behavior without
+        // reconstructing it from the per-enqueue/dequeue CSV stream.
+        testPlanCorpus.decayStaleEntries();
+        observabilityMetrics.recordSchedulerSnapshot(
+                observabilityMetrics.buildSchedulerSnapshot(
+                        finishedTestID,
+                        testPlanDiffFeedbackPacket.testPacketID,
+                        testPlanCorpus.occupancyBySchedulerClass()));
 
         // --- Cleanup and status update ---
         testID2TestPlan.remove(testPlanDiffFeedbackPacket.testPacketID);

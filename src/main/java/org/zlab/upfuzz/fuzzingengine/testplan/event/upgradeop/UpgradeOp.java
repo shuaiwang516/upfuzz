@@ -11,6 +11,11 @@ public class UpgradeOp extends Event {
     }
 
     @Override
+    public String compactSignatureFragment() {
+        return "n=" + nodeIndex;
+    }
+
+    @Override
     public String toString() {
         return String.format("[UpgradeOp] Upgrade Node[%d]", nodeIndex);
     }

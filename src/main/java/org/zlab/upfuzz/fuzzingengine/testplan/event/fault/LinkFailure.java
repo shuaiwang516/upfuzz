@@ -16,6 +16,15 @@ public class LinkFailure extends Fault {
     }
 
     @Override
+    public String compactSignatureFragment() {
+        // Order-insensitive so LinkFailure(1,2) and LinkFailure(2,1)
+        // share the same skeleton.
+        int lo = Math.min(nodeIndex1, nodeIndex2);
+        int hi = Math.max(nodeIndex1, nodeIndex2);
+        return "n1=" + lo + ",n2=" + hi;
+    }
+
+    @Override
     public String toString() {
         return String.format("[Fault] LinkFailure: Node[%d], Node[%d]",
                 nodeIndex1, nodeIndex2);

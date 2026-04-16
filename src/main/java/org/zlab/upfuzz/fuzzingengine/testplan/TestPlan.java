@@ -335,6 +335,90 @@ public class TestPlan implements Serializable {
         return idxes;
     }
 
+    /**
+     * Phase 3 short-term dedup helper. Returns a compact, stable string
+     * that captures the structural skeleton of this plan:
+     *
+     * <ul>
+     *   <li>event class name plus the event's
+     *       {@link Event#compactSignatureFragment()} — overridden in
+     *       {@link UpgradeOp}, {@link ShellCommand}, and the full
+     *       fault family so multi-node fault structure
+     *       (LinkFailure n1/n2, PartitionFailure node sets) lands in
+     *       the signature instead of collapsing through a bare class
+     *       name,</li>
+     *   <li>the upgrade order (ordered list of upgraded node indices),</li>
+     *   <li>the validation command list.</li>
+     * </ul>
+     *
+     * <p>This method is <em>lineage-agnostic</em> — two plans with the
+     * same skeleton but different lineage roots still collide here.
+     * For Phase 3 short-term dedup, use
+     * {@link #compactSignature(int)} which mixes in the lineage root
+     * so independent parents are not merged.
+     */
+    public String compactSignature() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("events=[");
+        if (events != null) {
+            for (Event event : events) {
+                appendEventSkeleton(sb, event);
+                sb.append('|');
+            }
+        }
+        sb.append("];upgradeOrder=[");
+        if (events != null) {
+            for (Event event : events) {
+                if (event instanceof UpgradeOp) {
+                    sb.append(((UpgradeOp) event).nodeIndex).append(',');
+                }
+            }
+        }
+        sb.append("];validation=[");
+        if (validationCommands != null) {
+            for (String cmd : validationCommands) {
+                if (cmd == null) {
+                    sb.append("\0");
+                } else {
+                    sb.append(cmd);
+                }
+                sb.append('|');
+            }
+        }
+        sb.append(']');
+        return sb.toString();
+    }
+
+    /**
+     * Phase 3 short-term dedup key. Identical to
+     * {@link #compactSignature()} but prefixed with the given lineage
+     * root, so two plans from independent parents never collapse even
+     * when their structural skeletons match. Pass {@code -1} (or any
+     * negative value) when no lineage root is known — this produces
+     * a unique key per call so the admission is never dedup-collapsed
+     * against an earlier entry.
+     */
+    public String compactSignature(int lineageRoot) {
+        if (lineageRoot < 0) {
+            // Sentinel lineage — never collapse with any other entry.
+            return "lineage=anon-" + System.identityHashCode(this) + ";"
+                    + compactSignature();
+        }
+        return "lineage=" + lineageRoot + ";" + compactSignature();
+    }
+
+    private static void appendEventSkeleton(StringBuilder sb, Event event) {
+        if (event == null) {
+            sb.append("null");
+            return;
+        }
+        sb.append(event.getClass().getSimpleName());
+        String fragment = event.compactSignatureFragment();
+        if (fragment != null && !fragment.isEmpty()) {
+            sb.append('@').append(fragment);
+        }
+    }
+
     public void print() {
         System.out.println("Test Plan:");
         for (Event event : events) {

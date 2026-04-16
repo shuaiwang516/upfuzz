@@ -72,6 +72,11 @@ public class ShellCommand extends Event {
     }
 
     @Override
+    public String compactSignatureFragment() {
+        return "n=" + nodeIndex + ",cmd=" + (command == null ? "" : command);
+    }
+
+    @Override
     public String toString() {
         return String.format("[Command][Node[%d]] Execute {%s}", nodeIndex,
                 command);

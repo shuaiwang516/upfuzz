@@ -11,6 +11,13 @@ public class LinkFailureRecover extends FaultRecover {
     }
 
     @Override
+    public String compactSignatureFragment() {
+        int lo = Math.min(nodeIndex1, nodeIndex2);
+        int hi = Math.max(nodeIndex1, nodeIndex2);
+        return "n1=" + lo + ",n2=" + hi;
+    }
+
+    @Override
     public String toString() {
         return String.format(
                 "[FaultRecover] LinkFailure Recover: Node[%d], Node[%d]",

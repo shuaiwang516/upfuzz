@@ -14,6 +14,11 @@ public class NodeFailure extends Fault {
     }
 
     @Override
+    public String compactSignatureFragment() {
+        return "n=" + nodeIndex;
+    }
+
+    @Override
     public String toString() {
         return String.format("[Fault] NodeFailure: Node[%d]", nodeIndex);
     }

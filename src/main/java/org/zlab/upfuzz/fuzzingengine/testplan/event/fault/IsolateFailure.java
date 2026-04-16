@@ -14,6 +14,11 @@ public class IsolateFailure extends Fault {
     }
 
     @Override
+    public String compactSignatureFragment() {
+        return "n=" + nodeIndex;
+    }
+
+    @Override
     public String toString() {
         return String.format("[Fault] Isolate Node[%d]", nodeIndex);
     }

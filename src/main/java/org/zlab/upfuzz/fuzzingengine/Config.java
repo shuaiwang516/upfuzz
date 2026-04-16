@@ -151,6 +151,55 @@ public class Config {
         // test plan from it.
         public int testPlanGenerationNum = 20;
 
+        // --- Phase 3 value-weighted scheduling ---
+        // Master switch for the stratified test-plan scheduler. When true,
+        // the short-term TestPlanCorpus uses priority-class queues
+        // (main_exploit / branch_scout / shadow_eval / repro_confirm)
+        // with weighted round-robin selection and class-aware mutation
+        // budgets; when false, the corpus falls back to legacy FIFO
+        // behavior so Phase 3 can be A/B tested or rolled back without
+        // a rebuild.
+        public boolean usePriorityTestPlanScheduler = true;
+
+        // Class-aware mutation budget knobs. Each admitted plan consumes
+        // the mutation epoch tied to its queue priority class at dequeue
+        // time instead of the flat {@link #testPlanMutationEpoch}. A
+        // value of 0 means the corresponding class is parked (queued but
+        // never mutated) — useful for offline replay experiments.
+        public int mainExploitMutationEpoch = 30;
+        public int branchScoutMutationEpoch = 10;
+        public int shadowEvalMutationEpoch = 4;
+        public int reproConfirmMutationEpoch = 50;
+
+        // Weighted round-robin weights across queue classes. The Phase 3
+        // scheduler picks the next queue by highest weight/deficit; a
+        // weight of 0 disables the queue entirely. Defaults bias
+        // strongly toward main_exploit while keeping branch_scout alive.
+        public int reproConfirmQueueWeight = 4;
+        public int mainExploitQueueWeight = 8;
+        public int branchScoutQueueWeight = 3;
+        public int shadowEvalQueueWeight = 1;
+
+        // Per-queue soft capacity. When a queue is full, the least
+        // valuable entry (lowest score) is evicted on enqueue so weak
+        // plans cannot monopolize queue memory. 0 means unbounded.
+        public int mainExploitQueueMaxSize = 256;
+        public int branchScoutQueueMaxSize = 256;
+        public int shadowEvalQueueMaxSize = 128;
+        public int reproConfirmQueueMaxSize = 64;
+
+        // Short-term dedup: a newly admitted plan whose compact
+        // signature matches a plan already in any queue is collapsed
+        // into the existing entry (its score is bumped, not a second
+        // copy enqueued). Set to false to disable dedup entirely.
+        public boolean enableTestPlanCompactDedup = true;
+
+        // Decay: after this many dequeues of the same lineage root
+        // without any downstream payoff credit, the plan is demoted one
+        // priority class (or dropped from shadow_eval). 0 disables
+        // decay entirely.
+        public int testPlanDequeueDecayThreshold = 3;
+
         public int intervalMin = 10; // ms
         public int intervalMax = 200; // ms
 
