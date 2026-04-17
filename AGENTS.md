@@ -7,6 +7,12 @@
 - `src/test/java/` mirrors production packages with JUnit tests.
 - Operational and data directories: `bin/` (run/utility scripts), root `*_config.json` files (test configs), `configInfo/` and `configtests/` (config datasets), `prebuild/` (downloaded system binaries), and `docs/` (usage/design notes).
 
+## Nettrace Guidance Rule
+- For rolling-upgrade fuzzing work, keep network-trace guidance as a first-class online guidance signal together with branch coverage.
+- Do not remove, disable, or permanently downgrade nettrace into offline-only analysis, clustering-only use, or pure debug telemetry.
+- Allowed direction: improve trace identity, diffing, weighting, corroboration, scheduling, or admission logic so trace becomes more useful.
+- Disallowed direction: conclude that the long-term design should run branch-only fuzzing and keep nettrace out of guidance.
+
 ## Build, Test, and Development Commands
 ```bash
 ./gradlew clean build

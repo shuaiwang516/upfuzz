@@ -6,6 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 UpFuzz is a coverage-guided fuzzing tool for detecting data format incompatibility bugs during distributed system upgrades. It tests systems like Cassandra, HDFS, HBase, and Ozone during version upgrades.
 
+Rolling-upgrade project rule:
+- For RupFuzz rolling-upgrade work, network-trace guidance must remain an online guidance signal.
+- Do not remove, disable, or permanently demote nettrace guidance to offline-only use, clustering-only use, or debug-only telemetry.
+- Acceptable work is to make trace guidance more selective, more stable, more informative, or better integrated with branch coverage.
+- Unacceptable work is to recommend or implement a branch-coverage-only end state for rolling-upgrade fuzzing.
+
 ## Build Commands
 
 ```bash
@@ -79,6 +85,10 @@ Each supported system implements:
 - Format coverage via `dinv-monitor` instrumentation (experimental)
 - Network trace coverage via `ssg-runtime` instrumentation (in development)
 - Failure detection: exception/error logs, read inconsistency comparison
+
+Nettrace preservation note:
+- In this repository, treat network trace as part of the intended guidance architecture, not an optional extra to be removed when current tuning underperforms.
+- If trace seems weak, the expected next step is to improve message identity, tri-diff/similarity logic, support gating, scheduling, or payoff integration while keeping trace in the guidance loop.
 
 ## Configuration Parameters
 
