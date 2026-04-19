@@ -1,22 +1,18 @@
-# Phase 6 default 6-machine mapping.
-# Order matters: distributed launch maps job-id 1..6 to this file order.
-# All six Phase 6 verification jobs are testingMode=5 smoke runs first.
-# Do not start verification from this list until the script changes are reviewed.
-
-# 1 -> cassandra  apache-cassandra-3.11.19 -> apache-cassandra-4.1.10
-ssh swang516@pc768.emulab.net
-
-# 2 -> cassandra  apache-cassandra-4.1.10 -> apache-cassandra-5.0.6
-ssh swang516@pc860.emulab.net
-
-# 3 -> hbase      hbase-2.5.13 -> hbase-2.6.4
-ssh swang516@pc857.emulab.net
-
-# 4 -> hbase      hbase-2.6.4 -> hbase-4.0.0-alpha-1-SNAPSHOT
-ssh swang516@pc711.emulab.net
-
-# 5 -> hdfs       hadoop-2.10.2 -> hadoop-3.3.6
-ssh swang516@pc704.emulab.net
-
-# 6 -> hdfs       hadoop-3.3.6 -> hadoop-3.4.2
-ssh swang516@pc855.emulab.net
+ssh swang516@c220g5-120117.wisc.cloudlab.us
+ssh swang516@c220g5-110920.wisc.cloudlab.us
+ssh swang516@c220g5-110924.wisc.cloudlab.us
+ssh swang516@c220g5-110927.wisc.cloudlab.us
+ssh swang516@c220g5-111311.wisc.cloudlab.us
+ssh swang516@c220g5-110913.wisc.cloudlab.us
+ssh swang516@c220g5-110925.wisc.cloudlab.us
+ssh swang516@c220g5-110922.wisc.cloudlab.us
+ssh swang516@c220g5-110932.wisc.cloudlab.us
+ssh swang516@c220g5-110917.wisc.cloudlab.us
+ssh swang516@c220g5-110912.wisc.cloudlab.us
+ssh swang516@c220g5-110901.wisc.cloudlab.us
+ssh swang516@c220g5-110926.wisc.cloudlab.us
+ssh swang516@c220g5-110909.wisc.cloudlab.us
+ssh swang516@c220g5-120122.wisc.cloudlab.us
+ssh swang516@c220g5-110902.wisc.cloudlab.us
+ssh swang516@c220g5-110918.wisc.cloudlab.us
+ssh swang516@c220g5-110910.wisc.cloudlab.us
