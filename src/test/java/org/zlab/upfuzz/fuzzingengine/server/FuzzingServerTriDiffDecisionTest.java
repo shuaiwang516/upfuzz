@@ -14,10 +14,16 @@ import org.junit.jupiter.api.Test;
 import org.zlab.net.tracker.SendMeta;
 import org.zlab.net.tracker.Trace;
 import org.zlab.net.tracker.diff.DiffComputeMessageTriDiff;
+import org.zlab.upfuzz.fuzzingengine.Config;
 import org.zlab.upfuzz.fuzzingengine.server.FuzzingServer.TraceStrengthGates;
 import org.zlab.upfuzz.fuzzingengine.server.FuzzingServer.TriDiffWindowDecision;
 import org.zlab.upfuzz.fuzzingengine.server.observability.AdmissionReason;
 import org.zlab.upfuzz.fuzzingengine.server.observability.TraceEvidenceStrength;
+import org.zlab.upfuzz.fuzzingengine.server.observability.TraceMetadataCoverageRow;
+import org.zlab.upfuzz.fuzzingengine.trace.BoundaryResolutionResult;
+import org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint;
+import org.zlab.upfuzz.fuzzingengine.trace.TopologyNormalizer;
+import org.zlab.upfuzz.fuzzingengine.trace.TopologySnapshot;
 import org.zlab.upfuzz.fuzzingengine.trace.TraceWindow;
 
 /**
@@ -1292,6 +1298,383 @@ class FuzzingServerTriDiffDecisionTest {
                         .messageType("UnitMessage")
                         .build(),
                 message);
+    }
+
+    // ---------------------------------------------------------------
+    // Phase 0 topology-aware boundary resolution
+    // ---------------------------------------------------------------
+
+    private static TopologySnapshot buildTopology(String... nodeSpecs) {
+        TopologyNormalizer normalizer = new TopologyNormalizer();
+        for (int i = 0; i < nodeSpecs.length; i++) {
+            String[] parts = nodeSpecs[i].split("\\|", -1);
+            String role = parts[0];
+            String[] aliases = new String[parts.length - 1];
+            for (int j = 1; j < parts.length; j++) {
+                aliases[j - 1] = parts[j];
+            }
+            normalizer.registerNode(i, role, aliases);
+        }
+        return normalizer.snapshot();
+    }
+
+    @Test
+    void boundaryCrossingResolvedViaHostnameTopologyMapping() {
+        // Scenario: peerId recorded as a hostname (no N-suffix) but the
+        // executor registered the hostname -> index mapping. The new
+        // topology-aware counter must recognize the crossing that the
+        // legacy numeric-only parser silently skipped.
+        TopologySnapshot topology = buildTopology(
+                "datanode|DC3N0|dn0.internal|10.0.0.1",
+                "datanode|DC3N1|dn1.internal|10.0.0.2",
+                "namenode|DC3N2|nn.internal|10.0.0.3");
+        Trace merged = new Trace();
+        addEntry(merged, "SrnNTLLS-N0", "nn.internal", "mutation1");
+        addEntry(merged, "nn.internal", "SrnNTLLS-N0", "ack1");
+
+        Set<Integer> upgraded = new HashSet<>(Arrays.asList(2));
+        BoundaryResolutionResult detailed = FuzzingServer
+                .countUpgradedBoundaryCrossingsDetailed(merged, upgraded,
+                        topology);
+        assertEquals(2, detailed.totalEventCount);
+        assertEquals(2, detailed.crossingCount,
+                "both hostname-peer events must resolve as crossings");
+        assertEquals(4, detailed.indexResolvedEndpointCount,
+                "all endpoints resolved to a specific node");
+        assertEquals(0, detailed.unresolvedEndpointCount);
+    }
+
+    @Test
+    void boundaryCrossingResolvedViaIpTopologyMapping() {
+        // Scenario: Cassandra 4.x routinely logs peer as "/10.0.0.3" with
+        // a leading slash from InetAddress.toString. The snapshot must
+        // resolve the leading-slash form back to the correct index.
+        TopologySnapshot topology = buildTopology(
+                "cassandra|DC3N0|10.0.0.1",
+                "cassandra|DC3N1|10.0.0.2",
+                "cassandra|DC3N2|10.0.0.3");
+        Trace merged = new Trace();
+        addEntry(merged, "executor-N0", "/10.0.0.2:9042", "mutation1");
+        addEntry(merged, "executor-N1", "/10.0.0.0", "unknown-ip");
+
+        Set<Integer> upgraded = new HashSet<>(Arrays.asList(1));
+        BoundaryResolutionResult detailed = FuzzingServer
+                .countUpgradedBoundaryCrossingsDetailed(merged, upgraded,
+                        topology);
+        assertEquals(2, detailed.totalEventCount);
+        assertEquals(1, detailed.crossingCount,
+                "N0->N1 crosses upgraded boundary; N1->unknown does not");
+        // First entry: both endpoints resolved (N0 via N-suffix, peer via
+        // IP with port). Second entry: N1 via N-suffix, peer IP unknown.
+        assertEquals(3, detailed.indexResolvedEndpointCount);
+        assertEquals(1, detailed.unresolvedEndpointCount,
+                "IP outside the registered cluster is unresolved");
+    }
+
+    @Test
+    void boundaryCrossingCountsUniqueRoleResolution() {
+        // HDFS-style topology: one namenode, two datanodes. A send from
+        // a datanode (index resolved) to "namenode" role is ambiguous by
+        // id lookup alone but uniquely resolvable by role — this is the
+        // Phase 0 "role-unique" path that must count as corroborating.
+        TopologySnapshot topology = buildTopology(
+                "datanode|DC3N0",
+                "datanode|DC3N1",
+                "namenode|DC3N2");
+        Trace merged = new Trace();
+        // peerId is the role name itself (no id mapping exists for
+        // "namenode" as a raw id, but the role resolves uniquely).
+        addEntry(merged, "executor-N0", "namenode", "heartbeat");
+
+        Set<Integer> upgraded = new HashSet<>(Arrays.asList(2));
+        BoundaryResolutionResult detailed = FuzzingServer
+                .countUpgradedBoundaryCrossingsDetailed(merged, upgraded,
+                        topology);
+        assertEquals(1, detailed.crossingCount,
+                "role-unique resolution must count the crossing");
+        assertEquals(1, detailed.indexResolvedEndpointCount,
+                "N0 endpoint resolves via numeric parsing");
+        assertEquals(1, detailed.roleResolvedEndpointCount,
+                "peer endpoint resolves via unique role");
+    }
+
+    @Test
+    void boundaryCrossingAmbiguousRoleIsDiagnosticOnly() {
+        // Cassandra-style topology: every node has the same role. A raw
+        // peerId that resolves only via role must not count as a
+        // boundary crossing — role membership alone is not enough to
+        // pin a node.
+        TopologySnapshot topology = buildTopology(
+                "cassandra|DC3N0",
+                "cassandra|DC3N1",
+                "cassandra|DC3N2");
+        Trace merged = new Trace();
+        addEntry(merged, "executor-N0", "cassandra", "gossip");
+
+        Set<Integer> upgraded = new HashSet<>(Arrays.asList(1));
+        BoundaryResolutionResult detailed = FuzzingServer
+                .countUpgradedBoundaryCrossingsDetailed(merged, upgraded,
+                        topology);
+        assertEquals(0, detailed.crossingCount,
+                "ambiguous role must not be treated as corroborating");
+        assertEquals(1, detailed.indexResolvedEndpointCount,
+                "sender side resolves by numeric parsing");
+        assertEquals(1, detailed.roleAmbiguousEndpointCount,
+                "peer side is diagnostic-only under ambiguous role");
+    }
+
+    @Test
+    void metadataCoverageDistinguishesMissingIds() {
+        // The boundary resolver's unresolved counter is the metadata
+        // coverage path used by trace_metadata_coverage.csv — missing
+        // peer ids must increment unresolvedEndpoints even with a
+        // snapshot present.
+        TopologySnapshot topology = buildTopology(
+                "datanode|DC3N0",
+                "namenode|DC3N1");
+        Trace merged = new Trace();
+        addEntry(merged, "executor-N0", null, "m-null-peer");
+        addEntry(merged, "garbage", "also-garbage", "m-all-garbage");
+
+        Set<Integer> upgraded = new HashSet<>(Arrays.asList(1));
+        BoundaryResolutionResult detailed = FuzzingServer
+                .countUpgradedBoundaryCrossingsDetailed(merged, upgraded,
+                        topology);
+        assertEquals(0, detailed.crossingCount);
+        assertEquals(1, detailed.indexResolvedEndpointCount,
+                "only executor-N0 resolves");
+        assertEquals(3, detailed.unresolvedEndpointCount,
+                "null peerId + two garbage endpoints stay unresolved");
+    }
+
+    @Test
+    void metadataCoverageRowSeparatesMissingAmbiguousAndUnresolvedPeers() {
+        // Exercise the actual coverage-row builder: peer-id
+        // classification must stay distinct between missing (null /
+        // empty), role-ambiguous (peer-to-peer), and unresolved
+        // (unregistered raw id) so Phase 1 sees each gap separately.
+        TopologySnapshot topology = buildTopology(
+                "cassandra|DC3N0|10.0.0.1",
+                "cassandra|DC3N1|10.0.0.2",
+                "namenode|nn.internal");
+
+        Trace merged = new Trace();
+        // 1. Resolved (index) — counts toward ID coverage, not gaps.
+        merged.recordSend("metaCov.fakeSend", 1, new int[] { 0 },
+                "m1",
+                SendMeta.builder()
+                        .nodeId("executor-N0")
+                        .peerId("10.0.0.2")
+                        .nodeRole("cassandra")
+                        .peerRole("cassandra")
+                        .messageType("UnitMessage")
+                        .logicalMessageId("lmid-1")
+                        .deliveryId("did-1")
+                        .build(),
+                "m1");
+        // 2. Role-ambiguous peer (shared Cassandra role).
+        merged.recordSend("metaCov.fakeSend", 2, new int[] { 0 },
+                "m2",
+                SendMeta.builder()
+                        .nodeId("executor-N0")
+                        .peerId("cassandra")
+                        .nodeRole("cassandra")
+                        .peerRole("cassandra")
+                        .messageType("UnitMessage")
+                        .build(),
+                "m2");
+        // 3. Unresolved peer (hostname not registered anywhere).
+        merged.recordSend("metaCov.fakeSend", 3, new int[] { 0 },
+                "m3",
+                SendMeta.builder()
+                        .nodeId("executor-N0")
+                        .peerId("mystery-host")
+                        .nodeRole("cassandra")
+                        .messageType("UnitMessage")
+                        .build(),
+                "m3");
+        // 4. Missing peer (null).
+        merged.recordSend("metaCov.fakeSend", 4, new int[] { 0 },
+                "m4",
+                SendMeta.builder()
+                        .nodeId("executor-N0")
+                        .nodeRole("cassandra")
+                        .messageType("UnitMessage")
+                        .build(),
+                "m4");
+        // 5. Empty-string peer (runtime treats as missing).
+        merged.recordSend("metaCov.fakeSend", 5, new int[] { 0 },
+                "m5",
+                SendMeta.builder()
+                        .nodeId("executor-N0")
+                        .peerId("")
+                        .nodeRole("cassandra")
+                        .messageType("UnitMessage")
+                        .build(),
+                "m5");
+        // 6. Sentinel "null" peer (must also count as missing).
+        merged.recordSend("metaCov.fakeSend", 6, new int[] { 0 },
+                "m6",
+                SendMeta.builder()
+                        .nodeId("executor-N0")
+                        .peerId("null")
+                        .nodeRole("cassandra")
+                        .messageType("UnitMessage")
+                        .build(),
+                "m6");
+
+        TraceMetadataCoverageRow row = FuzzingServer
+                .buildTraceMetadataCoverageRow(
+                        /* round */ 42L,
+                        /* testPacketId */ 7,
+                        /* laneName */ "Rolling",
+                        merged,
+                        topology);
+
+        assertEquals(42L, row.round);
+        assertEquals(7, row.testPacketId);
+        assertEquals("Rolling", row.laneName);
+        assertEquals(6, row.totalEntries);
+        assertEquals(1, row.entriesWithLogicalMessageId);
+        assertEquals(1, row.entriesWithDeliveryId);
+        assertEquals(6, row.entriesWithNodeRole);
+        assertEquals(2, row.entriesWithPeerRole,
+                "only entries 1 and 2 carry a peerRole");
+        assertEquals(3, row.entriesWithMissingPeerId,
+                "null + empty + \"null\" sentinel must all count as missing");
+        assertEquals(1, row.entriesWithRoleAmbiguousPeerId,
+                "peer-to-peer role must stay in the ambiguous bucket");
+        assertEquals(1, row.entriesWithUnresolvedPeerId,
+                "mystery-host is non-empty but not registered anywhere");
+        assertEquals(3, row.topologyNodeCount);
+        assertTrue(row.topologyIdMappingCount >= 3,
+                "snapshot tracks every registered alias");
+
+        // Sanity: the CSV schema must carry the new counters so offline
+        // tooling can count them separately.
+        String header = TraceMetadataCoverageRow.csvHeader();
+        assertTrue(header.contains("entries_with_missing_peer_id"));
+        assertTrue(header.contains("entries_with_role_ambiguous_peer_id"));
+        assertTrue(header.contains("entries_with_unresolved_peer_id"));
+    }
+
+    @Test
+    void metadataCoverageRowHandlesNullTraceAndNullSnapshot() {
+        // Degraded lanes must still produce a row with all counters
+        // zero and the snapshot-derived metadata zeroed so downstream
+        // CSV consumers do not need to special-case missing rows.
+        TraceMetadataCoverageRow row = FuzzingServer
+                .buildTraceMetadataCoverageRow(
+                        /* round */ 1L,
+                        /* testPacketId */ 0,
+                        /* laneName */ "OnlyOld",
+                        /* mergedTrace */ null,
+                        /* snapshot */ null);
+        assertEquals(0, row.totalEntries);
+        assertEquals(0, row.entriesWithMissingPeerId);
+        assertEquals(0, row.entriesWithRoleAmbiguousPeerId);
+        assertEquals(0, row.entriesWithUnresolvedPeerId);
+        assertEquals(0, row.topologyNodeCount);
+        assertEquals(0, row.topologyIdMappingCount);
+    }
+
+    @Test
+    void boundaryCrossingIgnoresOutOfRangeNumericIndexWithSnapshot() {
+        // Regression: a peer id like "N7" must not be treated as
+        // INDEX_RESOLVED when the active cluster only has three nodes.
+        // The snapshot's resolveEndpoint bounds check (indexToRole
+        // containsKey) is the source of truth; the server-side resolver
+        // must not re-run an unbounded numeric parser ahead of it.
+        TopologySnapshot topology = buildTopology(
+                "datanode|DC3N0|10.0.0.1",
+                "datanode|DC3N1|10.0.0.2",
+                "namenode|DC3N2|10.0.0.3");
+        Trace merged = new Trace();
+        // Known sender (N0) paired with an out-of-range N-form peer.
+        addEntry(merged, "executor-N0", "stale-N7",
+                "replay-from-larger-cluster");
+
+        Set<Integer> upgraded = new HashSet<>(Arrays.asList(2));
+        BoundaryResolutionResult detailed = FuzzingServer
+                .countUpgradedBoundaryCrossingsDetailed(merged, upgraded,
+                        topology);
+        assertEquals(1, detailed.totalEventCount);
+        assertEquals(0, detailed.crossingCount,
+                "out-of-range peer must not be counted as a crossing");
+        assertEquals(1, detailed.indexResolvedEndpointCount,
+                "sender N0 still resolves via the snapshot");
+        assertEquals(1, detailed.unresolvedEndpointCount,
+                "out-of-range N-form must stay unresolved");
+        assertEquals(0, detailed.roleResolvedEndpointCount);
+        assertEquals(0, detailed.roleAmbiguousEndpointCount);
+    }
+
+    @Test
+    void topologySnapshotRecognizesNTraceNodeIdAlias() {
+        // NET_TRACE_NODE_ID emits `<executorID>-N<idx>`. The Executor
+        // registers that form on the normalizer so the snapshot can
+        // resolve it by id lookup in addition to numeric parsing.
+        TopologyNormalizer normalizer = new TopologyNormalizer();
+        normalizer.registerNode(0, "namenode", "ABCD1234-N0", "DC3N0");
+        TopologySnapshot snapshot = normalizer.snapshot();
+
+        ResolvedTraceEndpoint viaIdLookup = snapshot
+                .resolveEndpoint("ABCD1234-N0");
+        assertEquals(ResolvedTraceEndpoint.Resolution.INDEX_RESOLVED,
+                viaIdLookup.resolution);
+        assertEquals(0, viaIdLookup.nodeIndex);
+        assertEquals("namenode", viaIdLookup.role);
+
+        ResolvedTraceEndpoint viaHostname = snapshot
+                .resolveEndpoint("DC3N0");
+        assertEquals(ResolvedTraceEndpoint.Resolution.INDEX_RESOLVED,
+                viaHostname.resolution);
+        assertEquals(0, viaHostname.nodeIndex);
+    }
+
+    // ---------------------------------------------------------------
+    // Phase 0 mode-5 cleanup: changedMessage retirement
+    // ---------------------------------------------------------------
+
+    @Test
+    void modeFiveDoesNotUseChangedMessageRollingTraceCorroboration() {
+        Config.Configuration conf = new Config.Configuration();
+        conf.testingMode = 5;
+        assertFalse(conf.useChangedMessageRollingTraceCorroboration(),
+                "mode 5 must retire changedMessage from the rolling trace path");
+        assertFalse(conf.isBranchOnlyBaselineMode(),
+                "mode 5 is not the branch-only baseline");
+    }
+
+    @Test
+    void modeSixIsExplicitBranchOnlyBaseline() {
+        Config.Configuration conf = new Config.Configuration();
+        conf.testingMode = 6;
+        conf.normalizeModeFlags();
+        assertFalse(conf.useChangedMessageRollingTraceCorroboration(),
+                "mode 6 disables rolling trace altogether");
+        assertTrue(conf.isBranchOnlyBaselineMode(),
+                "mode 6 is the explicit branch-only / trace-off baseline");
+        // Mode-6 normalization must continue to force trace features off
+        // so the branch-only baseline stays clean.
+        assertFalse(conf.useTrace);
+        assertFalse(conf.useCanonicalTraceSimilarity);
+        assertFalse(conf.useCanonicalMessageIdentityDiff);
+    }
+
+    @Test
+    void nonRollingModesKeepChangedMessageCorroboration() {
+        // Modes 0-4 continue to treat changedMessage as an active
+        // corroborator — Phase 0 intentionally does not widen the
+        // cleanup.
+        for (int mode : new int[] { 0, 2, 3, 4 }) {
+            Config.Configuration conf = new Config.Configuration();
+            conf.testingMode = mode;
+            assertTrue(conf.useChangedMessageRollingTraceCorroboration(),
+                    "mode " + mode + " must keep changedMessage behavior");
+            assertFalse(conf.isBranchOnlyBaselineMode(),
+                    "mode " + mode + " is not the branch-only baseline");
+        }
     }
 
     // ---------------------------------------------------------------

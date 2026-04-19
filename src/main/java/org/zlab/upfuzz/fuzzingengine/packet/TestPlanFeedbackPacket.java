@@ -4,6 +4,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.zlab.net.tracker.Trace;
 import org.zlab.upfuzz.fuzzingengine.FeedBack;
+import org.zlab.upfuzz.fuzzingengine.trace.TopologySnapshot;
 import org.zlab.upfuzz.fuzzingengine.trace.WindowedTrace;
 
 import java.io.DataInputStream;
@@ -50,6 +51,14 @@ public class TestPlanFeedbackPacket extends Packet implements Serializable {
 
     // Windowed trace for stage-aware comparison
     public WindowedTrace windowedTrace;
+
+    // Phase 0: topology snapshot captured on the executor side so the
+    // fuzzing server can resolve raw peer ids (IPs, hostnames,
+    // container aliases) back to role + node index without having to
+    // re-discover the cluster layout. See
+    // org.zlab.upfuzz.fuzzingengine.trace.TopologySnapshot for the
+    // resolution contract and Phase 0 plan section 1 for context.
+    public TopologySnapshot topologySnapshot;
 
     // Validation read results for cross-cluster comparison
     public List<String> validationReadResults = new ArrayList<>();

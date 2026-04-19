@@ -1629,6 +1629,8 @@ public class FuzzingClient {
                 packet.trace[i] = new Trace();
             }
             packet.windowedTrace = new WindowedTrace();
+            packet.topologySnapshot = org.zlab.upfuzz.fuzzingengine.trace.TopologySnapshot
+                    .empty();
         }
         return packet;
     }

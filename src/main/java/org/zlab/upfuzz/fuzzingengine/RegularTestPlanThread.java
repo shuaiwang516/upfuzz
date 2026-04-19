@@ -257,6 +257,17 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
             }
             testPlanFeedbackPacket.windowedTrace = wt;
 
+            // Phase 0: ship the lane topology alongside the trace so the
+            // server can run topology-aware boundary counting on the
+            // merged rolling lane. Executor.topologyNormalizer is built
+            // in Executor.execute() and already covers every IP /
+            // hostname / container alias / NET_TRACE_NODE_ID form that
+            // the bridge may record as peerId.
+            if (executor.topologyNormalizer != null) {
+                testPlanFeedbackPacket.topologySnapshot = executor.topologyNormalizer
+                        .snapshot();
+            }
+
             // Rebuild legacy flat trace from collected windows
             // (cannot use updateTrace() because runtime buffers were already
             // snapshot-cleared during windowed collection)

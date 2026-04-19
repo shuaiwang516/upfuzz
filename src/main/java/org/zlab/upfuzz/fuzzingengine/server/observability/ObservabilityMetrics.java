@@ -64,6 +64,7 @@ public final class ObservabilityMetrics {
     private static final String BRANCH_NOVELTY_CSV_NAME = "branch_novelty_summary.csv";
     private static final String SCHEDULER_CSV_NAME = "scheduler_metrics_summary.csv";
     private static final String STAGE_NOVELTY_CSV_NAME = "stage_novelty_summary.csv";
+    private static final String TRACE_METADATA_COVERAGE_CSV_NAME = "trace_metadata_coverage.csv";
 
     private final EnumMap<AdmissionReason, AtomicLong> admissionCounts = new EnumMap<>(
             AdmissionReason.class);
@@ -77,6 +78,7 @@ public final class ObservabilityMetrics {
     private final List<BranchNoveltyRow> branchNoveltyRows = new ArrayList<>();
     private final List<SchedulerMetricsRow> schedulerMetricsRows = new ArrayList<>();
     private final List<StageNoveltyRow> stageNoveltyRows = new ArrayList<>();
+    private final List<TraceMetadataCoverageRow> traceMetadataCoverageRows = new ArrayList<>();
 
     // === Phase 3 scheduler counters (cumulative per lane) ===
     // Keyed by SchedulerClass — the internal lane, not the
@@ -214,6 +216,23 @@ public final class ObservabilityMetrics {
     public int branchNoveltyRowCount() {
         synchronized (branchNoveltyRows) {
             return branchNoveltyRows.size();
+        }
+    }
+
+    // === Phase 0 trace metadata coverage rows ===
+
+    public void recordTraceMetadataCoverage(TraceMetadataCoverageRow row) {
+        if (!enabled || row == null) {
+            return;
+        }
+        synchronized (traceMetadataCoverageRows) {
+            traceMetadataCoverageRows.add(row);
+        }
+    }
+
+    public int traceMetadataCoverageRowCount() {
+        synchronized (traceMetadataCoverageRows) {
+            return traceMetadataCoverageRows.size();
         }
     }
 
@@ -600,6 +619,7 @@ public final class ObservabilityMetrics {
                 writeBranchNoveltyCsv();
                 writeSchedulerMetricsCsv();
                 writeStageNoveltyCsv();
+                writeTraceMetadataCoverageCsv();
             } catch (IOException e) {
                 logger.warn("Failed to write observability artifacts", e);
             }
@@ -764,6 +784,26 @@ public final class ObservabilityMetrics {
             w.write(StageNoveltyRow.csvHeader());
             w.newLine();
             for (StageNoveltyRow row : snapshot) {
+                w.write(row.toCsvRow());
+                w.newLine();
+            }
+        }
+        Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.ATOMIC_MOVE);
+    }
+
+    private void writeTraceMetadataCoverageCsv() throws IOException {
+        List<TraceMetadataCoverageRow> snapshot;
+        synchronized (traceMetadataCoverageRows) {
+            snapshot = new ArrayList<>(traceMetadataCoverageRows);
+        }
+        Path target = outputDir.resolve(TRACE_METADATA_COVERAGE_CSV_NAME);
+        Path tmp = outputDir.resolve(TRACE_METADATA_COVERAGE_CSV_NAME + ".tmp");
+        try (BufferedWriter w = Files.newBufferedWriter(tmp,
+                StandardCharsets.UTF_8)) {
+            w.write(TraceMetadataCoverageRow.csvHeader());
+            w.newLine();
+            for (TraceMetadataCoverageRow row : snapshot) {
                 w.write(row.toCsvRow());
                 w.newLine();
             }

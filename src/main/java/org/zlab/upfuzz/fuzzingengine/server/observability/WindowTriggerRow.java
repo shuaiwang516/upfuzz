@@ -15,10 +15,16 @@ package org.zlab.upfuzz.fuzzingengine.server.observability;
  *       baseline lanes (old-old ∩ new-new) for this window. This is the
  *       denominator for the missing-message fraction.</li>
  *   <li>{@link #changedMessageCount} — number of rolling-lane messages
- *       marked {@code changedMessage=true} in this window.</li>
- *   <li>{@link #upgradedBoundaryEventCount} — number of upgraded nodes
- *       participating in this window (derived from
- *       {@code TraceWindow.rawUpgradedNodeSet}).</li>
+ *       marked {@code changedMessage=true} in this window. Phase 0
+ *       retires this signal for {@code testingMode=5}; mode-5 runs
+ *       therefore emit {@code 0} here even when the underlying trace
+ *       still carries the legacy flag. The column is preserved for
+ *       non-mode-5 CSV compatibility.</li>
+ *   <li>{@link #upgradedBoundaryEventCount} — number of rolling-lane
+ *       messages whose sender and receiver resolved to opposite sides of
+ *       the upgraded node set. This is the new topology-aware crossing
+ *       count; see {@link #boundaryIndexResolvedEndpoints} et al. for
+ *       the per-endpoint resolution histogram.</li>
  *   <li>{@link #traceEvidenceStrength} — the Phase 0 label for this
  *       window; offline analysis can use this to recompute aggregate
  *       labels without re-deriving them from logs.</li>
@@ -29,6 +35,12 @@ package org.zlab.upfuzz.fuzzingengine.server.observability;
  *       missing, which is exactly the case Apr15 flagged as unreliable.
  *       Phase 2 support-aware gating will consume this column.</li>
  * </ul>
+ *
+ * <p>Phase 0 also added the per-endpoint boundary resolution histogram
+ * (total events, index-resolved, role-unique, role-ambiguous,
+ * unresolved) so Apr16-style silent skips — entries whose IP/hostname
+ * peerId landed outside the old numeric index parser — become visible
+ * instead of disappearing into a {@code 0} crossing count.
  */
 public final class WindowTriggerRow {
     public final long round;
@@ -56,6 +68,12 @@ public final class WindowTriggerRow {
     public final int upgradedBoundaryEventCount;
     public final TraceEvidenceStrength traceEvidenceStrength;
     public final boolean supportGatePassed;
+    // --- Phase 0 boundary-resolution accounting ---
+    public final int boundaryEventCountTotal;
+    public final int boundaryIndexResolvedEndpoints;
+    public final int boundaryRoleResolvedEndpoints;
+    public final int boundaryRoleAmbiguousEndpoints;
+    public final int boundaryUnresolvedEndpoints;
 
     public WindowTriggerRow(
             long round,
@@ -81,7 +99,12 @@ public final class WindowTriggerRow {
             int changedMessageCount,
             int upgradedBoundaryEventCount,
             TraceEvidenceStrength traceEvidenceStrength,
-            boolean supportGatePassed) {
+            boolean supportGatePassed,
+            int boundaryEventCountTotal,
+            int boundaryIndexResolvedEndpoints,
+            int boundaryRoleResolvedEndpoints,
+            int boundaryRoleAmbiguousEndpoints,
+            int boundaryUnresolvedEndpoints) {
         this.round = round;
         this.testPacketId = testPacketId;
         this.windowOrdinal = windowOrdinal;
@@ -108,6 +131,11 @@ public final class WindowTriggerRow {
                 ? TraceEvidenceStrength.NONE
                 : traceEvidenceStrength;
         this.supportGatePassed = supportGatePassed;
+        this.boundaryEventCountTotal = boundaryEventCountTotal;
+        this.boundaryIndexResolvedEndpoints = boundaryIndexResolvedEndpoints;
+        this.boundaryRoleResolvedEndpoints = boundaryRoleResolvedEndpoints;
+        this.boundaryRoleAmbiguousEndpoints = boundaryRoleAmbiguousEndpoints;
+        this.boundaryUnresolvedEndpoints = boundaryUnresolvedEndpoints;
     }
 
     public static String csvHeader() {
@@ -135,7 +163,12 @@ public final class WindowTriggerRow {
                 "changed_message_count",
                 "upgraded_boundary_event_count",
                 "trace_evidence_strength",
-                "support_gate_passed");
+                "support_gate_passed",
+                "boundary_event_count_total",
+                "boundary_event_count_index_resolved",
+                "boundary_event_count_role_resolved",
+                "boundary_event_count_role_ambiguous",
+                "boundary_event_count_unresolved");
     }
 
     public String toCsvRow() {
@@ -163,7 +196,12 @@ public final class WindowTriggerRow {
         sb.append(changedMessageCount).append(',');
         sb.append(upgradedBoundaryEventCount).append(',');
         sb.append(traceEvidenceStrength.name()).append(',');
-        sb.append(supportGatePassed);
+        sb.append(supportGatePassed).append(',');
+        sb.append(boundaryEventCountTotal).append(',');
+        sb.append(boundaryIndexResolvedEndpoints).append(',');
+        sb.append(boundaryRoleResolvedEndpoints).append(',');
+        sb.append(boundaryRoleAmbiguousEndpoints).append(',');
+        sb.append(boundaryUnresolvedEndpoints);
         return sb.toString();
     }
 

@@ -745,6 +745,47 @@ public class Config {
             }
         }
 
+        /**
+         * Phase 0 mode-scope helper. Encapsulates the decision "should the
+         * rolling trace path treat {@code changedMessage} / {@code
+         * modifiedFields.json} as an active corroborator?" so the Phase 0
+         * mode-5 cleanup lives in one place instead of being scattered as
+         * raw {@code testingMode == 5} checks across the scoring code.
+         *
+         * <p>Rules:
+         * <ul>
+         *   <li>{@code testingMode=5}: returns {@code false}. Mode 5 is the
+         *       rolling-upgrade fuzzing path; {@code changedMessage} is a
+         *       legacy signal from the older version-delta pipeline and
+         *       the Apr16 campaign showed it never fires for rolling
+         *       runs. Retiring it here stops the rolling scorer from
+         *       depending on {@code modifiedFields.json} deployment.</li>
+         *   <li>{@code testingMode=6}: returns {@code false}. Mode 6 is
+         *       the explicit branch-only / trace-off baseline; the
+         *       rolling trace path does not execute in this mode, but
+         *       the helper reports {@code false} for consistency so
+         *       future callers do not have to special-case it.</li>
+         *   <li>All other modes: returns {@code true}. Legacy modes
+         *       continue to treat {@code changedMessage} as an active
+         *       corroborator — Phase 0 intentionally does not widen the
+         *       cleanup into those modes.</li>
+         * </ul>
+         */
+        public boolean useChangedMessageRollingTraceCorroboration() {
+            return testingMode != 5 && testingMode != 6;
+        }
+
+        /**
+         * Phase 0 mode-scope helper. {@code testingMode=6} is defined as
+         * the explicit branch-only / trace-off validation baseline;
+         * returning {@code true} lets observability code report "this is
+         * the branch-only baseline" rather than re-deriving it from
+         * combinations of raw flags.
+         */
+        public boolean isBranchOnlyBaselineMode() {
+            return testingMode == 6;
+        }
+
         public Boolean checkNull() {
             Field[] fields = this.getClass().getDeclaredFields();
             for (Field field : fields) {

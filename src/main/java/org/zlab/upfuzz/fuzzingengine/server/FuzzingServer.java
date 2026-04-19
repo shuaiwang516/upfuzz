@@ -2009,26 +2009,44 @@ public class FuzzingServer {
                         logger.info("trace[" + j + "] len = "
                                 + testPlanFeedbackPacket.trace[j].size());
 
-                        List<TraceEntry> entries = testPlanFeedbackPacket.trace[j]
-                                .getTraceEntries();
-                        boolean hasChangedMessage = false;
-                        for (TraceEntry traceEntry : entries) {
-                            if (traceEntry.changedMessage) {
-                                hasChangedMessage = true;
-                                break;
+                        // Phase 0: the mode-5 rolling trace path no longer
+                        // treats changedMessage as an active corroborator.
+                        // The per-lane log here stays diagnostic-only and
+                        // is suppressed for mode-5 so runs do not appear to
+                        // rely on a signal the scorer ignores.
+                        if (Config.getConf()
+                                .useChangedMessageRollingTraceCorroboration()) {
+                            List<TraceEntry> entries = testPlanFeedbackPacket.trace[j]
+                                    .getTraceEntries();
+                            boolean hasChangedMessage = false;
+                            for (TraceEntry traceEntry : entries) {
+                                if (traceEntry.changedMessage) {
+                                    hasChangedMessage = true;
+                                    break;
+                                }
                             }
-                        }
-                        if (hasChangedMessage) {
-                            logger.info("Trace contains changed message");
-                        } else {
-                            logger.info(
-                                    "Trace does not contain changed message");
+                            if (hasChangedMessage) {
+                                logger.info("Trace contains changed message");
+                            } else {
+                                logger.info(
+                                        "Trace does not contain changed message");
+                            }
                         }
                     }
                 } else {
                     logger.error("trace is null for cluster " + i);
                     serializedTraces[i] = new Trace();
                 }
+
+                // Phase 0 metadata coverage: one row per lane per round.
+                // Captures how many entries carry the IDs and roles Phase 1
+                // and Phase 2 rely on, and how many peerIds remain
+                // unresolved even after the lane's topology snapshot.
+                recordTraceMetadataCoverage(
+                        testPlanDiffFeedbackPacket.testPacketID,
+                        testPlanID2Setup.get(i),
+                        serializedTraces[i],
+                        testPlanFeedbackPacket.topologySnapshot);
             }
 
             if (Config.getConf().printTrace) {
@@ -2347,9 +2365,19 @@ public class FuzzingServer {
                     // which overstated corroboration (a stage could have
                     // several upgraded nodes but zero cross-version
                     // traffic).
-                    int changedMessageCount = countChangedMessages(mergedRO);
-                    int upgradedBoundaryEventCount = countUpgradedBoundaryCrossings(
-                            mergedRO, aw.rolling.rawUpgradedNodeSet);
+                    // Phase 0 mode-5 cleanup: changedMessage corroboration
+                    // is retired from the rolling trace path. Other modes
+                    // keep their historical behavior so CSV consumers and
+                    // non-rolling regression tests stay unchanged.
+                    int changedMessageCount = Config.getConf()
+                            .useChangedMessageRollingTraceCorroboration()
+                                    ? countChangedMessages(mergedRO)
+                                    : 0;
+                    org.zlab.upfuzz.fuzzingengine.trace.TopologySnapshot rollingTopology = testPlanFeedbackPackets[1].topologySnapshot;
+                    org.zlab.upfuzz.fuzzingengine.trace.BoundaryResolutionResult boundary = countUpgradedBoundaryCrossingsDetailed(
+                            mergedRO, aw.rolling.rawUpgradedNodeSet,
+                            rollingTopology);
+                    int upgradedBoundaryEventCount = boundary.crossingCount;
 
                     // --- Per-window tri-diff ---
                     boolean triDiffInteresting = false;
@@ -2510,7 +2538,12 @@ public class FuzzingServer {
                                     changedMessageCount,
                                     upgradedBoundaryEventCount,
                                     windowStrength,
-                                    supportGatePassed));
+                                    supportGatePassed,
+                                    boundary.totalEventCount,
+                                    boundary.indexResolvedEndpointCount,
+                                    boundary.roleResolvedEndpointCount,
+                                    boundary.roleAmbiguousEndpointCount,
+                                    boundary.unresolvedEndpointCount));
                     windowsEvaluatedThisRound++;
                     if (windowHasEnoughEvents) {
                         if (supportGatePassed) {
@@ -5230,48 +5263,273 @@ public class FuzzingServer {
     }
 
     /**
+     * Phase 0 observability: emit a per-lane {@link
+     * org.zlab.upfuzz.fuzzingengine.server.observability.TraceMetadataCoverageRow}
+     * row so Apr16-style "trace collected but signal dead" patterns are
+     * explainable instead of silent.
+     */
+    private void recordTraceMetadataCoverage(int testPacketId,
+            String laneName,
+            Trace mergedTrace,
+            org.zlab.upfuzz.fuzzingengine.trace.TopologySnapshot snapshot) {
+        observabilityMetrics.recordTraceMetadataCoverage(
+                buildTraceMetadataCoverageRow(finishedTestID, testPacketId,
+                        laneName, mergedTrace, snapshot));
+    }
+
+    /**
+     * Pure counting helper for {@code trace_metadata_coverage.csv}.
+     * Deliberately tolerant of a null trace / null snapshot so degraded
+     * lanes still produce a row. Separated from the recording helper so
+     * unit tests can exercise the counter semantics directly.
+     *
+     * <p>Peer-id classification:
+     * <ul>
+     *   <li>null / empty / {@code "null"} → {@code entriesWithMissingPeerId}.
+     *       Missing ids never enter the resolver — keeping them in a
+     *       dedicated counter prevents absence from being silently
+     *       hidden inside "unresolved".</li>
+     *   <li>non-null + resolved to a single node (index or role-unique)
+     *       → counted as a corroborating peer (not a coverage gap).</li>
+     *   <li>non-null + {@link
+     *       org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint.Resolution#ROLE_AMBIGUOUS}
+     *       → {@code entriesWithRoleAmbiguousPeerId}. Kept distinct from
+     *       unresolved because ambiguity implies "role exists but
+     *       shared", which is a different Phase-1 decision than "no
+     *       mapping at all".</li>
+     *   <li>non-null + {@link
+     *       org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint.Resolution#UNRESOLVED}
+     *       → {@code entriesWithUnresolvedPeerId}. These are the
+     *       hostnames / IPs the snapshot did not recognize; they are
+     *       Phase 1's "needs richer id rule" pile.</li>
+     * </ul>
+     */
+    static org.zlab.upfuzz.fuzzingengine.server.observability.TraceMetadataCoverageRow buildTraceMetadataCoverageRow(
+            long round, int testPacketId, String laneName,
+            Trace mergedTrace,
+            org.zlab.upfuzz.fuzzingengine.trace.TopologySnapshot snapshot) {
+        int total = 0;
+        int withLogicalMessageId = 0;
+        int withDeliveryId = 0;
+        int withNodeRole = 0;
+        int withPeerRole = 0;
+        int missingPeerId = 0;
+        int roleAmbiguousPeerId = 0;
+        int unresolvedPeerId = 0;
+        if (mergedTrace != null) {
+            for (TraceEntry entry : mergedTrace.getTraceEntries()) {
+                if (entry == null) {
+                    continue;
+                }
+                total++;
+                if (isUsable(entry.logicalMessageId)) {
+                    withLogicalMessageId++;
+                }
+                if (isUsable(entry.deliveryId)) {
+                    withDeliveryId++;
+                }
+                if (isUsable(entry.nodeRole)) {
+                    withNodeRole++;
+                }
+                if (isUsable(entry.peerRole)) {
+                    withPeerRole++;
+                }
+                if (!isUsable(entry.peerId)) {
+                    missingPeerId++;
+                    continue;
+                }
+                org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint resolved = resolveBoundaryEndpoint(
+                        entry.peerId, entry.peerRole, snapshot);
+                switch (resolved.resolution) {
+                case ROLE_AMBIGUOUS:
+                    roleAmbiguousPeerId++;
+                    break;
+                case UNRESOLVED:
+                    unresolvedPeerId++;
+                    break;
+                default:
+                    // INDEX_RESOLVED / ROLE_UNIQUE are corroborating;
+                    // they are not a coverage gap.
+                    break;
+                }
+            }
+        }
+        int nodeCount = snapshot == null ? 0 : snapshot.nodeCount();
+        int idMappingCount = snapshot == null ? 0
+                : snapshot.idToIndex().size();
+        return new org.zlab.upfuzz.fuzzingengine.server.observability.TraceMetadataCoverageRow(
+                round, testPacketId, laneName, total,
+                withLogicalMessageId, withDeliveryId,
+                withNodeRole, withPeerRole,
+                missingPeerId, roleAmbiguousPeerId, unresolvedPeerId,
+                nodeCount, idMappingCount);
+    }
+
+    private static boolean isUsable(String value) {
+        return value != null && !value.isEmpty() && !"null".equals(value);
+    }
+
+    /**
      * Count per-event upgraded-boundary crossings in a merged rolling-lane
-     * trace. A crossing is a message where exactly one endpoint — sender
-     * or receiver — belongs to {@code upgradedNodeSet}. Returns 0 when
-     * either the trace or the upgraded set is null/empty.
-     *
-     * <p>This is the Phase 2 corroboration signal. The Apr15 code used
-     * {@code rawUpgradedNodeSet.size()} which only tells us how many
-     * nodes have already flipped to new bits, not how many messages
-     * actually crossed a version boundary. That overstated corroboration
-     * in stages where the rolling lane had several upgraded nodes but
-     * all observed traffic stayed within a single version (e.g., a
-     * post-upgrade stage where writes happen between two new-version
-     * replicas). The per-event count below fixes that.
-     *
-     * <p>Node indices are extracted from raw IDs of the form
-     * {@code <executorID>-N<index>} (see
-     * {@code CassandraDocker.NET_TRACE_NODE_ID}). Entries with
-     * unparseable endpoints are skipped rather than counted, so a
-     * malformed row cannot accidentally inflate the corroboration
-     * counter.
+     * trace using numeric index parsing only. Preserved as a small helper
+     * for the legacy test surface; production code now routes through
+     * {@link #countUpgradedBoundaryCrossingsDetailed(
+     * Trace, Set, org.zlab.upfuzz.fuzzingengine.trace.TopologySnapshot)}
+     * so endpoints recorded as IPs, hostnames, or container aliases are
+     * also resolved.
      */
     static int countUpgradedBoundaryCrossings(Trace mergedTrace,
             Set<Integer> upgradedNodeSet) {
-        if (mergedTrace == null || upgradedNodeSet == null
-                || upgradedNodeSet.isEmpty()) {
-            return 0;
+        return countUpgradedBoundaryCrossingsDetailed(mergedTrace,
+                upgradedNodeSet, null).crossingCount;
+    }
+
+    /**
+     * Phase 0 topology-aware boundary counter. Returns a
+     * {@link org.zlab.upfuzz.fuzzingengine.trace.BoundaryResolutionResult}
+     * that carries both the crossing count and the per-endpoint
+     * resolution histogram (index-resolved, role-unique, role-ambiguous,
+     * unresolved) so Apr16-style silent skips become observable.
+     *
+     * <p>Resolution is layered: numeric parsing first (the
+     * {@code NET_TRACE_NODE_ID=<executor>-N<idx>} form that the rolling
+     * runtime always sets), then {@link TopologySnapshot#resolveEndpoint}
+     * which additionally resolves IPs, hostnames, container aliases, and
+     * role-unique lookups. When a {@code snapshot} is null the detailed
+     * result mirrors the legacy numeric-only behavior but still populates
+     * the unresolved counter so callers can report the gap.
+     *
+     * <p>A crossing is counted only when <em>both</em> endpoints resolve
+     * with confidence — {@link ResolvedTraceEndpoint#isCorroborating()} —
+     * and fall on opposite sides of {@code upgradedNodeSet}. Ambiguous
+     * role matches are tracked in the histogram but never contribute to
+     * crossings so Cassandra peer-to-peer or multi-datanode HDFS traffic
+     * cannot silently inflate corroboration.
+     */
+    static org.zlab.upfuzz.fuzzingengine.trace.BoundaryResolutionResult countUpgradedBoundaryCrossingsDetailed(
+            Trace mergedTrace,
+            Set<Integer> upgradedNodeSet,
+            org.zlab.upfuzz.fuzzingengine.trace.TopologySnapshot snapshot) {
+        if (mergedTrace == null) {
+            return org.zlab.upfuzz.fuzzingengine.trace.BoundaryResolutionResult
+                    .empty();
         }
-        int count = 0;
-        for (TraceEntry entry : mergedTrace.getTraceEntries()) {
+        List<TraceEntry> entries = mergedTrace.getTraceEntries();
+        int total = 0;
+        int crossings = 0;
+        int indexResolvedEndpoints = 0;
+        int roleResolvedEndpoints = 0;
+        int roleAmbiguousEndpoints = 0;
+        int unresolvedEndpoints = 0;
+        for (TraceEntry entry : entries) {
             if (entry == null) {
                 continue;
             }
-            int srcIdx = extractNodeIndex(entry.nodeId);
-            int dstIdx = extractNodeIndex(entry.peerId);
-            if (srcIdx < 0 || dstIdx < 0) {
+            total++;
+            org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint src = resolveBoundaryEndpoint(
+                    entry.nodeId, entry.nodeRole, snapshot);
+            org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint dst = resolveBoundaryEndpoint(
+                    entry.peerId, entry.peerRole, snapshot);
+            indexResolvedEndpoints += countByResolution(src, dst,
+                    org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint.Resolution.INDEX_RESOLVED);
+            roleResolvedEndpoints += countByResolution(src, dst,
+                    org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint.Resolution.ROLE_UNIQUE);
+            roleAmbiguousEndpoints += countByResolution(src, dst,
+                    org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint.Resolution.ROLE_AMBIGUOUS);
+            unresolvedEndpoints += countByResolution(src, dst,
+                    org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint.Resolution.UNRESOLVED);
+            if (upgradedNodeSet == null || upgradedNodeSet.isEmpty()) {
                 continue;
             }
-            boolean srcUp = upgradedNodeSet.contains(srcIdx);
-            boolean dstUp = upgradedNodeSet.contains(dstIdx);
-            if (srcUp ^ dstUp) {
-                count++;
+            if (!src.isCorroborating() || !dst.isCorroborating()) {
+                continue;
             }
+            boolean srcUp = upgradedNodeSet.contains(src.nodeIndex);
+            boolean dstUp = upgradedNodeSet.contains(dst.nodeIndex);
+            if (srcUp ^ dstUp) {
+                crossings++;
+            }
+        }
+        return new org.zlab.upfuzz.fuzzingengine.trace.BoundaryResolutionResult(
+                total, crossings, indexResolvedEndpoints,
+                roleResolvedEndpoints, roleAmbiguousEndpoints,
+                unresolvedEndpoints);
+    }
+
+    /**
+     * Resolve a single endpoint. When a {@link
+     * org.zlab.upfuzz.fuzzingengine.trace.TopologySnapshot} is available
+     * it is the authoritative resolver: its three-tier lookup (explicit
+     * id → bounded numeric parsing → role) enforces the active-cluster
+     * bound so a stale peerId like {@code N7} on a three-node cluster
+     * stays {@link
+     * org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint.Resolution#UNRESOLVED}
+     * instead of inflating upgraded-boundary corroboration with an
+     * invented index.
+     *
+     * <p>When the id alone does not pin a node, the normalized {@code
+     * role} (populated by {@link TopologyNormalizer#normalizeTrace}) is
+     * re-tried against the snapshot so a peer whose raw id stayed a
+     * hostname but whose role is known can still reach {@link
+     * org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint.Resolution#ROLE_UNIQUE}
+     * — or at least {@link
+     * org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint.Resolution#ROLE_AMBIGUOUS}
+     * for Cassandra-style peer-to-peer topologies.
+     *
+     * <p>A null {@code snapshot} is the legacy path used by unit tests
+     * that pre-date Phase 0 topology propagation. In that mode we fall
+     * back to unbounded numeric parsing because there is no topology to
+     * bound against — this keeps the pre-Phase-0 test surface working
+     * but is never taken by the live scoring path, which always ships a
+     * snapshot on the feedback packet.
+     */
+    private static org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint resolveBoundaryEndpoint(
+            String rawId, String role,
+            org.zlab.upfuzz.fuzzingengine.trace.TopologySnapshot snapshot) {
+        if (snapshot != null) {
+            org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint byId = snapshot
+                    .resolveEndpoint(rawId);
+            if (byId.isCorroborating()) {
+                return byId;
+            }
+            // Retry via the normalized peerRole when the id alone did
+            // not pin a node. A unique role promotes to ROLE_UNIQUE; a
+            // shared role stays ROLE_AMBIGUOUS so Cassandra peer-to-peer
+            // traffic cannot silently inflate corroboration.
+            if (role != null && !role.isEmpty() && !"null".equals(role)) {
+                org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint byRole = snapshot
+                        .resolveRole(rawId, role);
+                if (byRole.isCorroborating()
+                        || byRole.resolution == org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint.Resolution.ROLE_AMBIGUOUS) {
+                    return byRole;
+                }
+            }
+            return byId;
+        }
+        // Legacy null-snapshot path (pre-Phase-0 unit tests). Use
+        // unbounded numeric parsing because there is no topology to
+        // bound against.
+        int numericIdx = extractNodeIndex(rawId);
+        if (numericIdx >= 0) {
+            return new org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint(
+                    rawId,
+                    org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint.Resolution.INDEX_RESOLVED,
+                    numericIdx, role);
+        }
+        return org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint
+                .unresolved(rawId);
+    }
+
+    private static int countByResolution(
+            org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint src,
+            org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint dst,
+            org.zlab.upfuzz.fuzzingengine.trace.ResolvedTraceEndpoint.Resolution kind) {
+        int count = 0;
+        if (src != null && src.resolution == kind) {
+            count++;
+        }
+        if (dst != null && dst.resolution == kind) {
+            count++;
         }
         return count;
     }

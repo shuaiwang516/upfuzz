@@ -433,29 +433,47 @@ public abstract class Executor implements IExecutor {
             }
         }
 
-        // Build topology normalizer for IP/hostname -> role resolution
+        // Build topology normalizer for IP/hostname/index -> role/index
+        // resolution. Phase 0: every raw id that points to a node is
+        // bound to that node's index so the server can run
+        // TopologySnapshot.resolveEndpoint against recorded peer ids
+        // without the old numeric-only skip.
         if (Config.getConf().useTrace) {
             topologyNormalizer = new TopologyNormalizer();
             for (int i = 0; i < nodeNum; i++) {
                 IDocker docker = dockerCluster.getDocker(i);
                 String ip = docker.getNetworkIP();
                 String role = docker.getNodeRole();
-                topologyNormalizer.registerMapping(ip, role);
-                // Register Docker service hostname (DC3N<index>)
-                topologyNormalizer.registerMapping("DC3N" + i, role);
-                // Register container name as hostname fallback
+                java.util.List<String> aliases = new java.util.ArrayList<>();
+                if (ip != null && !ip.isEmpty()) {
+                    aliases.add(ip);
+                }
+                // Docker service hostname (DC3N<index>)
+                aliases.add("DC3N" + i);
+                // Container name fallback
                 if (docker instanceof DockerMeta) {
                     String cname = ((DockerMeta) docker).containerName;
-                    topologyNormalizer.registerMapping(cname, role);
+                    if (cname != null && !cname.isEmpty()) {
+                        aliases.add(cname);
+                    }
                 }
-                // Register system-specific hostname aliases
+                // System-specific hostname aliases
                 for (String alias : docker.getHostnameAliases()) {
-                    topologyNormalizer.registerMapping(alias, role);
+                    if (alias != null && !alias.isEmpty()) {
+                        aliases.add(alias);
+                    }
                 }
+                // Bind NET_TRACE_NODE_ID form as well so the runtime's own
+                // nodeId field participates in direct id lookup.
+                aliases.add(executorID + "-N" + i);
+                aliases.add("N" + i);
+                topologyNormalizer.registerNode(i, role,
+                        aliases.toArray(new String[0]));
             }
             logger.info(
-                    "[TRACE] Topology normalizer initialized with {} mappings",
-                    topologyNormalizer.mappingCount());
+                    "[TRACE] Topology normalizer initialized: {} id mappings across {} nodes",
+                    topologyNormalizer.mappingCount(),
+                    topologyNormalizer.registeredNodeCount());
         }
 
         // Clear startup chatter
