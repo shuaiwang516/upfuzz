@@ -510,15 +510,16 @@ public class Config {
         public int strongTraceFallbackMinAllThreeCount = 20;
         public double strongTraceFallbackMaxRollingMinSimilarity = 0.40;
 
-        // --- Canonical key tier (Phase 3) ---
+        // --- Canonical key tier (Phase 1 online identity split) ---
         // Controls how strictly two messages are considered the same by
-        // window similarity and tri-diff. SEMANTIC is the original Phase 2
-        // key; SEMANTIC_SHAPE_SUMMARY is the Apr 12 recommended default
-        // because it separates within-semantic drift while still bucketing
-        // benign value noise so it can survive cross-version refactors.
-        // SEMANTIC_SHAPE_VALUE is reserved for offline analysis; it
-        // over-fragments in cross-version campaigns.
-        public CanonicalKeyMode canonicalKeyMode = CanonicalKeyMode.SEMANTIC_SHAPE_SUMMARY;
+        // window similarity and tri-diff. Phase 1 introduced
+        // {@link CanonicalKeyMode#GUIDANCE}: a role-first, protocol-family
+        // identity produced by the {@code ProtocolFamilyClassifier}. This
+        // is the new live-fuzzing default — it is stable under wrapper and
+        // summary drift and replaces the pre-Phase-1 reliance on
+        // {@link CanonicalKeyMode#SEMANTIC_SHAPE_SUMMARY}, which is now
+        // kept only for offline diagnostic fixtures.
+        public CanonicalKeyMode canonicalKeyMode = CanonicalKeyMode.GUIDANCE;
 
         // --- Phase 4 trace-signature dedup ---
         // Suppress trace-only admissions whose interesting-window

@@ -1691,9 +1691,14 @@ class FuzzingServerTriDiffDecisionTest {
         Trace trace = new Trace();
         int idx = 0;
         for (String message : messages) {
+            // Feed each synthetic identifier through {@code messageType} so the
+            // Phase 1 GUIDANCE key's {@code UNKNOWN:<rawSemanticType>} tail
+            // keeps distinct messages in distinct buckets — otherwise every
+            // unclassified test message would collapse into one bucket and
+            // the tri-diff assertions would become trivial.
             trace.recordSend("TriDiffDecisionTest.fakeSend", 10000001,
                     new int[] { idx }, message,
-                    SendMeta.builder().messageType("UnitMessage").build(),
+                    SendMeta.builder().messageType(message).build(),
                     message);
             idx++;
         }

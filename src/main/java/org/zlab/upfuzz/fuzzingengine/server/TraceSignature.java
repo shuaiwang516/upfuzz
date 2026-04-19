@@ -40,7 +40,7 @@ final class TraceSignature {
             String similarityBucket) {
         this.stageKey = stageKey == null ? "unknown|nodes=[]" : stageKey;
         this.canonicalKeyMode = canonicalKeyMode == null
-                ? CanonicalKeyMode.SEMANTIC
+                ? CanonicalKeyMode.GUIDANCE
                 : canonicalKeyMode;
         this.topExclusiveBuckets = immutableCopy(topExclusiveBuckets);
         this.topMissingBuckets = immutableCopy(topMissingBuckets);

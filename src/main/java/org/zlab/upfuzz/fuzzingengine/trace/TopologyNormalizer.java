@@ -198,6 +198,7 @@ public class TopologyNormalizer {
                         entry.nodeId, entry.peerId, resolvedNodeRole,
                         resolvedPeerRole, entry.channel,
                         entry.protocol, entry.messageType, entry.messageVersion,
+                        entry.rpcService, entry.rpcMethod, entry.messageKind,
                         entry.logicalMessageId, entry.deliveryId,
                         entry.fanoutType,
                         entry.targetCount, entry.messageShapeHash,
