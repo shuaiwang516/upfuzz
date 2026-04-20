@@ -366,12 +366,20 @@ class TraceSignatureDedupTest {
             // same endpoint pattern; their boundary-crossing count is
             // still zero because their rawUpgradedNodeSet is empty
             // (old-old) or covers both nodes (new-new).
+            // Phase 3 requires upgrade-critical family support for the
+            // scorer to label the window STRONG. SCHEMA_PULL_REQ maps to
+            // CASSANDRA_SCHEMA_SYNC via the Phase 1 classifier — this
+            // keeps the dedup path firing once the scorer runs.
             trace.recordSend("TraceSignatureDedupTest.fakeSend", 10010001,
                     new int[] { idx }, message,
                     SendMeta.builder()
-                            .messageType("ReplayMessage")
+                            .protocol("cassandra")
+                            .messageType("SCHEMA_PULL_REQ")
+                            .nodeRole("cassandra")
+                            .peerRole("cassandra")
                             .nodeId("replay-N" + (idx % 2))
                             .peerId("replay-N" + ((idx + 1) % 2))
+                            .logicalMessageId(message)
                             .build(),
                     message);
             idx++;

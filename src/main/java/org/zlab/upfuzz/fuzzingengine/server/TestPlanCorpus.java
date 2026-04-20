@@ -992,7 +992,8 @@ public class TestPlanCorpus {
         }
         if (traceStrength == TraceEvidenceStrength.STRONG) {
             base += 1.0;
-        } else if (traceStrength == TraceEvidenceStrength.WEAK) {
+        } else if (traceStrength == TraceEvidenceStrength.WEAK
+                || traceStrength == TraceEvidenceStrength.UNSUPPORTED_BUT_REPEATABLE) {
             base += 0.25;
         }
         if (candStrength == StructuredCandidateStrength.STRONG) {

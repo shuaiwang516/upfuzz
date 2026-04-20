@@ -158,7 +158,43 @@ public class FuzzingServerFlowObservabilityTest {
                 /* flowRoleAmbiguousBoundaryRolling */ 0,
                 /* flowUnresolvedBoundaryRolling */ 0,
                 "HBASE_CLIENT_MUTATION_OR_MULTI=5.00@ro=6/oo=1/nn=1",
-                "HBASE_CLIENT_MUTATION_OR_MULTI:ClientService#Mutate[PUT]=2");
+                "HBASE_CLIENT_MUTATION_OR_MULTI:ClientService#Mutate[PUT]=2",
+                /* supportClass */ "FAMILY_BACKED",
+                /* familySupportCount */ 3,
+                /* flowSupportCount */ 2,
+                /* baselineFlowSupportCount */ 2,
+                /* backgroundFamilySupportCount */ 1,
+                /* upgradeCriticalSupportCount */ 2,
+                /* familyJaccardOoRo */ 0.60,
+                /* familyJaccardRoNn */ 0.55,
+                /* familyJaccardOoNn */ 0.80,
+                /* familyWeightedSimOoRo */ 0.65,
+                /* familyWeightedSimRoNn */ 0.60,
+                /* familyWeightedSimOoNn */ 0.85,
+                /* flowJaccardOoRo */ 0.40,
+                /* flowJaccardRoNn */ 0.40,
+                /* flowJaccardOoNn */ 0.90,
+                /* explicitFlowJaccardOoRo */ 0.50,
+                /* explicitFlowJaccardRoNn */ 0.50,
+                /* explicitFlowJaccardOoNn */ 1.00,
+                /* orderSimilarityOoRo */ 0.50,
+                /* orderSimilarityRoNn */ 0.50,
+                /* orderSimilarityOoNn */ 1.00,
+                /* baselineAgreementScore */ 0.85,
+                /* rollingDivergenceScore */ 0.40,
+                /* orderDivergenceScore */ 0.50,
+                /* backgroundShareRolling */ 0.20,
+                /* boundaryBonusApplied */ 0.15,
+                /* orderBonusApplied */ 0.05,
+                /* backgroundCapApplied */ 0.0,
+                /* compositeScore */ 0.54,
+                /* rollingExclusiveUpgradeCriticalEventCount */ 4,
+                /* dominantSupportedFamily */ "CASSANDRA_SCHEMA_SYNC",
+                /* dominantDivergentFamily */ "HBASE_CLIENT_MUTATION_OR_MULTI",
+                /* dominantOrderAnomalousFamily */ "CASSANDRA_PAXOS",
+                /* familyProfileLabel */ "MIXED",
+                /* rollingOnlyUpgradeCriticalPresent */ true,
+                /* firingReasons */ "composite_reached_strong|boundary_corroborated");
         String csv = row.toCsvRow();
         String[] columns = csv.split(",", -1);
         assertEquals(WindowTriggerRow.csvHeader().split(",", -1).length,
@@ -174,7 +210,14 @@ public class FuzzingServerFlowObservabilityTest {
         assertEquals("1", columns[headerList
                 .indexOf("flow_boundary_involved_rolling")]);
         assertTrue(csv.contains("HBASE_CLIENT_MUTATION_OR_MULTI=5.00"));
-        assertTrue(total > 30);
+        // Phase 3 columns land at the tail of the header.
+        assertEquals("FAMILY_BACKED",
+                columns[headerList.indexOf("support_class")]);
+        assertEquals("composite_reached_strong|boundary_corroborated",
+                columns[headerList.indexOf("firing_reasons")]);
+        assertEquals("MIXED",
+                columns[headerList.indexOf("family_profile_label")]);
+        assertTrue(total > 60);
     }
 
     // --- Test-only helpers --------------------------------------------------
@@ -199,9 +242,10 @@ public class FuzzingServerFlowObservabilityTest {
             try {
                 java.lang.reflect.Constructor<FlowExtractionResult> ctor = FlowExtractionResult.class
                         .getDeclaredConstructor(List.class, int.class,
-                                int.class, int.class);
+                                int.class, int.class, java.util.Map.class);
                 ctor.setAccessible(true);
-                return ctor.newInstance(flows, explicit, fallback, failed);
+                return ctor.newInstance(flows, explicit, fallback, failed,
+                        Collections.emptyMap());
             } catch (ReflectiveOperationException e) {
                 throw new RuntimeException(
                         "FlowExtractionResult ctor signature changed", e);

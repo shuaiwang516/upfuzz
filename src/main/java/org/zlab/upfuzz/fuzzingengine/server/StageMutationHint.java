@@ -188,6 +188,7 @@ public final class StageMutationHint implements Serializable {
         }
         boolean strongTrace = traceStrength == TraceEvidenceStrength.STRONG;
         boolean weakTrace = traceStrength == TraceEvidenceStrength.WEAK
+                || traceStrength == TraceEvidenceStrength.UNSUPPORTED_BUT_REPEATABLE
                 || traceStrength == TraceEvidenceStrength.UNSUPPORTED;
         if (branchBacked && strongTrace) {
             return SignalType.BRANCH_AND_STRONG_TRACE;

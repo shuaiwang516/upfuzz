@@ -476,39 +476,65 @@ public class Config {
         public double rollingExclusiveFractionThreshold = 0.05;
         public double rollingMissingFractionThreshold = 0.05;
 
-        // --- Phase 2 trace evidence strength gates ---
-        // Phase 2 makes trace evidence support-aware, stage-aware, and
-        // change-aware. Windows that fire the tri-diff exclusive rule (or
-        // the window-sim rule) are still visible for observability, but a
-        // window must additionally pass the knobs below before the
-        // round-level trace strength can be promoted to STRONG. Windows
-        // that fire without passing these gates are classified as WEAK
-        // (or UNSUPPORTED when no three-way shared support exists).
+        // --- Phase 3 trace-strength scoring knobs ---
+        // Phase 3 retires the Phase 2 hard-gate knobs (strongTraceMin*,
+        // strongTraceFallback*, preUpgradeTraceCanStrengthenBranch) and
+        // replaces them with a small composite scorer grounded in the
+        // Phase 1 family taxonomy and the Phase 2 logical-flow
+        // extraction. See
+        // {@link
+        // org.zlab.upfuzz.fuzzingengine.server.TraceWindowGuidanceScorer}
+        // for the formula. Defaults are the first-cut replay calibration
+        // (see agent/result/2026-04-19-result-phase-3-replay-calibration.md)
+        // — support-backed upgrade-critical windows become reachable
+        // without letting background-only windows dominate.
         //
-        // All gates are inclusive (">= threshold") so a conservative
-        // default of 0 disables the knob and preserves Phase 0 behavior.
-        // The defaults below match the Apr15 offline-replay target
-        // (`strongTraceMinAllThreeCount=3`) and leave the stricter
-        // baseline/similarity/changed-message knobs open for offline
-        // tuning.
-        public int strongTraceMinAllThreeCount = 3;
-        public int strongTraceMinBaselineSharedCount = 3;
-        public double strongTraceMinBaselineSimilarity = 0.70;
-        public int strongTraceMinChangedMessageCount = 0;
-        public int strongTraceMinUpgradedBoundaryCount = 0;
-        // When false (Phase 2 default), PRE_UPGRADE windows can never
-        // upgrade a branch admission into STRONG trace-backed status.
-        // The flag exists so offline replay can A/B the policy without
-        // rebuilding.
-        public boolean preUpgradeTraceCanStrengthenBranch = false;
-        // Apr15 cutoff for "strong support alone": when changed-message
-        // and upgraded-boundary evidence is absent, the window can still
-        // reach STRONG if both (a) totalAllThreeCount is at or above
-        // this threshold and (b) rollingMinSimilarity drops far below
-        // the baseline. The defaults are intentionally strict so only
-        // large, highly divergent windows qualify.
-        public int strongTraceFallbackMinAllThreeCount = 20;
-        public double strongTraceFallbackMaxRollingMinSimilarity = 0.40;
+        // Composite score = baselineAgreement * rollingDivergence
+        // + boundaryBonus (if boundary traffic present)
+        // + orderBonus (if support >= FLOW_BACKED)
+        // — backgroundCap (if support < FAMILY_BACKED).
+
+        /** Weight applied to UPGRADE_CRITICAL families inside the scorer. */
+        public double traceUpgradeCriticalFamilyWeight = 1.0;
+
+        /** Weight applied to BACKGROUND families. Keep low so gossip/heartbeat
+         *  overlap cannot dominate baseline agreement. */
+        public double traceBackgroundFamilyWeight = 0.2;
+
+        /** Weight applied to UNKNOWN families. */
+        public double traceUnknownFamilyWeight = 0.4;
+
+        /** Composite score at or above this value produces STRONG. */
+        public double traceStrongScoreThreshold = 0.35;
+
+        /** Composite score at or above this value produces WEAK (when the
+         *  window fired). Below this, the window still fires but the strength
+         *  is WEAK because the composite signal is low. */
+        public double traceWeakScoreThreshold = 0.10;
+
+        /** Additive bonus applied when the window carries at least one
+         *  upgraded-boundary crossing or boundary-involved flow. */
+        public double traceBoundaryBonus = 0.15;
+
+        /** Cap on the order-divergence bonus. Order is a bounded secondary
+         *  signal per the Phase 3 plan; it can never dominate the composite. */
+        public double traceOrderBonusCap = 0.10;
+
+        /** Cap on the composite score when support is UNSUPPORTED or
+         *  BACKGROUND_ONLY. A background-only window can never exceed this
+         *  cap, so it cannot reach {@code traceStrongScoreThreshold}. */
+        public double traceBackgroundCap = 0.10;
+
+        /** Minimum baseline-baseline agreement required to promote a window
+         *  to STRONG. Low baseline agreement means the two same-version lanes
+         *  already disagree; rolling divergence from that unstable baseline
+         *  is noise. */
+        public double traceMinBaselineAgreementForStrong = 0.55;
+
+        /** Minimum rolling divergence required to promote a window to
+         *  STRONG. Guards against high-agreement rounds where the rolling
+         *  lane barely drifted. */
+        public double traceMinRollingDivergenceForStrong = 0.20;
 
         // --- Canonical key tier (Phase 1 online identity split) ---
         // Controls how strictly two messages are considered the same by
@@ -558,9 +584,6 @@ public class Config {
         // HBase scan-heavy / HDFS heartbeat-heavy workloads from
         // flooding the CSV.
         public int traceFlowTopDivergentDetailsPerFamily = 5;
-
-        // Debug
-        public boolean useCompressedOrderDebug = false;
 
         // --- Phase 0 observability ---
         // If true, the server writes reason-coded admission counters,
@@ -751,7 +774,6 @@ public class Config {
                 useTrace = false;
                 useCanonicalTraceSimilarity = false;
                 useCanonicalMessageIdentityDiff = false;
-                useCompressedOrderDebug = false;
                 printTrace = false;
                 useFormatCoverage = false;
                 useVersionDelta = false;

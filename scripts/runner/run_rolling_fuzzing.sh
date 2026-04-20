@@ -18,7 +18,6 @@ TESTING_MODE=3
 USE_DIFF=true
 USE_TRACE=true
 PRINT_TRACE=false
-USE_COMPRESSED_ORDER_DEBUG=false
 USE_CANONICAL_TRACE=true
 CANONICAL_WINDOW_SIM_THRESHOLD=0.75
 CANONICAL_AGGREGATE_SIM_THRESHOLD=0.85
@@ -62,7 +61,6 @@ Options:
   --hbase-daemon-retry-times <N>         HBase shell daemon retry attempts (default: ${HBASE_DAEMON_RETRY_TIMES})
   --use-trace <true|false>               Enable network trace collection (default: ${USE_TRACE})
   --print-trace <true|false>             Print detailed trace entries in server log (default: ${PRINT_TRACE})
-  --use-compressed-order-debug <true|false>  Enable compressed order debug signal (default: ${USE_COMPRESSED_ORDER_DEBUG})
   --use-canonical-trace <true|false>     Enable canonical trace similarity (default: ${USE_CANONICAL_TRACE})
   --canonical-window-sim-threshold <N>   Window-level similarity threshold (default: ${CANONICAL_WINDOW_SIM_THRESHOLD})
   --canonical-aggregate-sim-threshold <N> Aggregate similarity threshold (default: ${CANONICAL_AGGREGATE_SIM_THRESHOLD})
@@ -240,17 +238,27 @@ count_diff_feedback_packets() {
     rg -c --no-filename 'TestPlanDiffFeedbackPacket received' "${logfile}" 2>/dev/null || echo 0
 }
 
-# Phase 2-5 config knobs materialized explicitly so the run artifact
+# Phase 3-5 config knobs materialized explicitly so the run artifact
 # records which policy was active. Values match Java-side defaults in
-# Config.Configuration as of Phase 5.
-PHASE_25_CONFIG='  "strongTraceMinAllThreeCount" : 3,
-  "strongTraceMinBaselineSharedCount" : 3,
-  "strongTraceMinBaselineSimilarity" : 0.70,
-  "strongTraceMinChangedMessageCount" : 0,
-  "strongTraceMinUpgradedBoundaryCount" : 0,
-  "preUpgradeTraceCanStrengthenBranch" : false,
-  "strongTraceFallbackMinAllThreeCount" : 20,
-  "strongTraceFallbackMaxRollingMinSimilarity" : 0.40,
+# Config.Configuration as of Phase 3.
+#
+# Phase 3 retires the Phase 2 hard-gate knobs (strongTraceMin*,
+# strongTraceFallback*, preUpgradeTraceCanStrengthenBranch) and replaces
+# them with the composite-scorer knobs below; the new knobs are the
+# live calibration anchors for `TraceWindowGuidanceScorer`. See
+# `agent/result/2026-04-19-result-phase-3-replay-calibration.md` for the
+# calibration rationale. The `useCompressedOrderDebug` knob is also
+# retired — order is now a live scorer component, not a debug log line.
+PHASE_25_CONFIG='  "traceUpgradeCriticalFamilyWeight" : 1.0,
+  "traceBackgroundFamilyWeight" : 0.2,
+  "traceUnknownFamilyWeight" : 0.4,
+  "traceStrongScoreThreshold" : 0.35,
+  "traceWeakScoreThreshold" : 0.10,
+  "traceBoundaryBonus" : 0.15,
+  "traceOrderBonusCap" : 0.10,
+  "traceBackgroundCap" : 0.10,
+  "traceMinBaselineAgreementForStrong" : 0.55,
+  "traceMinRollingDivergenceForStrong" : 0.20,
   "usePriorityTestPlanScheduler" : true,
   "mainExploitMutationEpoch" : 30,
   "branchScoutMutationEpoch" : 10,
@@ -296,13 +304,11 @@ write_config_json() {
     local diff_json
     local trace_json
     local print_trace_json
-    local compressed_order_json
     local branch_json
     local logcheck_json
     diff_json="$(bool_json "${USE_DIFF}")"
     trace_json="$(bool_json "${USE_TRACE}")"
     print_trace_json="$(bool_json "${PRINT_TRACE}")"
-    compressed_order_json="$(bool_json "${USE_COMPRESSED_ORDER_DEBUG}")"
     canonical_trace_json="$(bool_json "${USE_CANONICAL_TRACE}")"
     canonical_msg_identity_json="$(bool_json "${USE_CANONICAL_MESSAGE_IDENTITY}")"
     branch_json="$(bool_json "${USE_BRANCH_COVERAGE}")"
@@ -331,7 +337,6 @@ write_config_json() {
   "differentialExecution" : ${diff_json},
   "useTrace" : ${trace_json},
   "printTrace" : ${print_trace_json},
-  "useCompressedOrderDebug" : ${compressed_order_json},
   "useCanonicalTraceSimilarity" : ${canonical_trace_json},
   "canonicalRollingMinWindowSimilarityThreshold" : ${CANONICAL_WINDOW_SIM_THRESHOLD},
   "canonicalWindowDivergenceMarginThreshold" : ${CANONICAL_WINDOW_DIVERGENCE_MARGIN},
@@ -390,7 +395,6 @@ JSON
   "differentialExecution" : ${diff_json},
   "useTrace" : ${trace_json},
   "printTrace" : ${print_trace_json},
-  "useCompressedOrderDebug" : ${compressed_order_json},
   "useCanonicalTraceSimilarity" : ${canonical_trace_json},
   "canonicalRollingMinWindowSimilarityThreshold" : ${CANONICAL_WINDOW_SIM_THRESHOLD},
   "canonicalWindowDivergenceMarginThreshold" : ${CANONICAL_WINDOW_DIVERGENCE_MARGIN},
@@ -444,7 +448,6 @@ JSON
   "differentialExecution" : ${diff_json},
   "useTrace" : ${trace_json},
   "printTrace" : ${print_trace_json},
-  "useCompressedOrderDebug" : ${compressed_order_json},
   "useCanonicalTraceSimilarity" : ${canonical_trace_json},
   "canonicalRollingMinWindowSimilarityThreshold" : ${CANONICAL_WINDOW_SIM_THRESHOLD},
   "canonicalWindowDivergenceMarginThreshold" : ${CANONICAL_WINDOW_DIVERGENCE_MARGIN},
@@ -542,10 +545,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --print-trace)
             PRINT_TRACE="$2"
-            shift 2
-            ;;
-        --use-compressed-order-debug)
-            USE_COMPRESSED_ORDER_DEBUG="$2"
             shift 2
             ;;
         --use-canonical-trace)
@@ -650,7 +649,6 @@ if [[ "${TESTING_MODE}" == "6" ]]; then
     USE_CANONICAL_TRACE=false
     USE_CANONICAL_MESSAGE_IDENTITY=false
     PRINT_TRACE=false
-    USE_COMPRESSED_ORDER_DEBUG=false
     REQUIRE_TRACE_SIGNAL=false
 fi
 
@@ -779,7 +777,6 @@ DIFF_LANE_TIMEOUT_SEC=${DIFF_LANE_TIMEOUT_SEC}
 HBASE_DAEMON_RETRY_TIMES=${HBASE_DAEMON_RETRY_TIMES}
 USE_TRACE=${USE_TRACE}
 PRINT_TRACE=${PRINT_TRACE}
-USE_COMPRESSED_ORDER_DEBUG=${USE_COMPRESSED_ORDER_DEBUG}
 USE_CANONICAL_TRACE=${USE_CANONICAL_TRACE}
 CANONICAL_WINDOW_SIM_THRESHOLD=${CANONICAL_WINDOW_SIM_THRESHOLD}
 CANONICAL_AGGREGATE_SIM_THRESHOLD=${CANONICAL_AGGREGATE_SIM_THRESHOLD}
