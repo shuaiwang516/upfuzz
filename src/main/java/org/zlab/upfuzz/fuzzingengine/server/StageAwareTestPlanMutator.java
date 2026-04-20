@@ -150,6 +150,23 @@ public final class StageAwareTestPlanMutator {
         if (hint.upgradeOrderMattered) {
             candidates.add(MutationFamily.SHUFFLE_UPGRADE_ORDER);
         }
+        // Phase 4 routing-context boosts: the new hint fields are
+        // mapped onto existing operator families only. When the
+        // trace-scoring decision flagged an order anomaly, nudge the
+        // picker toward LOCAL_REORDER_NEAR_HOTSPOT so mutation
+        // reproduces the compressed-family divergence observed in the
+        // rolling lane. When a boundary-involved role pair was
+        // recorded, double-weight DUPLICATE_SHELL_CLUSTER_AT_BOUNDARY
+        // — the direct existing operator for boundary-crossing
+        // pressure. Both duplicates bias the uniform pick without
+        // replacing the baseline candidate list.
+        if (hint.orderAnomalyPresent) {
+            candidates.add(MutationFamily.LOCAL_REORDER_NEAR_HOTSPOT);
+        }
+        if (hint.boundaryInvolvedRolePair != null
+                && !hint.boundaryInvolvedRolePair.isEmpty()) {
+            candidates.add(MutationFamily.DUPLICATE_SHELL_CLUSTER_AT_BOUNDARY);
+        }
         if (candidates.isEmpty()) {
             return null;
         }

@@ -202,24 +202,78 @@ class FuzzingServerTriDiffDecisionTest {
     }
 
     @Test
-    void isTraceAdmissibleOnlyPromotesStrong() {
+    void isTraceAdmissiblePhase4Policy() {
+        // Phase 4 admission policy (default
+        // enableLowerConfidenceTraceAdmission=true):
+        // STRONG → admit regardless of support class
+        // UNSUPPORTED_BUT_REPEATABLE → admit (repeatable rolling-
+        // only upgrade-critical traffic)
+        // WEAK with FLOW_BACKED+ support → admit
+        // WEAK with weaker support → reject
+        // UNSUPPORTED → reject
+        // traceInteresting=false → reject regardless of strength
+        Config.Configuration cfg = new Config.Configuration();
+        cfg.enableLowerConfidenceTraceAdmission = true;
+        Config.setInstance(cfg);
+
         assertTrue(FuzzingServer.isTraceAdmissible(true,
-                TraceEvidenceStrength.STRONG));
+                TraceEvidenceStrength.STRONG,
+                TraceSupportClass.UNSUPPORTED));
+        assertTrue(FuzzingServer.isTraceAdmissible(true,
+                TraceEvidenceStrength.UNSUPPORTED_BUT_REPEATABLE,
+                TraceSupportClass.UNSUPPORTED));
+        assertTrue(FuzzingServer.isTraceAdmissible(true,
+                TraceEvidenceStrength.WEAK,
+                TraceSupportClass.FLOW_BACKED));
+        assertTrue(FuzzingServer.isTraceAdmissible(true,
+                TraceEvidenceStrength.WEAK,
+                TraceSupportClass.FULL));
         assertFalse(FuzzingServer.isTraceAdmissible(true,
-                TraceEvidenceStrength.WEAK));
+                TraceEvidenceStrength.WEAK,
+                TraceSupportClass.BACKGROUND_ONLY),
+                "WEAK with only background support stays out of "
+                        + "the admission path");
         assertFalse(FuzzingServer.isTraceAdmissible(true,
-                TraceEvidenceStrength.UNSUPPORTED_BUT_REPEATABLE));
+                TraceEvidenceStrength.WEAK,
+                TraceSupportClass.FAMILY_BACKED),
+                "WEAK with family-only support stays out — flow-level "
+                        + "support is the Phase 4 floor");
         assertFalse(FuzzingServer.isTraceAdmissible(true,
-                TraceEvidenceStrength.UNSUPPORTED));
+                TraceEvidenceStrength.UNSUPPORTED,
+                TraceSupportClass.UNSUPPORTED));
         assertFalse(FuzzingServer.isTraceAdmissible(false,
-                TraceEvidenceStrength.STRONG),
+                TraceEvidenceStrength.STRONG,
+                TraceSupportClass.FLOW_BACKED),
                 "traceInteresting=false blocks admission even at STRONG");
     }
 
     @Test
-    void admissionChainBlocksWeakTraceFromUpgradingBranchOnly() {
+    void phase4AdmissionCanBeDisabledForRollback() {
+        Config.Configuration cfg = new Config.Configuration();
+        cfg.enableLowerConfidenceTraceAdmission = false;
+        Config.setInstance(cfg);
+        assertTrue(FuzzingServer.isTraceAdmissible(true,
+                TraceEvidenceStrength.STRONG,
+                TraceSupportClass.FLOW_BACKED));
+        assertFalse(FuzzingServer.isTraceAdmissible(true,
+                TraceEvidenceStrength.UNSUPPORTED_BUT_REPEATABLE,
+                TraceSupportClass.FLOW_BACKED),
+                "knob off → Phase 3 STRONG-only policy is restored");
+        assertFalse(FuzzingServer.isTraceAdmissible(true,
+                TraceEvidenceStrength.WEAK,
+                TraceSupportClass.FLOW_BACKED));
+    }
+
+    @Test
+    void admissionChainBlocksWeakUnsupportedFromUpgradingBranchOnly() {
         // Same chain the server uses inside updateStatus: round strength ->
-        // isTraceAdmissible -> classifyAdmissionReason.
+        // isTraceAdmissible -> classifyAdmissionReason. A WEAK round
+        // without flow-level support still must NOT promote BRANCH_ONLY
+        // to BRANCH_AND_TRACE.
+        Config.Configuration cfg = new Config.Configuration();
+        cfg.enableLowerConfidenceTraceAdmission = true;
+        Config.setInstance(cfg);
+
         TraceEvidenceStrength roundStrength = FuzzingServer
                 .classifyRoundTraceEvidenceStrength(
                         /* traceInteresting */ true,
@@ -231,7 +285,7 @@ class FuzzingServerTriDiffDecisionTest {
         assertEquals(TraceEvidenceStrength.WEAK, roundStrength);
 
         boolean effective = FuzzingServer.isTraceAdmissible(true,
-                roundStrength);
+                roundStrength, TraceSupportClass.BACKGROUND_ONLY);
         assertFalse(effective);
 
         AdmissionReason reasonWithBranch = FuzzingServer
@@ -242,7 +296,56 @@ class FuzzingServerTriDiffDecisionTest {
                         /* windowSimFired */ false,
                         /* aggregateSimFired */ false);
         assertEquals(AdmissionReason.BRANCH_ONLY, reasonWithBranch,
-                "weak trace must not upgrade BRANCH_ONLY to BRANCH_AND_TRACE");
+                "weak+unsupported trace must not upgrade BRANCH_ONLY");
+    }
+
+    @Test
+    void admissionChainRoutesWeakFlowBackedToBranchAndWeakTrace() {
+        // Phase 4 extension: a WEAK round with flow-backed support IS
+        // admissible. With branch coverage the round surfaces as
+        // BRANCH_AND_TRACE (admission reason); the queue-priority
+        // classifier then routes it into BRANCH_AND_WEAK_TRACE because
+        // the strength is still non-STRONG.
+        Config.Configuration cfg = new Config.Configuration();
+        cfg.enableLowerConfidenceTraceAdmission = true;
+        Config.setInstance(cfg);
+
+        TraceEvidenceStrength roundStrength = FuzzingServer
+                .classifyRoundTraceEvidenceStrength(
+                        /* traceInteresting */ true,
+                        /* strongFiringWindows */ 0,
+                        /* weakFiringWindows */ 1,
+                        /* unsupportedButRepeatableFiringWindows */ 0,
+                        /* unsupportedFiringWindows */ 0,
+                        /* aggregateSimFired */ false);
+        assertEquals(TraceEvidenceStrength.WEAK, roundStrength);
+
+        boolean effective = FuzzingServer.isTraceAdmissible(true,
+                roundStrength, TraceSupportClass.FLOW_BACKED);
+        assertTrue(effective,
+                "WEAK with flow-level support must be admissible under "
+                        + "Phase 4 lower-confidence admission");
+
+        AdmissionReason reasonWithBranch = FuzzingServer
+                .classifyAdmissionReason(
+                        /* newBranchCoverage */ true,
+                        effective,
+                        /* triDiffExclusiveFired */ true,
+                        /* windowSimFired */ false,
+                        /* aggregateSimFired */ false);
+        assertEquals(AdmissionReason.BRANCH_AND_TRACE, reasonWithBranch,
+                "branch + supported weak trace surfaces as BRANCH_AND_TRACE");
+
+        org.zlab.upfuzz.fuzzingengine.server.observability.QueuePriorityClass priority = FuzzingServer
+                .classifyQueuePriorityClass(reasonWithBranch, roundStrength);
+        assertEquals(
+                org.zlab.upfuzz.fuzzingengine.server.observability.QueuePriorityClass.BRANCH_AND_WEAK_TRACE,
+                priority,
+                "non-STRONG BRANCH_AND_TRACE maps to BRANCH_AND_WEAK_TRACE");
+        assertEquals(
+                org.zlab.upfuzz.fuzzingengine.server.observability.SchedulerClass.SHADOW_EVAL,
+                TestPlanCorpus.mapToSchedulerClass(priority),
+                "branch+supported-weak-trace ultimately lands in SHADOW_EVAL");
     }
 
     @Test
@@ -282,10 +385,17 @@ class FuzzingServerTriDiffDecisionTest {
     }
 
     @Test
-    void admissionChainKeepsUnsupportedButRepeatableOutOfTraceAdmission() {
-        // Phase 3: UNSUPPORTED_BUT_REPEATABLE is visible but not
-        // admissible — verify the round-level chain mirrors the window
-        // decision.
+    void admissionChainRoutesUnsupportedButRepeatableToShadow() {
+        // Phase 4 change: UNSUPPORTED_BUT_REPEATABLE is now
+        // admissible (the "repeated rolling-only upgrade-critical
+        // traffic" pattern the Apr16 HDFS 2.10.2 -> 3.3.6 runs
+        // produced). The round surfaces as a trace-only admission
+        // whose priority class is TRACE_ONLY_WEAK — routed by
+        // TestPlanCorpus.mapToSchedulerClass into SHADOW_EVAL.
+        Config.Configuration cfg = new Config.Configuration();
+        cfg.enableLowerConfidenceTraceAdmission = true;
+        Config.setInstance(cfg);
+
         TraceEvidenceStrength roundStrength = FuzzingServer
                 .classifyRoundTraceEvidenceStrength(
                         /* traceInteresting */ true,
@@ -296,8 +406,27 @@ class FuzzingServerTriDiffDecisionTest {
                         /* aggregateSimFired */ false);
         assertEquals(TraceEvidenceStrength.UNSUPPORTED_BUT_REPEATABLE,
                 roundStrength);
-        assertFalse(FuzzingServer.isTraceAdmissible(true, roundStrength),
-                "unsupported-but-repeatable must not drive trace-only admission");
+        assertTrue(FuzzingServer.isTraceAdmissible(true, roundStrength,
+                TraceSupportClass.UNSUPPORTED),
+                "unsupported-but-repeatable must be admissible under "
+                        + "Phase 4");
+
+        AdmissionReason reason = FuzzingServer.classifyAdmissionReason(
+                /* newBranchCoverage */ false,
+                /* traceInteresting */ true,
+                /* triDiffExclusiveFired */ false,
+                /* windowSimFired */ true,
+                /* aggregateSimFired */ false);
+        org.zlab.upfuzz.fuzzingengine.server.observability.QueuePriorityClass queueClass = FuzzingServer
+                .classifyQueuePriorityClass(reason, roundStrength);
+        assertEquals(
+                org.zlab.upfuzz.fuzzingengine.server.observability.QueuePriorityClass.TRACE_ONLY_WEAK,
+                queueClass,
+                "UNSUPPORTED_BUT_REPEATABLE is non-STRONG → routes to "
+                        + "TRACE_ONLY_WEAK → SHADOW_EVAL");
+        assertEquals(
+                org.zlab.upfuzz.fuzzingengine.server.observability.SchedulerClass.SHADOW_EVAL,
+                TestPlanCorpus.mapToSchedulerClass(queueClass));
     }
 
     // ---------------------------------------------------------------

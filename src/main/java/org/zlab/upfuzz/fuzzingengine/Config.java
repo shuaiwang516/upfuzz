@@ -246,6 +246,62 @@ public class Config {
         public int strongCandidateConfirmationBudget = 6;
         public int weakCandidateConfirmationBudget = 2;
 
+        // --- Phase 4 branch-backbone efficiency controls ---
+        // These are shared scheduler policy knobs (trace-agnostic) that
+        // keep branch-only exploration healthy and bound weak-candidate
+        // cost. Phase 6 A/B validation holds these constant across
+        // trace-on and trace-off arms so trace benefit is isolated.
+        //
+        // Master switch for the branch-backbone controls. When false
+        // the scheduler behaves like Phase 3 — global decay threshold
+        // only, no per-lane decay, no quarantine, no reweight bonus.
+        public boolean enableBranchBackboneControls = true;
+
+        // Extra score boost applied to a BRANCH_SCOUT / MAIN_EXPLOIT
+        // entry on every downstream branch payoff credit. Layers on
+        // top of the base payoff score bump so productive branch
+        // parents stay favored over low-value branch-only churn.
+        public double branchBackbonePayoffBonus = 1.0;
+
+        // Per-lane decay thresholds. When set to a positive value, the
+        // scheduler decays entries in that lane after this many
+        // dequeues without any downstream payoff credit, overriding
+        // the global {@code testPlanDequeueDecayThreshold}. 0 means
+        // "use the global threshold". Defaults accelerate decay for
+        // low-value lanes (branch-scout without payoff = 4, shadow-eval
+        // without payoff = 2) so unhelpful plans clear out faster.
+        public int branchScoutDecayThreshold = 4;
+        public int shadowEvalDecayThreshold = 2;
+        public int mainExploitDecayThreshold = 0;
+        public int reproConfirmDecayThreshold = 0;
+
+        // Weak-candidate quarantine. When a lineage root accumulates
+        // {@code weakCandidateQuarantineDecayEvents} SHADOW_EVAL
+        // decays without any downstream payoff, new admissions from
+        // that lineage are rejected for {@code
+        // weakCandidateQuarantineRounds} subsequent rounds. Prevents
+        // a repeatedly-useless weak-trace pattern from cycling through
+        // the shadow lane forever. 0 disables quarantine entirely.
+        public int weakCandidateQuarantineDecayEvents = 2;
+        public int weakCandidateQuarantineRounds = 50;
+
+        // Phase 4 lower-confidence trace admission. When true, the
+        // round-level trace gate admits non-STRONG trace rounds that
+        // still carry structural support — WEAK with at least
+        // flow-backed 3-way overlap, or UNSUPPORTED_BUT_REPEATABLE
+        // (repeated rolling-only upgrade-critical traffic). These
+        // lower-confidence admissions route to SHADOW_EVAL via the
+        // existing BRANCH_AND_WEAK_TRACE / TRACE_ONLY_WEAK
+        // priority classes so the Phase 4 routing plan (strong trace
+        // → MAIN_EXPLOIT, repeatable/supported weak → SHADOW_EVAL)
+        // is actually reachable from real server execution.
+        //
+        // Kept as a knob so Phase 6 A/B validation can hold this
+        // constant across trace-on and trace-off arms and so the
+        // Phase 3 STRONG-only admission policy can be restored for
+        // rollback.
+        public boolean enableLowerConfidenceTraceAdmission = true;
+
         // --- Phase 5 useful coverage guidance ---
         // Master switch for Phase 5 coverage-quality guidance. When
         // true, branch novelty is classified by source (rolling-only vs

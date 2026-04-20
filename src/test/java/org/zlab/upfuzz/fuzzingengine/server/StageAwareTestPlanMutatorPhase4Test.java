@@ -762,6 +762,128 @@ class StageAwareTestPlanMutatorPhase4Test {
     }
 
     // ------------------------------------------------------------------
+    // Phase 4 routing-context fields on the hint
+    // ------------------------------------------------------------------
+
+    @Test
+    void hintRoutingContextDefaultsAreNeutral() {
+        StageMutationHint hint = StageMutationHint.empty();
+        assertFalse(hint.hasRoutingContext(),
+                "empty hint must not advertise routing context");
+        assertEquals("", hint.hotRolePair);
+        assertEquals("", hint.boundaryInvolvedRolePair);
+        assertFalse(hint.orderAnomalyPresent);
+        assertEquals(TraceSupportClass.UNSUPPORTED, hint.flowSupportClass);
+    }
+
+    @Test
+    void hintRoutingContextExposedByConstructor() {
+        StageMutationHint hint = new StageMutationHint(
+                "stage_POST_STAGE",
+                StageMutationHint.StageKindHint.POST_STAGE,
+                1,
+                setOf(1),
+                StageMutationHint.SignalType.BRANCH_AND_STRONG_TRACE,
+                true, false, false, false, true,
+                org.zlab.net.tracker.classifier.ProtocolFamily.CASSANDRA_SCHEMA_SYNC,
+                "CLIENT->REPLICA",
+                "CLIENT->REPLICA",
+                true,
+                TraceSupportClass.FLOW_BACKED);
+        assertTrue(hint.hasRoutingContext());
+        assertEquals("CLIENT->REPLICA", hint.hotRolePair);
+        assertEquals(TraceSupportClass.FLOW_BACKED, hint.flowSupportClass);
+        assertTrue(hint.orderAnomalyPresent);
+    }
+
+    @Test
+    void pickFamilyBoostsBoundaryWhenRolePairPresent() {
+        // Force mutator to never roll templates and to always take the
+        // candidate-list path; verify DUPLICATE_SHELL_CLUSTER_AT_BOUNDARY
+        // is reachable when boundaryInvolvedRolePair is populated.
+        Config.getConf().enableStageTemplates = false;
+        StageMutationHint hint = new StageMutationHint(
+                "stage_POST_STAGE",
+                StageMutationHint.StageKindHint.POST_STAGE,
+                1,
+                setOf(1),
+                StageMutationHint.SignalType.BRANCH_AND_STRONG_TRACE,
+                true, false, false, false, false,
+                null,
+                "CLIENT->REPLICA",
+                "CLIENT->REPLICA",
+                false,
+                TraceSupportClass.FLOW_BACKED);
+        // Deterministic assertion: call pickFamily many times and
+        // confirm DUPLICATE_SHELL_CLUSTER_AT_BOUNDARY shows up at
+        // least once. Without the Phase 4 boost it still appears via
+        // the POST_STAGE candidate list, but when boundary is
+        // populated it gets an extra weight so the counter must be
+        // noticeably higher than the no-context baseline.
+        int withContextHits = countFamilyHits(hint,
+                StageAwareTestPlanMutator.MutationFamily.DUPLICATE_SHELL_CLUSTER_AT_BOUNDARY,
+                500);
+        StageMutationHint plainHint = new StageMutationHint(
+                "stage_POST_STAGE",
+                StageMutationHint.StageKindHint.POST_STAGE,
+                1,
+                setOf(1),
+                StageMutationHint.SignalType.BRANCH_AND_STRONG_TRACE,
+                true, false, false, false, false);
+        int plainHits = countFamilyHits(plainHint,
+                StageAwareTestPlanMutator.MutationFamily.DUPLICATE_SHELL_CLUSTER_AT_BOUNDARY,
+                500);
+        assertTrue(withContextHits > plainHits,
+                "boundary-involved role pair should increase the "
+                        + "DUPLICATE_SHELL_CLUSTER_AT_BOUNDARY weight: "
+                        + "withContext=" + withContextHits + ", plain="
+                        + plainHits);
+    }
+
+    @Test
+    void pickFamilyBoostsReorderWhenOrderAnomalyPresent() {
+        Config.getConf().enableStageTemplates = false;
+        StageMutationHint hint = new StageMutationHint(
+                "stage_POST_STAGE",
+                StageMutationHint.StageKindHint.POST_STAGE,
+                1,
+                setOf(1),
+                StageMutationHint.SignalType.BRANCH_AND_STRONG_TRACE,
+                true, false, false, false, false,
+                null, "", "", /* orderAnomalyPresent */ true,
+                TraceSupportClass.FLOW_BACKED);
+        StageMutationHint plainHint = new StageMutationHint(
+                "stage_POST_STAGE",
+                StageMutationHint.StageKindHint.POST_STAGE,
+                1,
+                setOf(1),
+                StageMutationHint.SignalType.BRANCH_AND_STRONG_TRACE,
+                true, false, false, false, false);
+        int withAnomaly = countFamilyHits(hint,
+                StageAwareTestPlanMutator.MutationFamily.LOCAL_REORDER_NEAR_HOTSPOT,
+                500);
+        int plain = countFamilyHits(plainHint,
+                StageAwareTestPlanMutator.MutationFamily.LOCAL_REORDER_NEAR_HOTSPOT,
+                500);
+        assertTrue(withAnomaly > plain,
+                "order-anomaly flag should boost LOCAL_REORDER_NEAR_HOTSPOT: "
+                        + "withAnomaly=" + withAnomaly + ", plain=" + plain);
+    }
+
+    private static int countFamilyHits(StageMutationHint hint,
+            StageAwareTestPlanMutator.MutationFamily target, int trials) {
+        int hits = 0;
+        for (int i = 0; i < trials; i++) {
+            StageAwareTestPlanMutator.MutationFamily picked = StageAwareTestPlanMutator
+                    .pickFamily(hint, Config.getConf());
+            if (picked == target) {
+                hits++;
+            }
+        }
+        return hits;
+    }
+
+    // ------------------------------------------------------------------
     // Test helpers
     // ------------------------------------------------------------------
 

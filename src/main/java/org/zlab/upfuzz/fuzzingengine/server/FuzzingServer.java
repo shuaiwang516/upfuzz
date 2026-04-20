@@ -20,9 +20,12 @@ import org.jacoco.core.data.ExecutionDataStore;
 import org.zlab.net.tracker.CanonicalKeyMode;
 import org.zlab.net.tracker.Trace;
 import org.zlab.net.tracker.TraceEntry;
+import org.zlab.net.tracker.classifier.ProtocolFamily;
 import org.zlab.net.tracker.diff.DiffComputeMessageTriDiff;
 import org.zlab.net.tracker.diff.DiffComputeSemanticSimilarity;
 import org.zlab.net.tracker.flow.FlowExtractionResult;
+import org.zlab.net.tracker.flow.TraceFlowKey;
+import org.zlab.net.tracker.flow.TraceFlowSummary;
 import org.zlab.upfuzz.fuzzingengine.trace.AlignedWindowFlowSummaries;
 import org.zlab.upfuzz.fuzzingengine.trace.TraceWindow;
 import org.zlab.upfuzz.fuzzingengine.trace.WindowedTrace;
@@ -47,6 +50,7 @@ import org.zlab.upfuzz.fuzzingengine.server.observability.BranchNoveltyClass;
 import org.zlab.upfuzz.fuzzingengine.server.observability.BranchNoveltyRow;
 import org.zlab.upfuzz.fuzzingengine.server.observability.ObservabilityMetrics;
 import org.zlab.upfuzz.fuzzingengine.server.observability.QueuePriorityClass;
+import org.zlab.upfuzz.fuzzingengine.server.observability.SchedulerClass;
 import org.zlab.upfuzz.fuzzingengine.server.observability.StageNoveltyRow;
 import org.zlab.upfuzz.fuzzingengine.server.observability.StructuredCandidateStrength;
 import org.zlab.upfuzz.fuzzingengine.server.observability.TraceEvidenceStrength;
@@ -2267,6 +2271,22 @@ public class FuzzingServer {
         boolean phase4AnyPostUpgradeFired = false;
         boolean phase4AnyFaultRecoveryFired = false;
 
+        // Phase 4 routing context: pulled from the TraceWindowGuidanceDecision
+        // and rolling-lane flow summary of each firing window so the
+        // stage-aware mutator and scheduler can target the observed
+        // divergence. hotProtocolFamily / hotRolePair /
+        // boundaryInvolvedRolePair come from the <em>first</em> firing
+        // window (same convention as hotStageId/hotWindowOrdinal).
+        // orderAnomalyPresent is an OR across every firing window.
+        // flowSupportClass tracks the MAX (strongest) support tier
+        // across every firing window so a single supported window
+        // cannot be hidden by later unsupported firings.
+        ProtocolFamily phase4HotProtocolFamily = null;
+        String phase4HotRolePair = "";
+        String phase4BoundaryInvolvedRolePair = "";
+        boolean phase4OrderAnomalyPresent = false;
+        TraceSupportClass phase4FlowSupportClass = TraceSupportClass.UNSUPPORTED;
+
         boolean allLanesOk = normalizeLaneStatus(
                 testPlanFeedbackPackets[0]) == TestPlanFeedbackPacket.LaneStatus.OK
                 && normalizeLaneStatus(
@@ -2722,6 +2742,11 @@ public class FuzzingServer {
                             phase4HotWindowOrdinal = aw.rolling.ordinal;
                             phase4HotStageId = aw.rolling.comparisonStageId;
                             phase4HotStageKind = aw.rolling.stageKind;
+                            phase4HotProtocolFamily = pickHotProtocolFamily(
+                                    decision);
+                            phase4HotRolePair = pickTopRolePair(rollingFlows);
+                            phase4BoundaryInvolvedRolePair = pickTopBoundaryInvolvedRolePair(
+                                    rollingFlows);
                         }
                         if (aw.rolling.rawUpgradedNodeSet != null) {
                             phase4HotNodeSet
@@ -2739,6 +2764,18 @@ public class FuzzingServer {
                         }
                         if (firedKind == TraceWindow.StageKind.FAULT_RECOVERY) {
                             phase4AnyFaultRecoveryFired = true;
+                        }
+                        if (decision != null) {
+                            if (decision.orderBonusApplied > 0.0
+                                    || decision.dominantOrderAnomalousFamily != null) {
+                                phase4OrderAnomalyPresent = true;
+                            }
+                            if (decision.supportClass != null
+                                    && decision.supportClass
+                                            .rank() > phase4FlowSupportClass
+                                                    .rank()) {
+                                phase4FlowSupportClass = decision.supportClass;
+                            }
                         }
                     }
                 }
@@ -2897,17 +2934,22 @@ public class FuzzingServer {
                 + " errorLog=" + errorLogVerdict);
 
         // === Corpus update (gated by verdict) ===
-        // Phase 2 enforcement: trace evidence only drives admission when
-        // the round-level label is STRONG. Weak and unsupported rounds
-        // never produce trace-only admissions and never upgrade a
-        // branch-only admission into BRANCH_AND_TRACE — this is the core
-        // filter Phase 2 adds to the Phase 1 exclusive-only admission
-        // contract. {@code traceInteresting} stays as the raw signal for
-        // observability so offline replay can see which rounds fired at
-        // the Phase 0/1 level; {@code effectiveTraceInteresting} is the
-        // Phase 2 decision that actually feeds the admission path.
+        // Phase 2/3 baseline: trace evidence drives admission only
+        // when the round-level label is STRONG. Phase 4 extends the
+        // gate with {@code enableLowerConfidenceTraceAdmission}: a
+        // round can still land in SHADOW_EVAL when it is
+        // UNSUPPORTED_BUT_REPEATABLE or WEAK with flow-backed support
+        // (see {@link #isTraceAdmissible(boolean, TraceEvidenceStrength,
+        // TraceSupportClass)} for the full policy). The round-level
+        // {@code phase4FlowSupportClass} captured during scoring is
+        // what decides the Phase 4 branch.
+        // {@code traceInteresting} stays as the raw signal for
+        // observability so offline replay can see which rounds fired
+        // at the Phase 0/1 level; {@code effectiveTraceInteresting}
+        // is the Phase 4 decision that feeds the admission path.
         boolean effectiveTraceInteresting = isTraceAdmissible(
-                traceInteresting, traceEvidenceStrength);
+                traceInteresting, traceEvidenceStrength,
+                phase4FlowSupportClass);
         boolean addToCorpus = newOriBC || newUpgradeBC
                 || effectiveTraceInteresting;
         boolean newBranchCoverage = newOriBC || newUpgradeBC;
@@ -3021,6 +3063,18 @@ public class FuzzingServer {
         if (traceEvidenceStrength == TraceEvidenceStrength.STRONG) {
             observabilityMetrics.recordDownstreamStrongTraceHit(
                     testPlanDiffFeedbackPacket.testPacketID);
+            // Phase 4: split the aggregate strong-trace signal into
+            // "trace helped discover a strong structured candidate"
+            // vs "trace improved exploration only" so the seed
+            // lifecycle CSV can answer both questions directly.
+            if (strongStructuredCandidate) {
+                observabilityMetrics
+                        .recordDownstreamTraceAssistedCandidateHit(
+                                testPlanDiffFeedbackPacket.testPacketID);
+            } else {
+                observabilityMetrics.recordDownstreamStrongTraceOnlyHit(
+                        testPlanDiffFeedbackPacket.testPacketID);
+            }
         }
         // Phase 1: only strong structured candidates are allowed to
         // promote a probationary seed. Weak structured candidates are
@@ -3194,7 +3248,12 @@ public class FuzzingServer {
                             rollingOnlyEventCandidate
                                     || rollingOnlyErrorLogCandidate,
                             strongStructuredCandidate
-                                    || weakStructuredCandidate);
+                                    || weakStructuredCandidate,
+                            phase4HotProtocolFamily,
+                            phase4HotRolePair,
+                            phase4BoundaryInvolvedRolePair,
+                            phase4OrderAnomalyPresent,
+                            phase4FlowSupportClass);
                     // Phase 3: when this admission also produced a
                     // strong structured candidate, promote the plan
                     // into the repro_confirm lane so the scheduler
@@ -3223,6 +3282,22 @@ public class FuzzingServer {
                                 queuePriorityClassForRow,
                                 stageMutationHint,
                                 branchNoveltyClass);
+                    }
+                    // Phase 4: credit a SHADOW_EVAL admission without a
+                    // candidate as a low-value shadow hit on the
+                    // lineage lifecycle. This lets offline analysis
+                    // spot lineages whose only contribution is weak-
+                    // trace churn without polluting the
+                    // strong-structured counter.
+                    SchedulerClass routedLane = TestPlanCorpus
+                            .mapToSchedulerClass(queuePriorityClassForRow);
+                    if (!strongStructuredCandidate
+                            && !weakStructuredCandidate
+                            && !rollingOnlyEventCandidate
+                            && !rollingOnlyErrorLogCandidate
+                            && routedLane == SchedulerClass.SHADOW_EVAL) {
+                        observabilityMetrics.recordDownstreamShadowLowValueHit(
+                                testPlanDiffFeedbackPacket.testPacketID);
                     }
                     if (isModeFive && !newBranchCoverage
                             && Config.getConf().useTraceSignatureDedup) {
@@ -5296,21 +5371,65 @@ public class FuzzingServer {
     }
 
     /**
-     * Trace-admission gate. Trace evidence only drives an admission (or
-     * upgrades a branch-only admission into
-     * {@link AdmissionReason#BRANCH_AND_TRACE}) when the round-level
-     * trace evidence strength is {@link TraceEvidenceStrength#STRONG}.
-     *
-     * <p>Weak, unsupported, and unsupported-but-repeatable rounds keep
-     * producing trace observability rows but never enter the corpus via
-     * the trace path. This is what turns the Phase 3 label into actual
-     * enforcement — the Apr15 {@code all3=0}, {@code PRE_UPGRADE},
-     * baseline-disagreement, and aggregate-sim-only rounds all land
-     * here.
+     * Phase 3 two-argument overload: admits STRONG rounds only and
+     * ignores any support-class context. Kept for test callers that
+     * do not compute a round-level support class.
      */
     static boolean isTraceAdmissible(boolean traceInteresting,
             TraceEvidenceStrength strength) {
-        return traceInteresting && strength == TraceEvidenceStrength.STRONG;
+        return isTraceAdmissible(traceInteresting, strength,
+                TraceSupportClass.UNSUPPORTED);
+    }
+
+    /**
+     * Trace-admission gate.
+     *
+     * <p>Phase 3 baseline: admit only {@link TraceEvidenceStrength#STRONG}
+     * rounds. Weak, unsupported, and unsupported-but-repeatable rounds
+     * keep producing trace observability rows but never enter the
+     * corpus via the trace path.
+     *
+     * <p>Phase 4 extension (gated on
+     * {@link Config.Configuration#enableLowerConfidenceTraceAdmission}):
+     * additionally admit
+     * <ul>
+     *   <li>{@link TraceEvidenceStrength#UNSUPPORTED_BUT_REPEATABLE}
+     *       rounds — repeated rolling-only upgrade-critical traffic
+     *       (the Apr16 HDFS {@code 2.10.2 -> 3.3.6} pattern Phase 3
+     *       flagged but never admitted).</li>
+     *   <li>{@link TraceEvidenceStrength#WEAK} rounds whose
+     *       round-level {@code supportClass} is
+     *       {@link TraceSupportClass#FLOW_BACKED} or stronger — 3-way
+     *       flow overlap exists, the composite score fell below the
+     *       strong threshold.</li>
+     * </ul>
+     * Lower-confidence admissions route to {@link SchedulerClass#SHADOW_EVAL}
+     * via the existing {@link QueuePriorityClass#BRANCH_AND_WEAK_TRACE}
+     * / {@link QueuePriorityClass#TRACE_ONLY_WEAK} classes, matching
+     * the Phase 4 policy "repeated but lower-confidence supported
+     * cases into SHADOW_EVAL".
+     */
+    static boolean isTraceAdmissible(boolean traceInteresting,
+            TraceEvidenceStrength strength,
+            TraceSupportClass supportClass) {
+        if (!traceInteresting) {
+            return false;
+        }
+        if (strength == TraceEvidenceStrength.STRONG) {
+            return true;
+        }
+        Config.Configuration cfg = Config.getConf();
+        if (cfg == null || !cfg.enableLowerConfidenceTraceAdmission) {
+            return false;
+        }
+        if (strength == TraceEvidenceStrength.UNSUPPORTED_BUT_REPEATABLE) {
+            return true;
+        }
+        if (strength == TraceEvidenceStrength.WEAK && supportClass != null
+                && supportClass.atLeast(TraceSupportClass.FLOW_BACKED)) {
+            return true;
+        }
+        return false;
     }
 
     // === Phase 0: confidence label classifiers ===
@@ -5900,6 +6019,12 @@ public class FuzzingServer {
      * window's stage id / ordinal, the union of every firing window's
      * rolling upgraded node set, and a closed set of booleans.
      */
+    /**
+     * Thirteen-argument overload used by tests that predate the Phase 4
+     * routing-context extension. Delegates to the full builder with
+     * empty/neutral routing-context values so existing assertions stay
+     * valid.
+     */
     static StageMutationHint buildStageMutationHint(
             String hotStageId,
             TraceWindow.StageKind hotStageKind,
@@ -5914,6 +6039,38 @@ public class FuzzingServer {
             StructuredCandidateStrength testLevelCandidateStrength,
             boolean rollingOnlyEventOrErrorLog,
             boolean anyStructuredDivergence) {
+        return buildStageMutationHint(hotStageId, hotStageKind,
+                hotWindowOrdinal, hotNodeSet, anyPreUpgradeFired,
+                anyNonPreUpgradeFired, anyPostUpgradeFired,
+                anyFaultRecoveryFired, newBranchCoverage,
+                traceEvidenceStrength, testLevelCandidateStrength,
+                rollingOnlyEventOrErrorLog, anyStructuredDivergence,
+                /* hotProtocolFamily */ null,
+                /* hotRolePair */ "",
+                /* boundaryInvolvedRolePair */ "",
+                /* orderAnomalyPresent */ false,
+                /* flowSupportClass */ TraceSupportClass.UNSUPPORTED);
+    }
+
+    static StageMutationHint buildStageMutationHint(
+            String hotStageId,
+            TraceWindow.StageKind hotStageKind,
+            int hotWindowOrdinal,
+            Set<Integer> hotNodeSet,
+            boolean anyPreUpgradeFired,
+            boolean anyNonPreUpgradeFired,
+            boolean anyPostUpgradeFired,
+            boolean anyFaultRecoveryFired,
+            boolean newBranchCoverage,
+            TraceEvidenceStrength traceEvidenceStrength,
+            StructuredCandidateStrength testLevelCandidateStrength,
+            boolean rollingOnlyEventOrErrorLog,
+            boolean anyStructuredDivergence,
+            ProtocolFamily hotProtocolFamily,
+            String hotRolePair,
+            String boundaryInvolvedRolePair,
+            boolean orderAnomalyPresent,
+            TraceSupportClass flowSupportClass) {
         StageMutationHint.SignalType signalType = StageMutationHint
                 .classifySignal(newBranchCoverage, traceEvidenceStrength,
                         testLevelCandidateStrength,
@@ -5947,7 +6104,93 @@ public class FuzzingServer {
                 preUpgradeOnly,
                 faultInfluenced,
                 needsConfirmation,
-                upgradeOrderMattered);
+                upgradeOrderMattered,
+                hotProtocolFamily,
+                hotRolePair == null ? "" : hotRolePair,
+                boundaryInvolvedRolePair == null ? ""
+                        : boundaryInvolvedRolePair,
+                orderAnomalyPresent,
+                flowSupportClass == null ? TraceSupportClass.UNSUPPORTED
+                        : flowSupportClass);
+    }
+
+    /**
+     * Pick the dominant divergent family from a scoring decision, falling
+     * back to the dominant supported family or the order-anomalous family
+     * when no divergent family is recorded. Returns {@code null} when the
+     * decision carried no named family.
+     */
+    static ProtocolFamily pickHotProtocolFamily(
+            TraceWindowGuidanceDecision decision) {
+        if (decision == null) {
+            return null;
+        }
+        if (decision.dominantDivergentFamily != null) {
+            return decision.dominantDivergentFamily;
+        }
+        if (decision.dominantOrderAnomalousFamily != null) {
+            return decision.dominantOrderAnomalousFamily;
+        }
+        return decision.dominantSupportedFamily;
+    }
+
+    /**
+     * Pick the {@code "src->dst"} role pair that carried the most
+     * rolling-lane traffic in {@code rollingFlows}. Returns an empty
+     * string when no flow is available.
+     */
+    static String pickTopRolePair(FlowExtractionResult rollingFlows) {
+        if (rollingFlows == null) {
+            return "";
+        }
+        return pickTopRolePairMatching(rollingFlows, null);
+    }
+
+    /**
+     * Pick the {@code "src->dst"} role pair that carried the most
+     * boundary-crossing rolling-lane traffic. Returns an empty string
+     * when no rolling flow crossed an upgraded boundary.
+     */
+    static String pickTopBoundaryInvolvedRolePair(
+            FlowExtractionResult rollingFlows) {
+        if (rollingFlows == null) {
+            return "";
+        }
+        return pickTopRolePairMatching(rollingFlows,
+                new java.util.function.Predicate<TraceFlowSummary>() {
+                    @Override
+                    public boolean test(TraceFlowSummary flow) {
+                        return flow != null && flow.boundaryInvolved();
+                    }
+                });
+    }
+
+    private static String pickTopRolePairMatching(
+            FlowExtractionResult flows,
+            java.util.function.Predicate<TraceFlowSummary> filter) {
+        Map<String, Integer> rolePairCounts = new LinkedHashMap<>();
+        for (TraceFlowSummary flow : flows.flows()) {
+            if (filter != null && !filter.test(flow)) {
+                continue;
+            }
+            TraceFlowKey key = flow.key();
+            if (key == null) {
+                continue;
+            }
+            String rolePair = key.srcRole + "->" + key.dstRole;
+            rolePairCounts.merge(rolePair, flow.eventCount(), Integer::sum);
+        }
+        String best = "";
+        int bestCount = -1;
+        for (Map.Entry<String, Integer> e : rolePairCounts.entrySet()) {
+            if (e.getValue() > bestCount
+                    || (e.getValue() == bestCount
+                            && e.getKey().compareTo(best) < 0)) {
+                best = e.getKey();
+                bestCount = e.getValue();
+            }
+        }
+        return best;
     }
 
     // === Phase 4: Canonical trace scoring helpers ===

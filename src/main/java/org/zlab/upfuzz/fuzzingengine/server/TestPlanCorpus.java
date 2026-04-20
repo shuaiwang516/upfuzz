@@ -73,6 +73,15 @@ public class TestPlanCorpus {
     // can be demoted one class.
     private final Map<Integer, Integer> dequeuesPerLineage = new HashMap<>();
 
+    // Phase 4 weak-candidate quarantine. Counts SHADOW_EVAL decay
+    // events per lineage root (reset by any downstream payoff). When
+    // the count crosses {@code weakCandidateQuarantineDecayEvents} a
+    // quarantine window is opened: the lineage cannot re-enter any
+    // queue until {@code currentRound >= quarantinedUntilRound}.
+    private final Map<Integer, Integer> shadowDecayEventsPerLineage = new HashMap<>();
+    private final Map<Integer, Long> quarantinedUntilRound = new HashMap<>();
+    private volatile long currentRound = -1L;
+
     private final ObservabilityMetrics observabilityMetrics;
 
     public TestPlanCorpus() {
@@ -167,6 +176,9 @@ public class TestPlanCorpus {
      * mutation budget to record per-class spend.
      */
     public QueuedTestPlan pollQueuedTestPlan(long roundId) {
+        if (roundId >= 0) {
+            currentRound = roundId;
+        }
         QueuedTestPlan entry;
         if (Config.getConf() != null
                 && !Config.getConf().usePriorityTestPlanScheduler) {
@@ -376,6 +388,25 @@ public class TestPlanCorpus {
         int testPacketId = testPlan != null ? testPlan.lineageTestId : -1;
         boolean phase3Enabled = Config.getConf() == null
                 || Config.getConf().usePriorityTestPlanScheduler;
+        if (roundId >= 0) {
+            currentRound = roundId;
+        }
+        // Phase 4: weak-candidate quarantine gate. Reject admissions
+        // from lineages that recently churned through the shadow lane
+        // without any payoff. Candidate parents (REPRO_CONFIRM-bound
+        // admissions) bypass the quarantine — a strong structured
+        // candidate is always worth re-observing even if past shadow
+        // churn hit the quarantine threshold.
+        if (!candidateParent && isQuarantined(lineageRoot, roundId)) {
+            if (observabilityMetrics != null) {
+                observabilityMetrics
+                        .recordSchedulerQuarantineRejection(schedClass);
+            }
+            logger.debug(
+                    "Phase 4 quarantine rejected admission for lineageRoot={} on lane={} (round={})",
+                    lineageRoot, schedClass, roundId);
+            return false;
+        }
         // Phase 3 dedup key = lineageRoot + plan skeleton, so two
         // independent parents producing the same skeleton are NOT
         // collapsed into a single queue entry. The phase plan
@@ -398,7 +429,7 @@ public class TestPlanCorpus {
         double initialScore = candidateParent
                 ? 10.0
                 : initialScoreFor(schedClass, traceEvidenceStrength,
-                        structuredCandidateStrength);
+                        structuredCandidateStrength, stageMutationHint);
         // Phase 5: boost the initial score for rolling-post-upgrade
         // novelty so seeds that uniquely expand post-upgrade coverage
         // rise above generic baseline-shared hits.
@@ -612,9 +643,27 @@ public class TestPlanCorpus {
         if (lineageRoot < 0) {
             return;
         }
+        // Phase 4: any payoff clears the pending shadow-decay count for
+        // this lineage so a productive parent is not held hostage by
+        // its earlier shadow churn.
+        clearShadowDecayTracking(lineageRoot);
+        double backboneBonus = resolveBranchBackbonePayoffBonus();
         for (QueuedTestPlan entry : allEntries()) {
             if (entry.lineageRoot == lineageRoot) {
                 entry.onBranchPayoff();
+                if (backboneBonus > 0.0
+                        && (entry.schedulerClass == SchedulerClass.BRANCH_SCOUT
+                                || entry.schedulerClass == SchedulerClass.MAIN_EXPLOIT)) {
+                    entry.score += backboneBonus;
+                    if (observabilityMetrics != null) {
+                        observabilityMetrics
+                                .recordSchedulerBranchBackboneReweight(
+                                        entry.schedulerClass);
+                        observabilityMetrics
+                                .recordDescendantBranchBackboneReweight(
+                                        entry.lineageRoot);
+                    }
+                }
                 if (observabilityMetrics != null) {
                     observabilityMetrics
                             .recordSchedulerBranchPayoff(entry.schedulerClass);
@@ -627,6 +676,7 @@ public class TestPlanCorpus {
         if (lineageRoot < 0) {
             return;
         }
+        clearShadowDecayTracking(lineageRoot);
         for (QueuedTestPlan entry : allEntries()) {
             if (entry.lineageRoot == lineageRoot) {
                 entry.onStrongCandidatePayoff();
@@ -642,6 +692,12 @@ public class TestPlanCorpus {
         if (lineageRoot < 0) {
             return;
         }
+        // Phase 4: any downstream payoff — including a weak
+        // candidate hit — clears the pending shadow-decay count for
+        // this lineage. A weak oracle signal is still evidence that
+        // the lineage is not dead-ended noise, so it cancels the
+        // quarantine runway.
+        clearShadowDecayTracking(lineageRoot);
         for (QueuedTestPlan entry : allEntries()) {
             if (entry.lineageRoot == lineageRoot) {
                 entry.onWeakCandidatePayoff();
@@ -651,6 +707,22 @@ public class TestPlanCorpus {
                 }
             }
         }
+    }
+
+    private static double resolveBranchBackbonePayoffBonus() {
+        Config.Configuration cfg = Config.getConf();
+        if (cfg == null || !cfg.enableBranchBackboneControls) {
+            return 0.0;
+        }
+        return Math.max(0.0, cfg.branchBackbonePayoffBonus);
+    }
+
+    private void clearShadowDecayTracking(int lineageRoot) {
+        if (lineageRoot < 0) {
+            return;
+        }
+        shadowDecayEventsPerLineage.remove(lineageRoot);
+        quarantinedUntilRound.remove(lineageRoot);
     }
 
     /**
@@ -677,8 +749,8 @@ public class TestPlanCorpus {
         if (Config.getConf() == null) {
             return;
         }
-        int threshold = Config.getConf().testPlanDequeueDecayThreshold;
-        if (threshold <= 0) {
+        int globalThreshold = Config.getConf().testPlanDequeueDecayThreshold;
+        if (globalThreshold <= 0) {
             return;
         }
         if (!Config.getConf().usePriorityTestPlanScheduler) {
@@ -697,11 +769,20 @@ public class TestPlanCorpus {
             SchedulerClass source = classes[i];
             Deque<QueuedTestPlan> sourceQueue = queues.get(source);
             Iterator<QueuedTestPlan> it = sourceQueue.iterator();
+            // Phase 4: per-lane decay threshold. Low-value lanes
+            // (SHADOW_EVAL) decay faster than the global default to
+            // bound weak-candidate churn, and high-value lanes
+            // (MAIN_EXPLOIT) can opt out of accelerated decay.
+            int laneThreshold = resolveDecayThreshold(source,
+                    globalThreshold);
+            if (laneThreshold <= 0) {
+                continue;
+            }
             while (it.hasNext()) {
                 QueuedTestPlan entry = it.next();
                 int dequeues = dequeuesPerLineage.getOrDefault(
                         entry.lineageRoot, 0);
-                if (entry.payoffCredits > 0 || dequeues < threshold) {
+                if (entry.payoffCredits > 0 || dequeues < laneThreshold) {
                     continue;
                 }
                 // Phase 5: protect the branch-scout floor
@@ -719,6 +800,11 @@ public class TestPlanCorpus {
                     if (observabilityMetrics != null) {
                         observabilityMetrics.recordSchedulerDecayDemotion(
                                 source);
+                    }
+                    // Phase 4: a drop from SHADOW_EVAL counts toward
+                    // the weak-candidate quarantine for that lineage.
+                    if (source == SchedulerClass.SHADOW_EVAL) {
+                        recordShadowDecayEvent(entry.lineageRoot);
                     }
                     continue;
                 }
@@ -742,6 +828,121 @@ public class TestPlanCorpus {
                 }
             }
         }
+    }
+
+    /**
+     * Phase 4: resolve the per-lane decay threshold. When the
+     * branch-backbone knob for the lane is &gt; 0 it overrides the
+     * global {@code testPlanDequeueDecayThreshold}; 0 means "use the
+     * global threshold". Returns the threshold to apply.
+     */
+    private static int resolveDecayThreshold(SchedulerClass lane,
+            int globalThreshold) {
+        Config.Configuration cfg = Config.getConf();
+        if (cfg == null || !cfg.enableBranchBackboneControls) {
+            return globalThreshold;
+        }
+        int lane_specific;
+        switch (lane) {
+        case SHADOW_EVAL:
+            lane_specific = cfg.shadowEvalDecayThreshold;
+            break;
+        case BRANCH_SCOUT:
+            lane_specific = cfg.branchScoutDecayThreshold;
+            break;
+        case MAIN_EXPLOIT:
+            lane_specific = cfg.mainExploitDecayThreshold;
+            break;
+        case REPRO_CONFIRM:
+            lane_specific = cfg.reproConfirmDecayThreshold;
+            break;
+        default:
+            lane_specific = 0;
+        }
+        return lane_specific > 0 ? lane_specific : globalThreshold;
+    }
+
+    /**
+     * Phase 4: record a SHADOW_EVAL decay event for the given lineage
+     * root. When the counter crosses the quarantine threshold, the
+     * lineage is quarantined for {@code weakCandidateQuarantineRounds}
+     * rounds so repeated weak-trace noise cannot keep cycling through
+     * the shadow lane.
+     */
+    private void recordShadowDecayEvent(int lineageRoot) {
+        if (lineageRoot < 0) {
+            return;
+        }
+        Config.Configuration cfg = Config.getConf();
+        if (cfg == null || !cfg.enableBranchBackboneControls) {
+            return;
+        }
+        int threshold = cfg.weakCandidateQuarantineDecayEvents;
+        int rounds = cfg.weakCandidateQuarantineRounds;
+        if (threshold <= 0 || rounds <= 0) {
+            return;
+        }
+        int count = shadowDecayEventsPerLineage.merge(lineageRoot, 1,
+                Integer::sum);
+        if (count >= threshold) {
+            long until = Math.max(0L, currentRound) + rounds;
+            quarantinedUntilRound.put(lineageRoot, until);
+            shadowDecayEventsPerLineage.remove(lineageRoot);
+            if (observabilityMetrics != null) {
+                observabilityMetrics.recordSchedulerQuarantineEvent(
+                        SchedulerClass.SHADOW_EVAL);
+                observabilityMetrics.recordDescendantBranchBackboneQuarantine(
+                        lineageRoot);
+            }
+            logger.debug(
+                    "Phase 4 quarantined lineageRoot={} until round={} "
+                            + "(currentRound={})",
+                    lineageRoot, until, currentRound);
+        }
+    }
+
+    /**
+     * Phase 4: check whether {@code lineageRoot} is currently
+     * quarantined. An admission attempt on a quarantined lineage is
+     * rejected. Quarantine expires automatically when the current
+     * round advances past the stored deadline.
+     */
+    boolean isQuarantined(int lineageRoot, long round) {
+        if (lineageRoot < 0) {
+            return false;
+        }
+        Long until = quarantinedUntilRound.get(lineageRoot);
+        if (until == null) {
+            return false;
+        }
+        if (round < 0) {
+            round = currentRound;
+        }
+        if (until <= round) {
+            quarantinedUntilRound.remove(lineageRoot);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Test hook — report the number of lineages currently in the
+     * Phase 4 quarantine cooldown.
+     */
+    public int quarantinedLineageCount() {
+        long round = Math.max(0L, currentRound);
+        int count = 0;
+        Iterator<Map.Entry<Integer, Long>> it = quarantinedUntilRound
+                .entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<Integer, Long> e = it.next();
+            if (e.getValue() > round) {
+                count++;
+            } else {
+                it.remove();
+            }
+        }
+        return count;
     }
 
     // === Internals ===
@@ -971,9 +1172,21 @@ public class TestPlanCorpus {
         }
     }
 
+    /**
+     * Phase 4 scoring policy. Applies the base class / strength
+     * bonus and layers on the routing-context bonuses from the
+     * hint (see {@link StageMutationHint} — {@code flowSupportClass},
+     * {@code orderAnomalyPresent}, {@code boundaryInvolvedRolePair}).
+     * The routing-context bonus makes the scheduler prefer
+     * lower-confidence admissions that at least carry actionable
+     * trace context for the stage-aware mutator, so an admitted
+     * plan with a real boundary-crossing flow edges ahead of a
+     * structurally-empty shadow entry.
+     */
     private static double initialScoreFor(SchedulerClass schedClass,
             TraceEvidenceStrength traceStrength,
-            StructuredCandidateStrength candStrength) {
+            StructuredCandidateStrength candStrength,
+            StageMutationHint hint) {
         double base;
         switch (schedClass) {
         case REPRO_CONFIRM:
@@ -998,6 +1211,23 @@ public class TestPlanCorpus {
         }
         if (candStrength == StructuredCandidateStrength.STRONG) {
             base += 2.0;
+        }
+        Config.Configuration cfg = Config.getConf();
+        if (cfg != null && cfg.enableStageFocusedMutation && hint != null) {
+            if (hint.flowSupportClass != null && hint.flowSupportClass
+                    .atLeast(TraceSupportClass.FULL)) {
+                base += 0.75;
+            } else if (hint.flowSupportClass != null && hint.flowSupportClass
+                    .atLeast(TraceSupportClass.FLOW_BACKED)) {
+                base += 0.5;
+            }
+            if (hint.orderAnomalyPresent) {
+                base += 0.25;
+            }
+            if (hint.boundaryInvolvedRolePair != null
+                    && !hint.boundaryInvolvedRolePair.isEmpty()) {
+                base += 0.5;
+            }
         }
         return base;
     }

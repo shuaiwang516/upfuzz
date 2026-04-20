@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
+import org.zlab.net.tracker.classifier.ProtocolFamily;
 import org.zlab.upfuzz.fuzzingengine.server.observability.StructuredCandidateStrength;
 import org.zlab.upfuzz.fuzzingengine.server.observability.TraceEvidenceStrength;
 import org.zlab.upfuzz.fuzzingengine.trace.TraceWindow;
@@ -21,6 +22,35 @@ import org.zlab.upfuzz.fuzzingengine.trace.TraceWindow;
  * <em>lane-local</em> — all fields come from the rolling lane of the
  * admitted round so the mutator can exploit the stage(s) where the
  * divergence or new branch coverage showed up.
+ *
+ * <p>Phase 4 extension (Apr 2026): the hint now carries a compact
+ * routing-context block that the Phase 4 scheduler and stage-aware
+ * mutator consume to target the observed trace divergence without
+ * pulling raw scoring state onto the queue:
+ *
+ * <ul>
+ *   <li>{@link #hotProtocolFamily} — the dominant divergent protocol
+ *       family in the firing window (falls back to the dominant
+ *       supported family when no divergent family exists). Null when
+ *       the hint was built for a pure-branch admission.</li>
+ *   <li>{@link #hotRolePair} — the {@code "src->dst"} role pair that
+ *       carried the most rolling-lane traffic in the firing window.
+ *       Empty when unavailable.</li>
+ *   <li>{@link #boundaryInvolvedRolePair} — the role pair for the most
+ *       boundary-crossing rolling flow, or empty when no flow crossed
+ *       an upgraded boundary.</li>
+ *   <li>{@link #orderAnomalyPresent} — whether the firing window saw
+ *       a compressed-family order divergence strong enough to earn the
+ *       Phase 3 order bonus.</li>
+ *   <li>{@link #flowSupportClass} — the strongest Phase 3 support tier
+ *       reached across any firing window (see
+ *       {@link TraceSupportClass}). Drives the Phase 4 routing policy
+ *       (full-flow support feeds MAIN_EXPLOIT; flow-backed or
+ *       family-backed support feeds SHADOW_EVAL; background-only /
+ *       unsupported stays out of the exploitation lanes).</li>
+ * </ul>
+ *
+ * <p>The rest of the hint tracks location / signal context:
  *
  * <ul>
  *   <li>{@link #hotStageId} / {@link #hotStageKind} — the comparison
@@ -56,11 +86,12 @@ import org.zlab.upfuzz.fuzzingengine.trace.TraceWindow;
  * </ul>
  *
  * <p>The class is immutable (all fields final) and serializable so
- * {@link TestPlan}-clone-based mutation pipelines do not accidentally
- * wipe the hint during {@code SerializationUtils.clone(...)}.
+ * {@link org.zlab.upfuzz.fuzzingengine.testplan.TestPlan}-clone-based
+ * mutation pipelines do not accidentally wipe the hint during
+ * {@code SerializationUtils.clone(...)}.
  */
 public final class StageMutationHint implements Serializable {
-    private static final long serialVersionUID = 20260415L;
+    private static final long serialVersionUID = 20260420L;
 
     /**
      * Serializable mirror of {@link TraceWindow.StageKind}. We do not
@@ -115,6 +146,13 @@ public final class StageMutationHint implements Serializable {
     public final boolean needsConfirmation;
     public final boolean upgradeOrderMattered;
 
+    // --- Phase 4 routing context ---
+    public final ProtocolFamily hotProtocolFamily;
+    public final String hotRolePair;
+    public final String boundaryInvolvedRolePair;
+    public final boolean orderAnomalyPresent;
+    public final TraceSupportClass flowSupportClass;
+
     public StageMutationHint(
             String hotStageId,
             StageKindHint hotStageKind,
@@ -126,6 +164,32 @@ public final class StageMutationHint implements Serializable {
             boolean faultInfluenced,
             boolean needsConfirmation,
             boolean upgradeOrderMattered) {
+        this(hotStageId, hotStageKind, hotWindowOrdinal, hotNodeSet,
+                signalType, postUpgrade, preUpgradeOnly, faultInfluenced,
+                needsConfirmation, upgradeOrderMattered,
+                /* hotProtocolFamily */ null,
+                /* hotRolePair */ "",
+                /* boundaryInvolvedRolePair */ "",
+                /* orderAnomalyPresent */ false,
+                /* flowSupportClass */ TraceSupportClass.UNSUPPORTED);
+    }
+
+    public StageMutationHint(
+            String hotStageId,
+            StageKindHint hotStageKind,
+            int hotWindowOrdinal,
+            Set<Integer> hotNodeSet,
+            SignalType signalType,
+            boolean postUpgrade,
+            boolean preUpgradeOnly,
+            boolean faultInfluenced,
+            boolean needsConfirmation,
+            boolean upgradeOrderMattered,
+            ProtocolFamily hotProtocolFamily,
+            String hotRolePair,
+            String boundaryInvolvedRolePair,
+            boolean orderAnomalyPresent,
+            TraceSupportClass flowSupportClass) {
         this.hotStageId = hotStageId == null ? "" : hotStageId;
         this.hotStageKind = hotStageKind == null ? StageKindHint.UNKNOWN
                 : hotStageKind;
@@ -141,6 +205,15 @@ public final class StageMutationHint implements Serializable {
         this.faultInfluenced = faultInfluenced;
         this.needsConfirmation = needsConfirmation;
         this.upgradeOrderMattered = upgradeOrderMattered;
+        this.hotProtocolFamily = hotProtocolFamily;
+        this.hotRolePair = hotRolePair == null ? "" : hotRolePair;
+        this.boundaryInvolvedRolePair = boundaryInvolvedRolePair == null
+                ? ""
+                : boundaryInvolvedRolePair;
+        this.orderAnomalyPresent = orderAnomalyPresent;
+        this.flowSupportClass = flowSupportClass == null
+                ? TraceSupportClass.UNSUPPORTED
+                : flowSupportClass;
     }
 
     /**
@@ -159,13 +232,34 @@ public final class StageMutationHint implements Serializable {
                 false,
                 false,
                 false,
-                false);
+                false,
+                null,
+                "",
+                "",
+                false,
+                TraceSupportClass.UNSUPPORTED);
     }
 
     /** True when the hint has enough information to drive targeted mutation. */
     public boolean hasStageInfo() {
         return hotWindowOrdinal >= 0
                 && hotStageKind != StageKindHint.UNKNOWN;
+    }
+
+    /**
+     * True when the Phase 4 routing context carries a non-empty
+     * protocol family or role pair. The Phase 4 scheduler consults
+     * this to decide whether the hint adds routing value beyond the
+     * bare stage coordinates.
+     */
+    public boolean hasRoutingContext() {
+        return hotProtocolFamily != null
+                || (hotRolePair != null && !hotRolePair.isEmpty())
+                || (boundaryInvolvedRolePair != null
+                        && !boundaryInvolvedRolePair.isEmpty())
+                || orderAnomalyPresent
+                || (flowSupportClass != null
+                        && flowSupportClass != TraceSupportClass.UNSUPPORTED);
     }
 
     /**
@@ -221,6 +315,12 @@ public final class StageMutationHint implements Serializable {
                 + ", faultInfluenced=" + faultInfluenced
                 + ", needsConfirmation=" + needsConfirmation
                 + ", upgradeOrderMattered=" + upgradeOrderMattered
+                + ", hotProtocolFamily=" + hotProtocolFamily
+                + ", hotRolePair='" + hotRolePair + '\''
+                + ", boundaryInvolvedRolePair='" + boundaryInvolvedRolePair
+                + '\''
+                + ", orderAnomalyPresent=" + orderAnomalyPresent
+                + ", flowSupportClass=" + flowSupportClass
                 + '}';
     }
 }

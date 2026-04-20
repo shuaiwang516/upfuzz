@@ -101,6 +101,17 @@ public final class ObservabilityMetrics {
             SchedulerClass.class);
     private final EnumMap<SchedulerClass, AtomicLong> schedulerDecayDemotions = new EnumMap<>(
             SchedulerClass.class);
+    // Phase 4 branch-backbone counters, keyed by the lane the event
+    // was attributed to. Reweight credits the lane of the queued plan
+    // when a downstream branch payoff arrives; quarantine events credit
+    // the lane the decayed plan was in at quarantine time; rejections
+    // credit the lane the rejected admission attempted to enter.
+    private final EnumMap<SchedulerClass, AtomicLong> schedulerBranchBackboneReweights = new EnumMap<>(
+            SchedulerClass.class);
+    private final EnumMap<SchedulerClass, AtomicLong> schedulerQuarantineEvents = new EnumMap<>(
+            SchedulerClass.class);
+    private final EnumMap<SchedulerClass, AtomicLong> schedulerQuarantineRejections = new EnumMap<>(
+            SchedulerClass.class);
 
     private volatile boolean enabled = true;
     private final Path outputDir;
@@ -120,6 +131,9 @@ public final class ObservabilityMetrics {
             schedulerWeakPayoff.put(c, new AtomicLong(0));
             schedulerDedupCollisions.put(c, new AtomicLong(0));
             schedulerDecayDemotions.put(c, new AtomicLong(0));
+            schedulerBranchBackboneReweights.put(c, new AtomicLong(0));
+            schedulerQuarantineEvents.put(c, new AtomicLong(0));
+            schedulerQuarantineRejections.put(c, new AtomicLong(0));
         }
     }
 
@@ -314,6 +328,28 @@ public final class ObservabilityMetrics {
         schedulerDecayDemotions.get(resolveClass(c)).incrementAndGet();
     }
 
+    public void recordSchedulerBranchBackboneReweight(SchedulerClass c) {
+        if (!enabled) {
+            return;
+        }
+        schedulerBranchBackboneReweights.get(resolveClass(c))
+                .incrementAndGet();
+    }
+
+    public void recordSchedulerQuarantineEvent(SchedulerClass c) {
+        if (!enabled) {
+            return;
+        }
+        schedulerQuarantineEvents.get(resolveClass(c)).incrementAndGet();
+    }
+
+    public void recordSchedulerQuarantineRejection(SchedulerClass c) {
+        if (!enabled) {
+            return;
+        }
+        schedulerQuarantineRejections.get(resolveClass(c)).incrementAndGet();
+    }
+
     public long getSchedulerEnqueues(SchedulerClass c) {
         return schedulerEnqueues.get(resolveClass(c)).get();
     }
@@ -344,6 +380,18 @@ public final class ObservabilityMetrics {
 
     public long getSchedulerDecayDemotions(SchedulerClass c) {
         return schedulerDecayDemotions.get(resolveClass(c)).get();
+    }
+
+    public long getSchedulerBranchBackboneReweights(SchedulerClass c) {
+        return schedulerBranchBackboneReweights.get(resolveClass(c)).get();
+    }
+
+    public long getSchedulerQuarantineEvents(SchedulerClass c) {
+        return schedulerQuarantineEvents.get(resolveClass(c)).get();
+    }
+
+    public long getSchedulerQuarantineRejections(SchedulerClass c) {
+        return schedulerQuarantineRejections.get(resolveClass(c)).get();
     }
 
     public void recordSchedulerSnapshot(SchedulerMetricsRow row) {
@@ -390,6 +438,12 @@ public final class ObservabilityMetrics {
                 SchedulerClass.class);
         EnumMap<SchedulerClass, Long> decay = new EnumMap<>(
                 SchedulerClass.class);
+        EnumMap<SchedulerClass, Long> backboneReweights = new EnumMap<>(
+                SchedulerClass.class);
+        EnumMap<SchedulerClass, Long> quarantineEvents = new EnumMap<>(
+                SchedulerClass.class);
+        EnumMap<SchedulerClass, Long> quarantineRejections = new EnumMap<>(
+                SchedulerClass.class);
         for (SchedulerClass c : SchedulerClass.values()) {
             enq.put(c, schedulerEnqueues.get(c).get());
             deq.put(c, schedulerDequeues.get(c).get());
@@ -399,6 +453,12 @@ public final class ObservabilityMetrics {
             weakPayoff.put(c, schedulerWeakPayoff.get(c).get());
             dedup.put(c, schedulerDedupCollisions.get(c).get());
             decay.put(c, schedulerDecayDemotions.get(c).get());
+            backboneReweights.put(c,
+                    schedulerBranchBackboneReweights.get(c).get());
+            quarantineEvents.put(c,
+                    schedulerQuarantineEvents.get(c).get());
+            quarantineRejections.put(c,
+                    schedulerQuarantineRejections.get(c).get());
         }
         return new SchedulerMetricsRow(
                 roundId,
@@ -406,7 +466,8 @@ public final class ObservabilityMetrics {
                 occupancyByClass,
                 enq, deq, budget,
                 branchPayoff, strongPayoff, weakPayoff,
-                dedup, decay);
+                dedup, decay,
+                backboneReweights, quarantineEvents, quarantineRejections);
     }
 
     private static SchedulerClass resolveClass(SchedulerClass c) {
@@ -571,6 +632,75 @@ public final class ObservabilityMetrics {
         SeedLifecycle record = resolveLifecycleForCredit(childTestId);
         if (record != null) {
             record.descendantStrongTraceHits.incrementAndGet();
+        }
+    }
+
+    /**
+     * Phase 4: credit the parent for a descendant round where STRONG
+     * trace evidence co-fired with a strong structured candidate.
+     * Answers "did trace help discover a strong structured candidate?"
+     */
+    public void recordDownstreamTraceAssistedCandidateHit(int childTestId) {
+        SeedLifecycle record = resolveLifecycleForCredit(childTestId);
+        if (record != null) {
+            record.descendantTraceAssistedCandidateHits.incrementAndGet();
+        }
+    }
+
+    /**
+     * Phase 4: credit the parent for a descendant round that produced
+     * STRONG trace evidence without any structured candidate. Tracks
+     * the "trace improved exploration only" signal.
+     */
+    public void recordDownstreamStrongTraceOnlyHit(int childTestId) {
+        SeedLifecycle record = resolveLifecycleForCredit(childTestId);
+        if (record != null) {
+            record.descendantStrongTraceOnlyHits.incrementAndGet();
+        }
+    }
+
+    /**
+     * Phase 4: credit the parent for a descendant that landed in the
+     * SHADOW_EVAL lane without producing any candidate — "repeated
+     * low-value shadow hit" signal.
+     */
+    public void recordDownstreamShadowLowValueHit(int childTestId) {
+        SeedLifecycle record = resolveLifecycleForCredit(childTestId);
+        if (record != null) {
+            record.descendantShadowLowValueHits.incrementAndGet();
+        }
+    }
+
+    /**
+     * Phase 4: credit the lineage when a queued plan received a
+     * branch-backbone reweight bonus. Called from
+     * {@code TestPlanCorpus#notifyBranchPayoff} with the plan's
+     * lineage root — already a lifecycle id.
+     */
+    public void recordDescendantBranchBackboneReweight(int lineageRoot) {
+        if (!enabled || lineageRoot < 0) {
+            return;
+        }
+        SeedLifecycle record = seedLifecycles.get(lineageRoot);
+        if (record != null) {
+            record.descendantBranchBackboneReweightEvents.incrementAndGet();
+        }
+    }
+
+    /**
+     * Phase 4: credit the lineage when it is placed in the
+     * weak-candidate quarantine cooldown. Like
+     * {@link #recordDescendantBranchBackboneReweight(int)}, takes the
+     * lineage root directly rather than a child test id.
+     */
+    public void recordDescendantBranchBackboneQuarantine(int lineageRoot) {
+        if (!enabled || lineageRoot < 0) {
+            return;
+        }
+        SeedLifecycle record = seedLifecycles.get(lineageRoot);
+        if (record != null) {
+            record.descendantBranchBackboneQuarantineEvents
+                    .incrementAndGet();
         }
     }
 

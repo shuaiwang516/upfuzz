@@ -67,6 +67,49 @@ public final class SeedLifecycle {
     public final AtomicLong descendantStrongTraceHits = new AtomicLong(0);
 
     /**
+     * Phase 4: downstream rounds where STRONG trace evidence AND a
+     * strong structured candidate co-fired. Answers "did trace help
+     * discover a strong structured candidate for this lineage?"
+     * independently of the aggregate strong-trace counter.
+     */
+    public final AtomicLong descendantTraceAssistedCandidateHits = new AtomicLong(
+            0);
+
+    /**
+     * Phase 4: downstream rounds where STRONG trace evidence fired
+     * without any structured candidate. Exploration-only trace
+     * contribution that did not surface an oracle-visible bug but
+     * still shaped the search.
+     */
+    public final AtomicLong descendantStrongTraceOnlyHits = new AtomicLong(
+            0);
+
+    /**
+     * Phase 4: descendants that landed in the SHADOW_EVAL scheduler lane
+     * without producing any candidate. Tracks repeated low-value shadow
+     * hits so offline analysis can spot lineages whose only contribution
+     * is weak-trace churn.
+     */
+    public final AtomicLong descendantShadowLowValueHits = new AtomicLong(0);
+
+    /**
+     * Phase 4: times a queued plan from this lineage received a
+     * branch-backbone reweight bonus (extra score on branch payoff).
+     * Visible in {@code seed_lifecycle_summary.csv} so offline analysis
+     * can see whether branch-only parents were ever reweighted.
+     */
+    public final AtomicLong descendantBranchBackboneReweightEvents = new AtomicLong(
+            0);
+
+    /**
+     * Phase 4: times this lineage was placed in the weak-candidate
+     * quarantine cooldown because repeated SHADOW_EVAL decays never
+     * produced payoff.
+     */
+    public final AtomicLong descendantBranchBackboneQuarantineEvents = new AtomicLong(
+            0);
+
+    /**
      * Phase 5: branch novelty class at creation time. Records whether
      * this seed was admitted with rolling-post-upgrade novelty,
      * rolling-pre-upgrade-only novelty, shared novelty, baseline-only
@@ -134,6 +177,11 @@ public final class SeedLifecycle {
                 "descendant_weak_event_candidate_hits",
                 "descendant_weak_error_log_candidate_hits",
                 "descendant_strong_trace_hits",
+                "descendant_trace_assisted_candidate_hits",
+                "descendant_strong_trace_only_hits",
+                "descendant_shadow_low_value_hits",
+                "descendant_branch_backbone_reweight_events",
+                "descendant_branch_backbone_quarantine_events",
                 "branch_novelty_class");
     }
 
@@ -152,6 +200,11 @@ public final class SeedLifecycle {
         sb.append(descendantWeakEventCandidateHits.get()).append(',');
         sb.append(descendantWeakErrorLogCandidateHits.get()).append(',');
         sb.append(descendantStrongTraceHits.get()).append(',');
+        sb.append(descendantTraceAssistedCandidateHits.get()).append(',');
+        sb.append(descendantStrongTraceOnlyHits.get()).append(',');
+        sb.append(descendantShadowLowValueHits.get()).append(',');
+        sb.append(descendantBranchBackboneReweightEvents.get()).append(',');
+        sb.append(descendantBranchBackboneQuarantineEvents.get()).append(',');
         sb.append(branchNoveltyClass.name());
         return sb.toString();
     }

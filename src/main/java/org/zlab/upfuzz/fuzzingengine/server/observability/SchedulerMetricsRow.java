@@ -38,6 +38,14 @@ public final class SchedulerMetricsRow {
     public final Map<SchedulerClass, Long> weakPayoffByClass;
     public final Map<SchedulerClass, Long> dedupCollisionsByClass;
     public final Map<SchedulerClass, Long> decayDemotionsByClass;
+    // Phase 4 branch-backbone controls. Reweight events track how many
+    // times a BRANCH_SCOUT / MAIN_EXPLOIT entry in the lane received
+    // the branch-backbone payoff bonus; quarantine events / rejections
+    // track how many lineages were quarantined or had their admission
+    // rejected while quarantined (attributed to the source lane).
+    public final Map<SchedulerClass, Long> branchBackboneReweightsByClass;
+    public final Map<SchedulerClass, Long> quarantineEventsByClass;
+    public final Map<SchedulerClass, Long> quarantineRejectionsByClass;
 
     public SchedulerMetricsRow(
             long roundId,
@@ -50,7 +58,10 @@ public final class SchedulerMetricsRow {
             Map<SchedulerClass, Long> strongPayoffByClass,
             Map<SchedulerClass, Long> weakPayoffByClass,
             Map<SchedulerClass, Long> dedupCollisionsByClass,
-            Map<SchedulerClass, Long> decayDemotionsByClass) {
+            Map<SchedulerClass, Long> decayDemotionsByClass,
+            Map<SchedulerClass, Long> branchBackboneReweightsByClass,
+            Map<SchedulerClass, Long> quarantineEventsByClass,
+            Map<SchedulerClass, Long> quarantineRejectionsByClass) {
         this.roundId = roundId;
         this.testPacketId = testPacketId;
         this.occupancyByClass = copyIntMap(occupancyByClass);
@@ -63,6 +74,11 @@ public final class SchedulerMetricsRow {
         this.weakPayoffByClass = copyLongMap(weakPayoffByClass);
         this.dedupCollisionsByClass = copyLongMap(dedupCollisionsByClass);
         this.decayDemotionsByClass = copyLongMap(decayDemotionsByClass);
+        this.branchBackboneReweightsByClass = copyLongMap(
+                branchBackboneReweightsByClass);
+        this.quarantineEventsByClass = copyLongMap(quarantineEventsByClass);
+        this.quarantineRejectionsByClass = copyLongMap(
+                quarantineRejectionsByClass);
     }
 
     private static Map<SchedulerClass, Integer> copyIntMap(
@@ -101,6 +117,9 @@ public final class SchedulerMetricsRow {
             sb.append(',').append(base).append("_weak_payoff");
             sb.append(',').append(base).append("_dedup_collisions");
             sb.append(',').append(base).append("_decay_demotions");
+            sb.append(',').append(base).append("_branch_backbone_reweights");
+            sb.append(',').append(base).append("_quarantine_events");
+            sb.append(',').append(base).append("_quarantine_rejections");
         }
         return sb.toString();
     }
@@ -119,6 +138,9 @@ public final class SchedulerMetricsRow {
             sb.append(',').append(weakPayoffByClass.get(c));
             sb.append(',').append(dedupCollisionsByClass.get(c));
             sb.append(',').append(decayDemotionsByClass.get(c));
+            sb.append(',').append(branchBackboneReweightsByClass.get(c));
+            sb.append(',').append(quarantineEventsByClass.get(c));
+            sb.append(',').append(quarantineRejectionsByClass.get(c));
         }
         return sb.toString();
     }
