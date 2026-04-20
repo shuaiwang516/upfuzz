@@ -2629,6 +2629,29 @@ public class FuzzingServer {
                                     decision.familyProfileLabel(),
                                     decision.rollingOnlyUpgradeCriticalPresent,
                                     decision.firingReasonJoined()));
+                    if (Config.getConf().enableTraceFlowTupleDump) {
+                        emitClassifierInputRows(observabilityMetrics,
+                                finishedTestID,
+                                testPlanDiffFeedbackPacket.testPacketID,
+                                aw.rolling.ordinal,
+                                aw.rolling.comparisonStageId, "oo", mergedOO,
+                                Config
+                                        .getConf().traceFlowTupleDumpTopK);
+                        emitClassifierInputRows(observabilityMetrics,
+                                finishedTestID,
+                                testPlanDiffFeedbackPacket.testPacketID,
+                                aw.rolling.ordinal,
+                                aw.rolling.comparisonStageId, "ro", mergedRO,
+                                Config
+                                        .getConf().traceFlowTupleDumpTopK);
+                        emitClassifierInputRows(observabilityMetrics,
+                                finishedTestID,
+                                testPlanDiffFeedbackPacket.testPacketID,
+                                aw.rolling.ordinal,
+                                aw.rolling.comparisonStageId, "nn", mergedNN,
+                                Config
+                                        .getConf().traceFlowTupleDumpTopK);
+                    }
                     windowsEvaluatedThisRound++;
                     if (windowHasEnoughEvents) {
                         if (supportGatePassed) {
@@ -5526,6 +5549,106 @@ public class FuzzingServer {
             }
         }
         return sb.toString();
+    }
+
+    /**
+     * Phase 5: walk a merged-lane {@link Trace} and emit per-tuple
+     * {@link org.zlab.upfuzz.fuzzingengine.server.observability.ClassifierInputRow}
+     * records into {@code metrics}. Tuples are
+     * {@code (rpcService, rpcMethod, messageType, payloadType, messageKind,
+     * protocol)}, counted across all events in the lane, classified through
+     * the live {@link org.zlab.net.tracker.classifier.ProtocolFamilyClassifier}
+     * and capped at {@code topK} entries (most frequent first; 0 means
+     * unbounded). The downstream replay tool consumes the emitted CSV to
+     * exercise alternative version-aware family-map profiles against the
+     * same raw classifier inputs the live run observed.
+     */
+    static void emitClassifierInputRows(
+            org.zlab.upfuzz.fuzzingengine.server.observability.ObservabilityMetrics metrics,
+            long round, int testPacketId, int windowOrdinal,
+            String comparisonStage, String laneLabel, Trace mergedTrace,
+            int topK) {
+        if (metrics == null || mergedTrace == null) {
+            return;
+        }
+        java.util.Map<ClassifierTupleKey, int[]> counts = new java.util.LinkedHashMap<>();
+        for (TraceEntry entry : mergedTrace.getTraceEntries()) {
+            if (entry == null) {
+                continue;
+            }
+            ClassifierTupleKey key = new ClassifierTupleKey(entry.rpcService,
+                    entry.rpcMethod, entry.messageType, entry.log,
+                    entry.messageKind, entry.protocol);
+            int[] cell = counts.computeIfAbsent(key, k -> new int[1]);
+            cell[0]++;
+        }
+        java.util.List<java.util.Map.Entry<ClassifierTupleKey, int[]>> ordered = new java.util.ArrayList<>(
+                counts.entrySet());
+        ordered.sort((a, b) -> Integer.compare(b.getValue()[0],
+                a.getValue()[0]));
+        int emitted = 0;
+        for (java.util.Map.Entry<ClassifierTupleKey, int[]> e : ordered) {
+            if (topK > 0 && emitted >= topK) {
+                break;
+            }
+            ClassifierTupleKey k = e.getKey();
+            org.zlab.net.tracker.classifier.ProtocolFamily family = org.zlab.net.tracker.classifier.ProtocolFamilyClassifier
+                    .classify(k.protocol, k.messageType, k.rpcService,
+                            k.rpcMethod, k.messageKind, k.payloadType);
+            metrics.recordClassifierInput(
+                    new org.zlab.upfuzz.fuzzingengine.server.observability.ClassifierInputRow(
+                            round, testPacketId, windowOrdinal,
+                            comparisonStage, laneLabel, k.protocol,
+                            k.rpcService, k.rpcMethod, k.messageType,
+                            k.messageKind, k.payloadType,
+                            family == null ? "" : family.name(),
+                            e.getValue()[0]));
+            emitted++;
+        }
+    }
+
+    /** Composite key for {@link #emitClassifierInputRows} aggregation. */
+    static final class ClassifierTupleKey {
+        final String rpcService;
+        final String rpcMethod;
+        final String messageType;
+        final String payloadType;
+        final String messageKind;
+        final String protocol;
+
+        ClassifierTupleKey(String rpcService, String rpcMethod,
+                String messageType, String payloadType, String messageKind,
+                String protocol) {
+            this.rpcService = rpcService;
+            this.rpcMethod = rpcMethod;
+            this.messageType = messageType;
+            this.payloadType = payloadType;
+            this.messageKind = messageKind;
+            this.protocol = protocol;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof ClassifierTupleKey)) {
+                return false;
+            }
+            ClassifierTupleKey other = (ClassifierTupleKey) o;
+            return java.util.Objects.equals(rpcService, other.rpcService)
+                    && java.util.Objects.equals(rpcMethod, other.rpcMethod)
+                    && java.util.Objects.equals(messageType, other.messageType)
+                    && java.util.Objects.equals(payloadType, other.payloadType)
+                    && java.util.Objects.equals(messageKind, other.messageKind)
+                    && java.util.Objects.equals(protocol, other.protocol);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(rpcService, rpcMethod, messageType,
+                    payloadType, messageKind, protocol);
+        }
     }
 
     private static int countChangedMessages(Trace mergedTrace) {

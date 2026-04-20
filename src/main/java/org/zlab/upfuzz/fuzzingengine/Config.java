@@ -603,6 +603,48 @@ public class Config {
         // kept only for offline diagnostic fixtures.
         public CanonicalKeyMode canonicalKeyMode = CanonicalKeyMode.GUIDANCE;
 
+        // --- Phase 5 system-level scoring/routing preset ---
+        // Picks the per-system trace policy bundle (scoring thresholds,
+        // family weights, background cap, trace-only admission budget,
+        // queue-routing weights). {@link TraceSystemPreset#AUTO} resolves
+        // to the system-specific preset based on {@link #system};
+        // {@link TraceSystemPreset#GENERIC} keeps the Java defaults as-is
+        // (use this for ablation runs or per-knob experiments).
+        // {@link Config#setInstance(Configuration)} applies the resolved
+        // preset after {@link #normalizeModeFlags()}, so JSON-level
+        // overrides of preset-controlled knobs are lost when this field
+        // is non-{@code GENERIC}.
+        public TraceSystemPreset traceSystemPreset = TraceSystemPreset.AUTO;
+
+        // --- Phase 5 version-aware family-map profile ---
+        // Path to a YAML file that supplies per-(rpcService, rpcMethod)
+        // ProtocolFamily mappings beyond the Phase 1 hardcoded taxonomy.
+        // The loader applies these only as long-tail extensions: the
+        // profile fills entries the live classifier currently returns as
+        // UNKNOWN, and never overrides an already-classified family. When
+        // {@code null} or unreadable, no override is registered. Profiles
+        // are produced by
+        // {@code
+        // nettrace-shuai/rupfuzz-nettrace/scripts/generate_family_inventories.sh}.
+        public String familyMapProfilePath = null;
+
+        // --- Phase 5 raw classifier-input dump (opt-in observability) ---
+        // When {@code true}, the server emits a per-window CSV
+        // {@code trace_window_classifier_inputs.csv} containing the raw
+        // {@code (rpcService, rpcMethod, messageType, payloadType,
+        // messageKind, protocol, currentFamily)} tuples plus per-tuple
+        // counts for each lane (oo / ro / nn). This is the only artifact
+        // that lets the Phase 5 replay tool exercise version-aware family
+        // map changes — the standard {@code trace_window_summary.csv}
+        // already carries aggregate family counts but not the raw
+        // classifier inputs needed to re-classify under a different
+        // profile. Off by default; turning it on is cheap but adds one
+        // file per run and is mostly useful when staging a profile
+        // change. {@code traceFlowTupleDumpTopK} bounds the per-(round,
+        // window, lane) tuple count emitted; 0 means unbounded.
+        public boolean enableTraceFlowTupleDump = false;
+        public int traceFlowTupleDumpTopK = 50;
+
         // --- Phase 4 trace-signature dedup ---
         // Suppress trace-only admissions whose interesting-window
         // signatures are already saturated in a bounded recent-signature
@@ -903,6 +945,73 @@ public class Config {
 
     public static void setInstance(Configuration config) {
         config.normalizeModeFlags();
+        applyTraceSystemPreset(config);
+        loadFamilyMapProfileIfPresent(config);
         instance = config;
+    }
+
+    /**
+     * Phase 5 helper. Resolves {@link Configuration#traceSystemPreset} (handling
+     * {@link TraceSystemPreset#AUTO}) and applies the resolved preset bundle
+     * onto {@code config}. {@link TraceSystemPreset#GENERIC} is a no-op and
+     * preserves the JSON-supplied values exactly. The resolved preset is
+     * written back onto {@code traceSystemPreset} so the run artifact
+     * records the concrete preset that was applied (never {@code AUTO}).
+     */
+    static void applyTraceSystemPreset(Configuration config) {
+        if (config == null) {
+            return;
+        }
+        TraceSystemPreset preset = config.traceSystemPreset;
+        if (preset == null) {
+            preset = TraceSystemPreset.AUTO;
+        }
+        TraceSystemPreset resolved = preset.resolve(config.system);
+        resolved.applyTo(config);
+        config.traceSystemPreset = resolved;
+    }
+
+    /**
+     * Phase 5 helper. Loads the version-aware family-map profile from
+     * {@link Configuration#familyMapProfilePath} (if set) and registers it
+     * as the active long-tail override on
+     * {@link org.zlab.net.tracker.classifier.ProtocolFamilyClassifier}.
+     *
+     * <p>The classifier override is JVM-global static state. {@code setInstance}
+     * may be called multiple times in the same JVM (re-loading config in tests
+     * or between replay runs), so this helper is responsible for clearing the
+     * previously-registered override whenever the new {@code config} does NOT
+     * supply a profile path, or when the path is unreadable / malformed. Tests
+     * therefore see deterministic classifier behavior regardless of which other
+     * tests ran first.
+     *
+     * <p>I/O or parse failures are logged but do not fail server startup —
+     * the live classifier still works without an override.
+     */
+    static void loadFamilyMapProfileIfPresent(Configuration config) {
+        if (config == null) {
+            org.zlab.net.tracker.classifier.ProtocolFamilyClassifier
+                    .setLongTailOverride(null);
+            return;
+        }
+        String path = config.familyMapProfilePath;
+        if (path == null || path.trim().isEmpty()) {
+            org.zlab.net.tracker.classifier.ProtocolFamilyClassifier
+                    .setLongTailOverride(null);
+            return;
+        }
+        try {
+            org.zlab.upfuzz.fuzzingengine.trace.VersionAwareFamilyProfile
+                    .loadAndRegister(java.nio.file.Paths.get(path));
+        } catch (java.io.IOException | RuntimeException e) {
+            // Loader failed — clear any previously-registered override so a
+            // subsequent run with no profile path does not silently inherit
+            // the prior profile from JVM-global state.
+            org.zlab.net.tracker.classifier.ProtocolFamilyClassifier
+                    .setLongTailOverride(null);
+            org.apache.logging.log4j.LogManager.getLogger(Config.class).warn(
+                    "[Phase5] Failed to load family-map profile from {}: {}",
+                    path, e.toString());
+        }
     }
 }

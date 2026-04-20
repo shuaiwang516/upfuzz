@@ -42,6 +42,22 @@ CLIENT_PORT=7400
 SERVER_START_TIMEOUT_SEC=120
 RUN_NAME=""
 SKIP_PRE_CLEAN=false
+# Phase 5 system-level preset + version-aware classifier profile.
+# Default AUTO resolves on the Java side from the JSON `system` field.
+TRACE_SYSTEM_PRESET="AUTO"
+# Optional path to a version-aware family-map profile produced by
+# nettrace-shuai/rupfuzz-nettrace/scripts/generate_family_inventories.sh.
+# Empty string means "no override"; the runner auto-derives a default
+# from the prebuild family-maps tree if a matching file exists.
+FAMILY_MAP_PROFILE=""
+DEFAULT_FAMILY_MAP_DIR="${ROOT_DIR}/../nettrace-shuai/rupfuzz-nettrace/profiles/family-maps"
+# Phase-5 raw classifier-input dump. When true, the server emits
+# trace_window_classifier_inputs.csv alongside the other observability
+# CSVs so the TraceReplay metadata tier can re-classify raw tuples
+# under a different version-aware family-map profile. Off by default —
+# enable explicitly when staging a profile change.
+ENABLE_FLOW_TUPLE_DUMP="false"
+FLOW_TUPLE_DUMP_TOP_K=50
 
 usage() {
     cat <<USAGE
@@ -82,6 +98,10 @@ Options:
   --fixed-config-idx <N>                 Force example-testplan config index test<N> (default: random)
   --run-name <name>                      Result folder name (default: auto generated)
   --skip-pre-clean                       Skip pre-run clean.sh
+  --trace-system-preset <name>           Phase 5 system preset (default: ${TRACE_SYSTEM_PRESET}). Values: AUTO|GENERIC|CASSANDRA|HDFS|HBASE
+  --family-map-profile <path>            Phase 5 long-tail family-map profile YAML (default: auto-derived from prebuild family-maps if present)
+  --enable-flow-tuple-dump <true|false>  Emit trace_window_classifier_inputs.csv for TraceReplay metadata tier (default: ${ENABLE_FLOW_TUPLE_DUMP})
+  --flow-tuple-dump-top-k <N>            Cap per-(round,window,lane) tuples emitted when dump is enabled; 0 = unbounded (default: ${FLOW_TUPLE_DUMP_TOP_K})
   -h, --help                             Show this help
 
 Examples:
@@ -238,36 +258,31 @@ count_diff_feedback_packets() {
     rg -c --no-filename 'TestPlanDiffFeedbackPacket received' "${logfile}" 2>/dev/null || echo 0
 }
 
-# Phase 3-5 config knobs materialized explicitly so the run artifact
-# records which policy was active. Values match Java-side defaults in
-# Config.Configuration as of Phase 3.
+# Phase 3-4 trace-agnostic config knobs materialized explicitly so the
+# run artifact records which policy was active. Values match Java-side
+# defaults in Config.Configuration.
 #
-# Phase 3 retires the Phase 2 hard-gate knobs (strongTraceMin*,
-# strongTraceFallback*, preUpgradeTraceCanStrengthenBranch) and replaces
-# them with the composite-scorer knobs below; the new knobs are the
-# live calibration anchors for `TraceWindowGuidanceScorer`. See
-# `agent/result/2026-04-19-result-phase-3-replay-calibration.md` for the
-# calibration rationale. The `useCompressedOrderDebug` knob is also
-# retired — order is now a live scorer component, not a debug log line.
-PHASE_25_CONFIG='  "traceUpgradeCriticalFamilyWeight" : 1.0,
-  "traceBackgroundFamilyWeight" : 0.2,
-  "traceUnknownFamilyWeight" : 0.4,
-  "traceStrongScoreThreshold" : 0.35,
-  "traceWeakScoreThreshold" : 0.10,
-  "traceBoundaryBonus" : 0.15,
-  "traceOrderBonusCap" : 0.10,
-  "traceBackgroundCap" : 0.10,
-  "traceMinBaselineAgreementForStrong" : 0.55,
-  "traceMinRollingDivergenceForStrong" : 0.20,
-  "usePriorityTestPlanScheduler" : true,
+# Phase 5 RETIRED the per-system trace scoring/routing knobs from this
+# block — they are now controlled by the system-level
+# {@link org.zlab.upfuzz.fuzzingengine.TraceSystemPreset} preset applied
+# in Config.setInstance. The runner emits `traceSystemPreset` instead;
+# the preset overrides the following retired knobs:
+#   traceStrongScoreThreshold / traceWeakScoreThreshold,
+#   traceBoundaryBonus / traceOrderBonusCap / traceBackgroundCap,
+#   traceUpgradeCriticalFamilyWeight / traceBackgroundFamilyWeight /
+#   traceUnknownFamilyWeight,
+#   traceMinBaselineAgreementForStrong / traceMinRollingDivergenceForStrong,
+#   mainExploitQueueWeight / branchScoutQueueWeight /
+#   shadowEvalQueueWeight / reproConfirmQueueWeight,
+#   traceOnlyAdmissionCapPerRound / traceOnlyAdmissionCapPer100Rounds,
+#   enableLowerConfidenceTraceAdmission.
+# Override individual knobs by setting `traceSystemPreset: "GENERIC"` in
+# the JSON and emitting them yourself.
+PHASE_25_CONFIG='  "usePriorityTestPlanScheduler" : true,
   "mainExploitMutationEpoch" : 30,
   "branchScoutMutationEpoch" : 10,
   "shadowEvalMutationEpoch" : 4,
   "reproConfirmMutationEpoch" : 50,
-  "reproConfirmQueueWeight" : 4,
-  "mainExploitQueueWeight" : 8,
-  "branchScoutQueueWeight" : 3,
-  "shadowEvalQueueWeight" : 1,
   "mainExploitQueueMaxSize" : 256,
   "branchScoutQueueMaxSize" : 256,
   "shadowEvalQueueMaxSize" : 128,
@@ -291,6 +306,39 @@ PHASE_25_CONFIG='  "traceUpgradeCriticalFamilyWeight" : 1.0,
   "branchScoutMinOccupancy" : 5,
   "enableStageCoverageSnapshots" : false'
 
+# Phase 5 system preset + family-map profile JSON fragment, materialized
+# per-run so each generated config records which preset / profile / dump
+# state was active. The Java side resolves AUTO from the JSON `system`
+# field. `traceFlowTupleDumpTopK` is only emitted when the dump is on —
+# with the dump off the default 50 is irrelevant and keeps the config
+# output tight.
+build_phase5_block() {
+    local preset="$1"
+    local profile_path="$2"
+    local dump_enabled="$3"
+    local dump_top_k="$4"
+    printf '  "traceSystemPreset" : "%s"' "${preset}"
+    if [[ -n "${profile_path}" ]]; then
+        printf ',\n  "familyMapProfilePath" : "%s"' "${profile_path}"
+    fi
+    printf ',\n  "enableTraceFlowTupleDump" : %s' "${dump_enabled}"
+    if [[ "${dump_enabled}" == "true" ]]; then
+        printf ',\n  "traceFlowTupleDumpTopK" : %d' "${dump_top_k}"
+    fi
+}
+
+# Auto-derive a family-map profile from the prebuild family-maps tree
+# when the user does not specify one explicitly. Returns empty when no
+# matching file exists.
+auto_derive_family_map() {
+    local system="$1"
+    local original_version="$2"
+    local candidate="${DEFAULT_FAMILY_MAP_DIR}/${system}-${original_version}-family-map.yaml"
+    if [[ -f "${candidate}" ]]; then
+        echo "${candidate}"
+    fi
+}
+
 write_config_json() {
     local path="$1"
     local system="$2"
@@ -313,6 +361,13 @@ write_config_json() {
     canonical_msg_identity_json="$(bool_json "${USE_CANONICAL_MESSAGE_IDENTITY}")"
     branch_json="$(bool_json "${USE_BRANCH_COVERAGE}")"
     logcheck_json="$(bool_json "${ENABLE_LOG_CHECK}")"
+
+    local phase5_block
+    phase5_block="$(build_phase5_block \
+        "${TRACE_SYSTEM_PRESET}" \
+        "${FAMILY_MAP_PROFILE}" \
+        "${ENABLE_FLOW_TUPLE_DUMP}" \
+        "${FLOW_TUPLE_DUMP_TOP_K}")"
 
     case "${system}" in
         cassandra)
@@ -369,7 +424,8 @@ write_config_json() {
   "cassandraEnableTimeoutCheck" : false,
   "differentialLaneTimeoutSec" : ${DIFF_LANE_TIMEOUT_SEC},
   "CASSANDRA_RETRY_TIMEOUT" : ${CASSANDRA_RETRY_TIMEOUT},
-${PHASE_25_CONFIG}
+${PHASE_25_CONFIG},
+${phase5_block}
 }
 JSON
             ;;
@@ -420,7 +476,8 @@ JSON
   "prepareImageFirst" : true,
   "enable_fsimage" : true,
   "differentialLaneTimeoutSec" : ${DIFF_LANE_TIMEOUT_SEC},
-${PHASE_25_CONFIG}
+${PHASE_25_CONFIG},
+${phase5_block}
 }
 JSON
             ;;
@@ -472,7 +529,8 @@ JSON
   "enable_IS_DISABLED" : true,
   "hbaseDaemonRetryTimes" : ${HBASE_DAEMON_RETRY_TIMES},
   "differentialLaneTimeoutSec" : ${DIFF_LANE_TIMEOUT_SEC},
-${PHASE_25_CONFIG}
+${PHASE_25_CONFIG},
+${phase5_block}
 }
 JSON
             ;;
@@ -631,6 +689,22 @@ while [[ $# -gt 0 ]]; do
             SKIP_PRE_CLEAN=true
             shift 1
             ;;
+        --trace-system-preset)
+            TRACE_SYSTEM_PRESET="$2"
+            shift 2
+            ;;
+        --family-map-profile)
+            FAMILY_MAP_PROFILE="$2"
+            shift 2
+            ;;
+        --enable-flow-tuple-dump)
+            ENABLE_FLOW_TUPLE_DUMP="$2"
+            shift 2
+            ;;
+        --flow-tuple-dump-top-k)
+            FLOW_TUPLE_DUMP_TOP_K="$2"
+            shift 2
+            ;;
         -h|--help)
             usage
             exit 0
@@ -731,6 +805,30 @@ fi
 [[ "${FIXED_CONFIG_IDX}" =~ ^-?[0-9]+$ ]] || die "--fixed-config-idx must be an integer"
 [[ "${HBASE_DAEMON_RETRY_TIMES}" =~ ^[0-9]+$ ]] || die "--hbase-daemon-retry-times must be a non-negative integer"
 
+case "${TRACE_SYSTEM_PRESET}" in
+    AUTO|GENERIC|CASSANDRA|HDFS|HBASE) ;;
+    *) die "--trace-system-preset must be AUTO|GENERIC|CASSANDRA|HDFS|HBASE (got: ${TRACE_SYSTEM_PRESET})" ;;
+esac
+
+case "${ENABLE_FLOW_TUPLE_DUMP}" in
+    true|false) ;;
+    *) die "--enable-flow-tuple-dump must be true|false (got: ${ENABLE_FLOW_TUPLE_DUMP})" ;;
+esac
+
+[[ "${FLOW_TUPLE_DUMP_TOP_K}" =~ ^[0-9]+$ ]] || die "--flow-tuple-dump-top-k must be a non-negative integer (got: ${FLOW_TUPLE_DUMP_TOP_K})"
+
+# Phase 5: auto-derive a family-map profile path when the user did not
+# pass --family-map-profile explicitly. Empty string falls back to "no
+# override" on the Java side.
+if [[ -z "${FAMILY_MAP_PROFILE}" ]]; then
+    FAMILY_MAP_PROFILE="$(auto_derive_family_map "${SYSTEM}" "${ORIGINAL_VERSION}")"
+    if [[ -n "${FAMILY_MAP_PROFILE}" ]]; then
+        log "Auto-derived family-map profile: ${FAMILY_MAP_PROFILE}"
+    fi
+elif [[ ! -f "${FAMILY_MAP_PROFILE}" ]]; then
+    die "--family-map-profile points at a non-existent file: ${FAMILY_MAP_PROFILE}"
+fi
+
 if [[ "${USE_TRACE}" == true && "${SYSTEM}" == "cassandra" && "${NODE_NUM}" -lt 2 ]]; then
     log "WARNING: Cassandra use-trace with node-num=${NODE_NUM} can miss inter-node traffic. Prefer --node-num 2+ for trace verification."
 fi
@@ -798,6 +896,10 @@ SERVER_START_TIMEOUT_SEC=${SERVER_START_TIMEOUT_SEC}
 RUN_NAME=${RUN_NAME}
 RUN_DIR=${RUN_DIR}
 REQUIRE_TRACE_SIGNAL=${REQUIRE_TRACE_SIGNAL}
+TRACE_SYSTEM_PRESET=${TRACE_SYSTEM_PRESET}
+FAMILY_MAP_PROFILE=${FAMILY_MAP_PROFILE}
+ENABLE_FLOW_TUPLE_DUMP=${ENABLE_FLOW_TUPLE_DUMP}
+FLOW_TUPLE_DUMP_TOP_K=${FLOW_TUPLE_DUMP_TOP_K}
 GIT_SHA=${GIT_SHA}
 META
 
@@ -1047,6 +1149,10 @@ trace_merged_new_nonzero_count: ${TRACE_MERGED_NEW_NONZERO_COUNT}
 trace_merged_zero_count: ${TRACE_MERGED_ZERO_COUNT}
 message_tri_diff_count: ${MESSAGE_TRI_DIFF_COUNT}
 require_trace_signal: ${REQUIRE_TRACE_SIGNAL}
+trace_system_preset: ${TRACE_SYSTEM_PRESET}
+family_map_profile: ${FAMILY_MAP_PROFILE}
+enable_flow_tuple_dump: ${ENABLE_FLOW_TUPLE_DUMP}
+flow_tuple_dump_top_k: ${FLOW_TUPLE_DUMP_TOP_K}
 server_stdout: ${SERVER_STDOUT}
 client_launcher_stdout: ${CLIENT_LAUNCHER_STDOUT}
 server_log_copy: ${RUN_DIR}/upfuzz_server.log

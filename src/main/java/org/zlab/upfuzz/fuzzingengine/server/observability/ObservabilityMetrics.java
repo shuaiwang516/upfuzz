@@ -49,7 +49,7 @@ import org.apache.logging.log4j.Logger;
  * place so a concurrent reader or a campaign kill never sees a truncated
  * file.
  */
-public final class ObservabilityMetrics {
+public class ObservabilityMetrics {
     private static final Logger logger = LogManager
             .getLogger(ObservabilityMetrics.class);
 
@@ -65,6 +65,7 @@ public final class ObservabilityMetrics {
     private static final String SCHEDULER_CSV_NAME = "scheduler_metrics_summary.csv";
     private static final String STAGE_NOVELTY_CSV_NAME = "stage_novelty_summary.csv";
     private static final String TRACE_METADATA_COVERAGE_CSV_NAME = "trace_metadata_coverage.csv";
+    private static final String CLASSIFIER_INPUTS_CSV_NAME = "trace_window_classifier_inputs.csv";
 
     private final EnumMap<AdmissionReason, AtomicLong> admissionCounts = new EnumMap<>(
             AdmissionReason.class);
@@ -79,6 +80,7 @@ public final class ObservabilityMetrics {
     private final List<SchedulerMetricsRow> schedulerMetricsRows = new ArrayList<>();
     private final List<StageNoveltyRow> stageNoveltyRows = new ArrayList<>();
     private final List<TraceMetadataCoverageRow> traceMetadataCoverageRows = new ArrayList<>();
+    private final List<ClassifierInputRow> classifierInputRows = new ArrayList<>();
 
     // === Phase 3 scheduler counters (cumulative per lane) ===
     // Keyed by SchedulerClass — the internal lane, not the
@@ -241,6 +243,28 @@ public final class ObservabilityMetrics {
         }
         synchronized (traceMetadataCoverageRows) {
             traceMetadataCoverageRows.add(row);
+        }
+    }
+
+    /**
+     * Phase 5: record a single raw classifier-input tuple. Caller must
+     * already have checked
+     * {@link org.zlab.upfuzz.fuzzingengine.Config.Configuration#enableTraceFlowTupleDump}
+     * — this method drops the row when observability is disabled but does not
+     * gate on the dump flag itself.
+     */
+    public void recordClassifierInput(ClassifierInputRow row) {
+        if (!enabled || row == null) {
+            return;
+        }
+        synchronized (classifierInputRows) {
+            classifierInputRows.add(row);
+        }
+    }
+
+    public int classifierInputRowCount() {
+        synchronized (classifierInputRows) {
+            return classifierInputRows.size();
         }
     }
 
@@ -750,10 +774,82 @@ public final class ObservabilityMetrics {
                 writeSchedulerMetricsCsv();
                 writeStageNoveltyCsv();
                 writeTraceMetadataCoverageCsv();
+                writeClassifierInputsCsv();
             } catch (IOException e) {
                 logger.warn("Failed to write observability artifacts", e);
             }
         }
+    }
+
+    /**
+     * Phase 5: write the optional raw classifier-input dump. The file is
+     * emitted ONLY when {@code Config.getConf().enableTraceFlowTupleDump}
+     * is {@code true}, so downstream tooling (the {@code TraceReplay}
+     * metadata tier) can unambiguously distinguish the two states:
+     *
+     * <ul>
+     *   <li><b>File absent</b>: the dump was never enabled; the
+     *       metadata tier is unavailable for this run.</li>
+     *   <li><b>File present with only a CSV header</b>: the dump was
+     *       enabled but the run produced zero matching windows (or
+     *       observability is disabled); the metadata tier is available
+     *       but empty.</li>
+     *   <li><b>File present with rows</b>: the dump was enabled and
+     *       recorded classifier inputs; metadata tier is available and
+     *       populated.</li>
+     * </ul>
+     *
+     * <p>To preserve this contract on repeated writes into the same
+     * directory, the writer also explicitly deletes a stale sidecar
+     * from a prior enabled run before returning when the dump is
+     * disabled — otherwise a later run with the dump off would appear
+     * to still have metadata-tier data.
+     */
+    private void writeClassifierInputsCsv() throws IOException {
+        Path target = outputDir.resolve(CLASSIFIER_INPUTS_CSV_NAME);
+        if (!isTraceFlowTupleDumpEnabled()) {
+            // Remove any stale sidecar left from a previous enabled run
+            // so the "absent = unavailable" contract holds across reruns
+            // that share an output directory.
+            try {
+                Files.deleteIfExists(target);
+            } catch (IOException ignore) {
+                // Best-effort: if deletion fails we still leave the old
+                // file in place rather than crashing the writer.
+            }
+            return;
+        }
+        Path tmp = outputDir.resolve(CLASSIFIER_INPUTS_CSV_NAME + ".tmp");
+        List<ClassifierInputRow> snapshot;
+        synchronized (classifierInputRows) {
+            snapshot = new ArrayList<>(classifierInputRows);
+        }
+        try (BufferedWriter w = Files.newBufferedWriter(tmp,
+                StandardCharsets.UTF_8)) {
+            w.write(ClassifierInputRow.csvHeader());
+            w.newLine();
+            for (ClassifierInputRow row : snapshot) {
+                w.write(row.toCsvRow());
+                w.newLine();
+            }
+        }
+        Files.move(tmp, target,
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+    }
+
+    /**
+     * Extracted so unit tests can stub this without standing up a full
+     * {@link org.zlab.upfuzz.fuzzingengine.Config}. Protected so a test
+     * subclass can override. Returns {@code false} when no
+     * {@code Config} instance is set, matching the "off by default"
+     * semantics documented on
+     * {@link org.zlab.upfuzz.fuzzingengine.Config.Configuration#enableTraceFlowTupleDump}.
+     */
+    protected boolean isTraceFlowTupleDumpEnabled() {
+        org.zlab.upfuzz.fuzzingengine.Config.Configuration conf = org.zlab.upfuzz.fuzzingengine.Config
+                .getConf();
+        return conf != null && conf.enableTraceFlowTupleDump;
     }
 
     private void writeAdmissionSummaryCsv() throws IOException {
