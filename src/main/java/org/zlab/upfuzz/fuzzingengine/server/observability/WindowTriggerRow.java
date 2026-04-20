@@ -41,6 +41,31 @@ package org.zlab.upfuzz.fuzzingengine.server.observability;
  * unresolved) so Apr16-style silent skips — entries whose IP/hostname
  * peerId landed outside the old numeric index parser — become visible
  * instead of disappearing into a {@code 0} crossing count.
+ *
+ * <p>Phase 2 appended the compact flow-level summary columns described
+ * in the plan:
+ * <ul>
+ *   <li>{@code flow_total_*} — per-lane flow counts (old-old, rolling,
+ *       new-new). Useful for spotting lanes whose grouping collapsed or
+ *       exploded.</li>
+ *   <li>{@code flow_explicit_id_rolling} /
+ *       {@code flow_fallback_rolling} — how the rolling lane split
+ *       between {@link CorrelationSource#EXPLICIT_LOGICAL_ID} /
+ *       {@link CorrelationSource#EXPLICIT_DELIVERY_ID} and the bounded
+ *       fallback tier, per system.</li>
+ *   <li>{@code flow_boundary_involved_rolling} /
+ *       {@code flow_role_ambiguous_boundary_rolling} — flow-level
+ *       boundary counts. Both are derived from
+ *       {@link org.zlab.upfuzz.fuzzingengine.trace.RollingFlowBoundaryOracle},
+ *       which reuses the Phase 0 topology snapshot so raw-IP peers
+ *       keep resolving through the same path.</li>
+ *   <li>{@code flow_top_divergent_families} /
+ *       {@code flow_top_divergent_details_rolling} — Phase 2's
+ *       first-cut divergence report; ordered by absolute gap between
+ *       the rolling-lane family count and the baseline-mean count.
+ *       These are observability-only (no admission effect) — Phase 3
+ *       will promote the same inputs into the scoring layer.</li>
+ * </ul>
  */
 public final class WindowTriggerRow {
     public final long round;
@@ -74,6 +99,18 @@ public final class WindowTriggerRow {
     public final int boundaryRoleResolvedEndpoints;
     public final int boundaryRoleAmbiguousEndpoints;
     public final int boundaryUnresolvedEndpoints;
+    // --- Phase 2 flow-level summary columns ---
+    public final int flowTotalOldOld;
+    public final int flowTotalRolling;
+    public final int flowTotalNewNew;
+    public final int flowExplicitIdRolling;
+    public final int flowFallbackRolling;
+    public final int flowGroupingFailedRolling;
+    public final int flowBoundaryInvolvedRolling;
+    public final int flowRoleAmbiguousBoundaryRolling;
+    public final int flowUnresolvedBoundaryRolling;
+    public final String flowTopDivergentFamilies;
+    public final String flowTopDivergentDetailsRolling;
 
     public WindowTriggerRow(
             long round,
@@ -104,7 +141,18 @@ public final class WindowTriggerRow {
             int boundaryIndexResolvedEndpoints,
             int boundaryRoleResolvedEndpoints,
             int boundaryRoleAmbiguousEndpoints,
-            int boundaryUnresolvedEndpoints) {
+            int boundaryUnresolvedEndpoints,
+            int flowTotalOldOld,
+            int flowTotalRolling,
+            int flowTotalNewNew,
+            int flowExplicitIdRolling,
+            int flowFallbackRolling,
+            int flowGroupingFailedRolling,
+            int flowBoundaryInvolvedRolling,
+            int flowRoleAmbiguousBoundaryRolling,
+            int flowUnresolvedBoundaryRolling,
+            String flowTopDivergentFamilies,
+            String flowTopDivergentDetailsRolling) {
         this.round = round;
         this.testPacketId = testPacketId;
         this.windowOrdinal = windowOrdinal;
@@ -136,6 +184,20 @@ public final class WindowTriggerRow {
         this.boundaryRoleResolvedEndpoints = boundaryRoleResolvedEndpoints;
         this.boundaryRoleAmbiguousEndpoints = boundaryRoleAmbiguousEndpoints;
         this.boundaryUnresolvedEndpoints = boundaryUnresolvedEndpoints;
+        this.flowTotalOldOld = flowTotalOldOld;
+        this.flowTotalRolling = flowTotalRolling;
+        this.flowTotalNewNew = flowTotalNewNew;
+        this.flowExplicitIdRolling = flowExplicitIdRolling;
+        this.flowFallbackRolling = flowFallbackRolling;
+        this.flowGroupingFailedRolling = flowGroupingFailedRolling;
+        this.flowBoundaryInvolvedRolling = flowBoundaryInvolvedRolling;
+        this.flowRoleAmbiguousBoundaryRolling = flowRoleAmbiguousBoundaryRolling;
+        this.flowUnresolvedBoundaryRolling = flowUnresolvedBoundaryRolling;
+        this.flowTopDivergentFamilies = flowTopDivergentFamilies == null ? ""
+                : flowTopDivergentFamilies;
+        this.flowTopDivergentDetailsRolling = flowTopDivergentDetailsRolling == null
+                ? ""
+                : flowTopDivergentDetailsRolling;
     }
 
     public static String csvHeader() {
@@ -168,7 +230,18 @@ public final class WindowTriggerRow {
                 "boundary_event_count_index_resolved",
                 "boundary_event_count_role_resolved",
                 "boundary_event_count_role_ambiguous",
-                "boundary_event_count_unresolved");
+                "boundary_event_count_unresolved",
+                "flow_total_old_old",
+                "flow_total_rolling",
+                "flow_total_new_new",
+                "flow_explicit_id_rolling",
+                "flow_fallback_rolling",
+                "flow_grouping_failed_rolling",
+                "flow_boundary_involved_rolling",
+                "flow_role_ambiguous_boundary_rolling",
+                "flow_unresolved_boundary_rolling",
+                "flow_top_divergent_families",
+                "flow_top_divergent_details_rolling");
     }
 
     public String toCsvRow() {
@@ -201,7 +274,18 @@ public final class WindowTriggerRow {
         sb.append(boundaryIndexResolvedEndpoints).append(',');
         sb.append(boundaryRoleResolvedEndpoints).append(',');
         sb.append(boundaryRoleAmbiguousEndpoints).append(',');
-        sb.append(boundaryUnresolvedEndpoints);
+        sb.append(boundaryUnresolvedEndpoints).append(',');
+        sb.append(flowTotalOldOld).append(',');
+        sb.append(flowTotalRolling).append(',');
+        sb.append(flowTotalNewNew).append(',');
+        sb.append(flowExplicitIdRolling).append(',');
+        sb.append(flowFallbackRolling).append(',');
+        sb.append(flowGroupingFailedRolling).append(',');
+        sb.append(flowBoundaryInvolvedRolling).append(',');
+        sb.append(flowRoleAmbiguousBoundaryRolling).append(',');
+        sb.append(flowUnresolvedBoundaryRolling).append(',');
+        sb.append(csvEscape(flowTopDivergentFamilies)).append(',');
+        sb.append(csvEscape(flowTopDivergentDetailsRolling));
         return sb.toString();
     }
 

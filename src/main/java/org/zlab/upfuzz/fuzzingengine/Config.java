@@ -545,6 +545,20 @@ public class Config {
         // buckets retained in each compact per-window trace signature.
         public int traceSignatureTopBucketLimit = 3;
 
+        // --- Phase 2 flow-summary observability ---
+        // Maximum number of divergent families surfaced on each
+        // WindowTriggerRow. Kept small so the CSV stays wide-enough to
+        // scan but still tall enough to fit the top handful of
+        // upgrade-critical families for Cassandra / HDFS / HBase.
+        public int traceFlowTopDivergentFamiliesLimit = 3;
+
+        // Maximum number of rolling-lane detail labels emitted per
+        // divergent family. 0 disables the per-family cap (emit every
+        // label); negative values behave identically. A tight cap keeps
+        // HBase scan-heavy / HDFS heartbeat-heavy workloads from
+        // flooding the CSV.
+        public int traceFlowTopDivergentDetailsPerFamily = 5;
+
         // Debug
         public boolean useCompressedOrderDebug = false;
 

@@ -23,6 +23,8 @@ import org.zlab.net.tracker.TraceEntry;
 import org.zlab.net.tracker.diff.DiffComputeCompressedOrder;
 import org.zlab.net.tracker.diff.DiffComputeMessageTriDiff;
 import org.zlab.net.tracker.diff.DiffComputeSemanticSimilarity;
+import org.zlab.net.tracker.flow.FlowExtractionResult;
+import org.zlab.upfuzz.fuzzingengine.trace.AlignedWindowFlowSummaries;
 import org.zlab.upfuzz.fuzzingengine.trace.TraceWindow;
 import org.zlab.upfuzz.fuzzingengine.trace.WindowedTrace;
 import org.zlab.ocov.Utils;
@@ -2379,6 +2381,29 @@ public class FuzzingServer {
                             rollingTopology);
                     int upgradedBoundaryEventCount = boundary.crossingCount;
 
+                    // Phase 2: extract per-lane logical-flow summaries
+                    // exactly once per aligned window. The rolling lane
+                    // runs the topology-aware boundary oracle; baselines
+                    // skip boundary marking because no version cut
+                    // exists in a same-version lane. The summary bundle
+                    // below is passed into the per-window observability
+                    // row and will feed Phase 3 scoring without needing
+                    // a second pass over the traces.
+                    AlignedWindowFlowSummaries flowSummaries = AlignedWindowFlowSummaries
+                            .from(aw.oldOld, aw.rolling, aw.newNew,
+                                    aw.rolling.rawUpgradedNodeSet,
+                                    rollingTopology);
+                    FlowExtractionResult rollingFlows = flowSummaries
+                            .rolling();
+                    List<AlignedWindowFlowSummaries.DivergentFamily> topDivergent = flowSummaries
+                            .topDivergentFamilies(
+                                    Config.getConf().traceFlowTopDivergentFamiliesLimit);
+                    String topDivergentFamiliesCsv = formatTopDivergentFamilies(
+                            topDivergent);
+                    String topDivergentDetailsCsv = formatTopDivergentDetails(
+                            topDivergent, rollingFlows,
+                            Config.getConf().traceFlowTopDivergentDetailsPerFamily);
+
                     // --- Per-window tri-diff ---
                     boolean triDiffInteresting = false;
                     boolean triDiffExclusiveFired = false;
@@ -2543,7 +2568,22 @@ public class FuzzingServer {
                                     boundary.indexResolvedEndpointCount,
                                     boundary.roleResolvedEndpointCount,
                                     boundary.roleAmbiguousEndpointCount,
-                                    boundary.unresolvedEndpointCount));
+                                    boundary.unresolvedEndpointCount,
+                                    flowSummaries.oldOld().flowCount(),
+                                    rollingFlows.flowCount(),
+                                    flowSummaries.newNew().flowCount(),
+                                    rollingFlows
+                                            .flowsGroupedWithExplicitId(),
+                                    rollingFlows
+                                            .flowsGroupedWithDeterministicFallback(),
+                                    rollingFlows.flowsGroupingFailed(),
+                                    rollingFlows.boundaryInvolvedFlowCount(),
+                                    rollingFlows
+                                            .roleAmbiguousBoundaryFlowCount(),
+                                    rollingFlows
+                                            .unresolvedBoundaryFlowCount(),
+                                    topDivergentFamiliesCsv,
+                                    topDivergentDetailsCsv));
                     windowsEvaluatedThisRound++;
                     if (windowHasEnoughEvents) {
                         if (supportGatePassed) {
@@ -5249,6 +5289,94 @@ public class FuzzingServer {
      * rolling lane carried at least one payload whose class changed
      * between versions — a secondary signal of mixed-version relevance.
      */
+    /**
+     * Phase 2 CSV helper: render the ranked divergent-family list as a
+     * {@code FAMILY=gap@ro=a/oo=b/nn=c} sequence joined by {@code ;}.
+     * Empty string when no family diverged. The format is stable so
+     * offline parsers can split on {@code ;} and {@code @}.
+     */
+    static String formatTopDivergentFamilies(
+            List<AlignedWindowFlowSummaries.DivergentFamily> families) {
+        if (families == null || families.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < families.size(); i++) {
+            if (i > 0) {
+                sb.append(';');
+            }
+            AlignedWindowFlowSummaries.DivergentFamily d = families.get(i);
+            sb.append(d.family.name()).append('=')
+                    .append(String.format(java.util.Locale.ROOT, "%.2f",
+                            d.gap()));
+            sb.append("@ro=").append(d.rollingCount);
+            sb.append("/oo=").append(d.oldOldCount);
+            sb.append("/nn=").append(d.newNewCount);
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Phase 2 CSV helper: dump per-family detail-label counts for each
+     * top divergent family in the rolling lane. Format:
+     * {@code FAMILY:label=count|label=count; FAMILY:label=count}.
+     * Empty string when no divergent family exists or none of the
+     * divergent families carried a detail label in the rolling trace.
+     *
+     * <p>Labels within each family are sorted by descending count, tie
+     * broken by label name ascending, before the {@code cap} is
+     * applied. This guarantees the highest-frequency divergent detail
+     * stays in the emitted row even when the histogram's insertion
+     * order happens to list a low-count label first — the previous
+     * insertion-order walk could drop the top label if it was appended
+     * after the cap was reached.
+     *
+     * <p>The cap is passed in rather than pulled from {@link Config} so
+     * unit tests can exercise this helper without standing up a full
+     * server config.
+     */
+    static String formatTopDivergentDetails(
+            List<AlignedWindowFlowSummaries.DivergentFamily> families,
+            FlowExtractionResult rolling, int cap) {
+        if (families == null || families.isEmpty() || rolling == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        boolean firstFamily = true;
+        for (AlignedWindowFlowSummaries.DivergentFamily d : families) {
+            Map<String, Integer> labels = rolling.detailLabelCounts(d.family);
+            if (labels.isEmpty()) {
+                continue;
+            }
+            List<Map.Entry<String, Integer>> ranked = new ArrayList<>(
+                    labels.entrySet());
+            ranked.sort((a, b) -> {
+                int byCount = Integer.compare(b.getValue(), a.getValue());
+                if (byCount != 0) {
+                    return byCount;
+                }
+                return a.getKey().compareTo(b.getKey());
+            });
+            if (!firstFamily) {
+                sb.append(';');
+            }
+            firstFamily = false;
+            sb.append(d.family.name()).append(':');
+            int emitted = 0;
+            for (Map.Entry<String, Integer> entry : ranked) {
+                if (cap > 0 && emitted >= cap) {
+                    break;
+                }
+                if (emitted > 0) {
+                    sb.append('|');
+                }
+                sb.append(entry.getKey()).append('=').append(entry.getValue());
+                emitted++;
+            }
+        }
+        return sb.toString();
+    }
+
     private static int countChangedMessages(Trace mergedTrace) {
         if (mergedTrace == null) {
             return 0;
