@@ -5,6 +5,7 @@ PREBUILD_ROOT="/home/shuai/xlab/rupfuzz/prebuild"
 UPFUZZ_ROOT="/home/shuai/xlab/rupfuzz/upfuzz-shuai"
 LOG_DIR="${PREBUILD_ROOT}/build-binary-logs"
 SSG_JAR="${PREBUILD_ROOT}/ssgFatJar.jar"
+NETTRACE_PREBUILD_ROOT="/home/shuai/xlab/rupfuzz/nettrace-shuai/rupfuzz-nettrace/prebuild"
 
 JAVA8="/usr/lib/jvm/java-1.8.0-openjdk-amd64"
 JAVA11="/usr/lib/jvm/java-1.11.0-openjdk-amd64"
@@ -33,6 +34,66 @@ run_logged() {
     tail -n 120 "${logfile}" >&2 || true
     exit 1
   fi
+}
+
+discover_versions_from_source() {
+  local system="$1"
+  local src_dir="${NETTRACE_PREBUILD_ROOT}/${system}"
+  local -a archives=()
+  local archive name
+
+  [[ -d "${src_dir}" ]] || die "missing nettrace prebuild dir: ${src_dir}"
+
+  shopt -s nullglob
+  archives=("${src_dir}"/*-src-instrumented.tar.gz)
+  shopt -u nullglob
+
+  ((${#archives[@]} > 0)) || die "no instrumented source archives found under ${src_dir}"
+
+  for archive in "${archives[@]}"; do
+    name="$(basename "${archive}")"
+    printf '%s\n' "${name%-src-instrumented.tar.gz}"
+  done | sort -V
+}
+
+sync_instrumented_archives() {
+  local system="$1"
+  local src_dir="${NETTRACE_PREBUILD_ROOT}/${system}"
+  local dst_dir="${PREBUILD_ROOT}/${system}"
+  local -a archives=()
+  local archive name target
+
+  [[ -d "${src_dir}" ]] || die "missing nettrace prebuild dir: ${src_dir}"
+  mkdir -p "${dst_dir}"
+
+  shopt -s nullglob
+  archives=("${src_dir}"/*-src-instrumented.tar.gz)
+  shopt -u nullglob
+
+  ((${#archives[@]} > 0)) || die "no instrumented source archives found under ${src_dir}"
+
+  for archive in "${archives[@]}"; do
+    name="$(basename "${archive}")"
+    target="${dst_dir}/${name}"
+    rm -f "${target}"
+    run_logged "sync_${system}_${name%.tar.gz}" cp -f "${archive}" "${target}"
+  done
+}
+
+resolve_versions() {
+  local system="$1"
+  local env_name="$2"
+  local raw="${!env_name:-}"
+  local -a versions=()
+
+  if [[ -n "${raw}" ]]; then
+    read -r -a versions <<< "${raw}"
+  else
+    mapfile -t versions < <(discover_versions_from_source "${system}")
+  fi
+
+  ((${#versions[@]} > 0)) || die "no versions resolved for ${system}"
+  printf '%s\n' "${versions[@]}"
 }
 
 assert_jar_contains_entry() {
@@ -414,27 +475,45 @@ main() {
   [[ -f "${SSG_JAR}" ]] || die "ssgFatJar.jar not found at ${SSG_JAR}"
 
   if should_run_target "cassandra"; then
-    log "Building Cassandra binaries"
-    build_cassandra_version "apache-cassandra-3.11.19"
-    build_cassandra_version "apache-cassandra-4.1.10"
-    build_cassandra_version "apache-cassandra-5.0.6"
+    log "Syncing Cassandra instrumented source archives from ${NETTRACE_PREBUILD_ROOT}/cassandra"
+    sync_instrumented_archives "cassandra"
   fi
 
   if should_run_target "hdfs"; then
-    log "Building HDFS binaries"
-    build_hdfs_version "hadoop-2.10.2"
-    build_hdfs_version "hadoop-3.3.6"
-    build_hdfs_version "hadoop-3.4.2"
+    log "Syncing HDFS instrumented source archives from ${NETTRACE_PREBUILD_ROOT}/hdfs"
+    sync_instrumented_archives "hdfs"
   fi
 
   if should_run_target "hbase"; then
-    log "Building HBase binaries"
+    log "Syncing HBase instrumented source archives from ${NETTRACE_PREBUILD_ROOT}/hbase"
+    sync_instrumented_archives "hbase"
+  fi
+
+  if should_run_target "cassandra"; then
+    local cassandra_versions
+    mapfile -t cassandra_versions < <(resolve_versions "cassandra" "CASSANDRA_VERSIONS")
+    log "Building Cassandra binaries"
+    local version
+    for version in "${cassandra_versions[@]}"; do
+      build_cassandra_version "${version}"
+    done
+  fi
+
+  if should_run_target "hdfs"; then
+    local hdfs_versions
+    mapfile -t hdfs_versions < <(resolve_versions "hdfs" "HDFS_VERSIONS")
+    log "Building HDFS binaries"
+    local version
+    for version in "${hdfs_versions[@]}"; do
+      build_hdfs_version "${version}"
+    done
+  fi
+
+  if should_run_target "hbase"; then
     local hbase_versions
-    if [[ -n "${HBASE_VERSIONS:-}" ]]; then
-      read -r -a hbase_versions <<< "${HBASE_VERSIONS}"
-    else
-      hbase_versions=("hbase-2.5.13" "hbase-2.6.4" "hbase-4.0.0-alpha-1-SNAPSHOT")
-    fi
+    mapfile -t hbase_versions < <(resolve_versions "hbase" "HBASE_VERSIONS")
+    log "Building HBase binaries"
+    local version
     for version in "${hbase_versions[@]}"; do
       build_hbase_version "${version}"
     done
