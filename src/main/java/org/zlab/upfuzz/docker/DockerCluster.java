@@ -24,6 +24,7 @@ public abstract class DockerCluster implements IDockerCluster {
 
     protected Docker[] dockers;
     protected Docker[] extranodes;
+    private boolean checkpointRestoreExtraNodes = true;
     public DockerMeta.DockerState[] dockerStates;
 
     public Network network;
@@ -49,6 +50,7 @@ public abstract class DockerCluster implements IDockerCluster {
 
     public boolean collectFormatCoverage;
     public Set<String> blackListErrorLog = new HashSet<>();
+    private Set<Integer> checkpointRestoreNodeIndexes = null;
 
     // This function do the shifting
     // .1 runs the client
@@ -66,7 +68,10 @@ public abstract class DockerCluster implements IDockerCluster {
 
         // 192.168.24.[(0001~1111)|0000] / 28
 
-        this.subnetID = RandomUtils.nextInt(1, 256);
+        Integer checkpointSubnetID = executor.getCheckpointReuseSubnetID();
+        this.subnetID = checkpointSubnetID == null
+                ? RandomUtils.nextInt(1, 256)
+                : checkpointSubnetID;
         this.subnet = "192.168." + subnetID + ".0/24";
         this.hostIP = "192.168." + subnetID + ".1";
         this.agentPort = executor.agentPort;
@@ -308,6 +313,280 @@ public abstract class DockerCluster implements IDockerCluster {
             traces[i] = collectTrace(i);
         }
         return traces;
+    }
+
+    protected List<Docker> allDockerContainers() {
+        List<Docker> containers = new ArrayList<>();
+        if (extranodes != null) {
+            for (Docker docker : extranodes) {
+                if (docker != null) {
+                    containers.add(docker);
+                }
+            }
+        }
+        if (dockers != null) {
+            for (Docker docker : dockers) {
+                if (docker != null) {
+                    containers.add(docker);
+                }
+            }
+        }
+        return containers;
+    }
+
+    public void configureCheckpointRestoreNodes(Set<Integer> nodeIndexes) {
+        if (nodeIndexes == null) {
+            checkpointRestoreNodeIndexes = null;
+            return;
+        }
+        checkpointRestoreNodeIndexes = new HashSet<>(nodeIndexes);
+    }
+
+    public void configureCheckpointRestoreExtraNodes(
+            boolean restoreExtraNodes) {
+        checkpointRestoreExtraNodes = restoreExtraNodes;
+    }
+
+    public void configureCheckpointImageOverrides(
+            Map<String, String> imageOverrides) {
+        if (imageOverrides == null || imageOverrides.isEmpty()) {
+            return;
+        }
+        if (dockers != null) {
+            for (int i = 0; i < dockers.length; i++) {
+                Docker docker = dockers[i];
+                if (docker == null)
+                    continue;
+                String imageName = imageOverrides.get(
+                        checkpointImageKeyForMainNode(i));
+                if (imageName != null) {
+                    docker.setCheckpointReuseImageName(imageName);
+                }
+            }
+        }
+        if (extranodes != null) {
+            for (Docker docker : extranodes) {
+                if (docker == null)
+                    continue;
+                String imageName = imageOverrides.get(
+                        checkpointImageKeyForExtraNode(docker.index));
+                if (imageName != null) {
+                    docker.setCheckpointReuseImageName(imageName);
+                }
+            }
+        }
+    }
+
+    protected void applyCheckpointReuseNodeVersions() throws Exception {
+        Set<Integer> upgradedNodes = executor.getCheckpointReuseUpgradedNodes();
+        if (upgradedNodes == null || upgradedNodes.isEmpty()) {
+            return;
+        }
+
+        for (int nodeIndex : upgradedNodes) {
+            if (!checkIndex(nodeIndex)) {
+                throw new IllegalArgumentException(String.format(
+                        "checkpointReuse upgraded node %d is outside nodeNum=%d",
+                        nodeIndex, nodeNum));
+            }
+            dockers[nodeIndex].prepareCheckpointReuseVersion(
+                    DockerMeta.DockerVersion.upgraded);
+            dockerStates[nodeIndex].dockerVersion = DockerMeta.DockerVersion.upgraded;
+            logger.info(
+                    "[CHECKPOINT_REUSE] Node {} will start from upgraded checkpoint image",
+                    nodeIndex);
+        }
+    }
+
+    public static String checkpointImageKeyForMainNode(int index) {
+        return "node-" + index;
+    }
+
+    public static String checkpointImageKeyForExtraNode(int index) {
+        return "extra-" + index;
+    }
+
+    private String checkpointImageKeyFor(Docker docker) {
+        if (extranodes != null) {
+            for (Docker extranode : extranodes) {
+                if (docker == extranode) {
+                    return checkpointImageKeyForExtraNode(docker.index);
+                }
+            }
+        }
+        if (dockers != null) {
+            for (int i = 0; i < dockers.length; i++) {
+                if (docker == dockers[i]) {
+                    return checkpointImageKeyForMainNode(i);
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean shouldRestoreFromCheckpoint(Docker docker) {
+        if (extranodes != null) {
+            for (Docker extranode : extranodes) {
+                if (docker == extranode) {
+                    return checkpointRestoreExtraNodes;
+                }
+            }
+        }
+        if (checkpointRestoreNodeIndexes == null) {
+            return true;
+        }
+        if (dockers != null) {
+            for (int i = 0; i < dockers.length; i++) {
+                if (docker == dockers[i]) {
+                    return checkpointRestoreNodeIndexes.contains(i);
+                }
+            }
+        }
+        return true;
+    }
+
+    public void createDockerCheckpoint(String checkpointName)
+            throws IOException, InterruptedException {
+        for (Docker docker : allDockerContainers()) {
+            if (!shouldRestoreFromCheckpoint(docker)) {
+                logger.info("[CHECKPOINT] Skipping Docker checkpoint {} for {}",
+                        checkpointName, docker.containerName);
+                continue;
+            }
+            docker.stopServicesForCheckpoint();
+        }
+
+        for (Docker docker : allDockerContainers()) {
+            if (!shouldRestoreFromCheckpoint(docker)) {
+                continue;
+            }
+            removeDockerCheckpointIfExists(docker, checkpointName);
+            Process checkpointProcess = Utilities.exec(new String[] {
+                    "docker", "checkpoint", "create",
+                    "--leave-running",
+                    docker.containerName,
+                    checkpointName
+            }, workdir);
+            String output = Utilities.readProcess(checkpointProcess);
+            if (checkpointProcess.exitValue() != 0) {
+                throw new IOException(String.format(
+                        "docker checkpoint create failed for %s: %s",
+                        docker.containerName, output));
+            }
+            logger.info("[CHECKPOINT] Created {} for {}",
+                    checkpointName, docker.containerName);
+        }
+    }
+
+    private void removeDockerCheckpointIfExists(Docker docker,
+            String checkpointName) throws IOException, InterruptedException {
+        Process rmProcess = Utilities.exec(new String[] {
+                "docker", "checkpoint", "rm",
+                docker.containerName,
+                checkpointName
+        }, workdir);
+        Utilities.readProcess(rmProcess);
+    }
+
+    public void restoreDockerCheckpoint(String checkpointName)
+            throws Exception {
+        for (Docker docker : allDockerContainers()) {
+            Process killProcess = Utilities.exec(new String[] {
+                    "docker", "kill", docker.containerName
+            }, workdir);
+            Utilities.readProcess(killProcess);
+        }
+
+        for (Docker docker : allDockerContainers()) {
+            String[] startCommand;
+            if (shouldRestoreFromCheckpoint(docker)) {
+                startCommand = new String[] {
+                        "timeout", "120s", "docker", "start",
+                        "--checkpoint", checkpointName,
+                        docker.containerName
+                };
+            } else {
+                startCommand = new String[] {
+                        "timeout", "120s", "docker", "start",
+                        docker.containerName
+                };
+            }
+            Process restoreProcess = Utilities.exec(startCommand, workdir);
+            String output = Utilities.readProcess(restoreProcess);
+            if (restoreProcess.exitValue() != 0) {
+                throw new IOException(String.format(
+                        "docker checkpoint restore/start failed for %s: %s",
+                        docker.containerName, output));
+            }
+            if (shouldRestoreFromCheckpoint(docker)) {
+                docker.restartContainerAfterCheckpointRestore();
+            }
+            logger.info("[CHECKPOINT] {} {} for {}",
+                    shouldRestoreFromCheckpoint(docker)
+                            ? "Restored checkpoint"
+                            : "Started without checkpoint",
+                    checkpointName, docker.containerName);
+        }
+
+        for (Docker docker : allDockerContainers()) {
+            for (int i = 0; i < dockers.length; i++) {
+                if (dockers[i] == docker) {
+                    dockerStates[i].alive = true;
+                    break;
+                }
+            }
+            docker.start();
+            logger.info("[CHECKPOINT] Reconnected {} for {}",
+                    checkpointName, docker.containerName);
+        }
+    }
+
+    public void createReusableCheckpointImages(
+            Map<String, String> imageNames) throws Exception {
+        List<Docker> cacheSourceContainers = new ArrayList<>();
+        for (Docker docker : allDockerContainers()) {
+            String key = checkpointImageKeyFor(docker);
+            if (key == null || !imageNames.containsKey(key)) {
+                logger.info(
+                        "[CHECKPOINT_REUSE] Skipping reusable image commit for {}",
+                        docker.containerName);
+                continue;
+            }
+            cacheSourceContainers.add(docker);
+            docker.stopServicesForCheckpoint();
+            docker.prepareReusableCheckpointImage();
+        }
+
+        for (Docker docker : cacheSourceContainers) {
+            String key = checkpointImageKeyFor(docker);
+            String imageName = imageNames.get(key);
+            Process commitProcess = Utilities.exec(new String[] {
+                    "docker", "commit", docker.containerName, imageName
+            }, workdir);
+            String output = Utilities.readProcess(commitProcess);
+            if (commitProcess.exitValue() != 0) {
+                throw new IOException(String.format(
+                        "docker commit failed for reusable checkpoint image %s from %s: %s",
+                        imageName, docker.containerName, output));
+            }
+            logger.info("[CHECKPOINT_REUSE] Committed {} from {}",
+                    imageName, docker.containerName);
+        }
+
+        for (Docker docker : cacheSourceContainers) {
+            docker.restartContainerAfterCheckpointRestore();
+        }
+        for (Docker docker : cacheSourceContainers) {
+            for (int i = 0; i < dockers.length; i++) {
+                if (dockers[i] == docker) {
+                    dockerStates[i].alive = true;
+                    break;
+                }
+            }
+            docker.start();
+            logger.info("[CHECKPOINT_REUSE] Reconnected reusable cache source {}",
+                    docker.containerName);
+        }
     }
 
     public void clearFormatCoverage() {

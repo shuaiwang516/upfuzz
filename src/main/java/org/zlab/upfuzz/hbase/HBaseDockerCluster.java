@@ -97,6 +97,9 @@ public class HBaseDockerCluster extends DockerCluster {
         }
         extranodes[0] = new HBaseHDFSDocker(this, 100);
         extranodes[0].build();
+        applyCheckpointReuseNodeVersions();
+        configureCheckpointImageOverrides(
+                executor.getCheckpointReuseImageOverrides());
         return true;
     }
 
@@ -369,6 +372,18 @@ public class HBaseDockerCluster extends DockerCluster {
             hosts[i - 1] = "hregion" + i;
         }
         return hosts;
+    }
+
+    public void waitForCheckpointRestoreReady(String phase) throws Exception {
+        HBaseDocker masterDocker = getMasterDocker();
+        if (masterDocker == null) {
+            throw new IOException(
+                    "Master docker is unavailable while waiting for checkpoint restore readiness");
+        }
+        masterDocker.waitForMasterAndClusterReady(
+                "checkpoint restore " + phase);
+        masterDocker.waitForCheckpointFunctionalReadiness(
+                "checkpoint restore " + phase);
     }
 
     @Override

@@ -72,6 +72,12 @@ public abstract class Executor implements IExecutor {
     private Set<Integer> currentRawUpgradedNodeSet = new HashSet<>();
     private int stageCounter = 0;
     private String currentOpenReason = "";
+    private Set<Integer> checkpointInitialNormalizedTransitionNodeSet = new HashSet<>();
+    private Set<Integer> checkpointInitialRawUpgradedNodeSet = new HashSet<>();
+    private Map<String, String> checkpointReuseImageOverrides = Collections
+            .emptyMap();
+    private Integer checkpointReuseSubnetID;
+    private Set<Integer> checkpointReuseUpgradedNodes = Collections.emptySet();
 
     public DockerCluster dockerCluster;
     public TopologyNormalizer topologyNormalizer;
@@ -131,10 +137,48 @@ public abstract class Executor implements IExecutor {
 
     public void clearState() {
         executorID = RandomStringUtils.randomAlphanumeric(8);
+        checkpointReuseImageOverrides = Collections.emptyMap();
+        checkpointReuseSubnetID = null;
+        checkpointReuseUpgradedNodes = Collections.emptySet();
     }
 
     public String getSysExecID() {
         return systemID + "-" + executorID;
+    }
+
+    public void configureCheckpointReuseStartup(
+            Map<String, String> imageOverrides, Integer subnetID) {
+        configureCheckpointReuseStartup(imageOverrides, subnetID,
+                Collections.emptySet());
+    }
+
+    public void configureCheckpointReuseStartup(
+            Map<String, String> imageOverrides, Integer subnetID,
+            Set<Integer> upgradedNodes) {
+        if (imageOverrides == null || imageOverrides.isEmpty()) {
+            checkpointReuseImageOverrides = Collections.emptyMap();
+        } else {
+            checkpointReuseImageOverrides = new LinkedHashMap<>(
+                    imageOverrides);
+        }
+        checkpointReuseSubnetID = subnetID;
+        if (upgradedNodes == null || upgradedNodes.isEmpty()) {
+            checkpointReuseUpgradedNodes = Collections.emptySet();
+        } else {
+            checkpointReuseUpgradedNodes = new LinkedHashSet<>(upgradedNodes);
+        }
+    }
+
+    public Map<String, String> getCheckpointReuseImageOverrides() {
+        return checkpointReuseImageOverrides;
+    }
+
+    public Integer getCheckpointReuseSubnetID() {
+        return checkpointReuseSubnetID;
+    }
+
+    public Set<Integer> getCheckpointReuseUpgradedNodes() {
+        return checkpointReuseUpgradedNodes;
     }
 
     public boolean freshStartNewVersion() {
@@ -215,6 +259,14 @@ public abstract class Executor implements IExecutor {
             return "upgraded";
         }
         return currentRawUpgradedNodeSet.isEmpty() ? "original" : "upgraded";
+    }
+
+    public void configureCheckpointInitialStage(Set<Integer> normalizedNodes,
+            Set<Integer> rawUpgradedNodes) {
+        checkpointInitialNormalizedTransitionNodeSet = new HashSet<>(
+                normalizedNodes);
+        checkpointInitialRawUpgradedNodeSet = new HashSet<>(
+                rawUpgradedNodes);
     }
 
     /**
@@ -430,6 +482,22 @@ public abstract class Executor implements IExecutor {
         if (direction == 1) {
             for (int i = 0; i < nodeNum; i++) {
                 currentRawUpgradedNodeSet.add(i);
+            }
+        }
+
+        if (!checkpointInitialNormalizedTransitionNodeSet.isEmpty()
+                || !checkpointInitialRawUpgradedNodeSet.isEmpty()) {
+            currentNormalizedTransitionNodeSet
+                    .addAll(checkpointInitialNormalizedTransitionNodeSet);
+            currentRawUpgradedNodeSet
+                    .addAll(checkpointInitialRawUpgradedNodeSet);
+            stageCounter = currentNormalizedTransitionNodeSet.size();
+            if (stageCounter >= nodeNum) {
+                currentComparisonStageId = "POST_FINAL_STAGE";
+                currentStageKind = TraceWindow.StageKind.POST_FINAL_STAGE;
+            } else if (stageCounter > 0) {
+                currentComparisonStageId = "POST_STAGE_" + stageCounter;
+                currentStageKind = TraceWindow.StageKind.POST_STAGE;
             }
         }
 

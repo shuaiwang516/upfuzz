@@ -22,6 +22,14 @@ DIFF_LANE_TIMEOUT_SEC=1200
 HBASE_DAEMON_RETRY_TIMES=""
 SKIP_BUILD=false
 SKIP_DOCKER_BUILD=false
+DRY_RUN=false
+ENABLE_CHECKPOINT_RESTORE=false
+CHECKPOINT_SELECTED_NODES="0"
+CHECKPOINT_ALL_LANES=true
+CHECKPOINT_CACHE_DIR="fuzzing_storage/checkpoints"
+CHECKPOINT_REUSE=false
+CHECKPOINT_ALLOW_NON_CASSANDRA=false
+CHECKPOINT_WORKLOAD_ONLY_BENCHMARK=false
 
 usage() {
     cat <<'USAGE'
@@ -41,6 +49,18 @@ Options:
   --diff-lane-timeout-sec <sec>      Differential lane timeout for all systems (default: 1200)
   --hbase-daemon-retry-times <N>     Override hbaseDaemonRetryTimes in generated config (HBase only)
   --node-num <N>                     Override node number (default for HBase jobs: 3)
+  --enable-checkpoint-restore <true|false>
+                                     Enable mode-5 Docker checkpoint startup path (default: false)
+  --checkpoint-reuse <true|false>    Reuse persistent checkpoint cache images; requires checkpoint restore (default: false)
+  --checkpoint-selected-nodes <csv>  Node indexes for checkpoint prefix, e.g. 0 or 0,1 (default: 0)
+  --checkpoint-all-lanes <true|false>
+                                     Apply checkpoint prefix to old-old, rolling, and new-new lanes (default: true)
+  --checkpoint-cache-dir <path>      Checkpoint metadata/cache directory passed to UpFuzz
+  --checkpoint-allow-non-cassandra <true|false>
+                                     Allow checkpoint mode for HDFS/HBase after validation (default: false)
+  --checkpoint-workload-only-benchmark <true|false>
+                                     Deprecated compatibility knob passed through to UpFuzz (default: false)
+  --dry-run                          Mock a CloudLab launch locally: validate and print runner command only
   --skip-docker-build                Skip docker image build step
   --skip-build                       Skip './gradlew classes -x test'
   --skip-pull                        Deprecated alias for --skip-docker-build
@@ -61,6 +81,24 @@ log() {
 die() {
     echo "ERROR: $*" >&2
     exit 1
+}
+
+validate_bool() {
+    local name="$1"
+    local value="$2"
+    case "${value}" in
+        true|false) ;;
+        *) die "${name} must be true|false (got: ${value})" ;;
+    esac
+}
+
+render_cmd() {
+    local rendered=""
+    local arg
+    for arg in "$@"; do
+        rendered+=" $(printf '%q' "${arg}")"
+    done
+    echo "${rendered# }"
 }
 
 require_cmd() {
@@ -308,6 +346,38 @@ while [[ $# -gt 0 ]]; do
             NODE_NUM="$2"
             shift 2
             ;;
+        --enable-checkpoint-restore)
+            ENABLE_CHECKPOINT_RESTORE="$2"
+            shift 2
+            ;;
+        --checkpoint-reuse)
+            CHECKPOINT_REUSE="$2"
+            shift 2
+            ;;
+        --checkpoint-selected-nodes)
+            CHECKPOINT_SELECTED_NODES="$2"
+            shift 2
+            ;;
+        --checkpoint-all-lanes)
+            CHECKPOINT_ALL_LANES="$2"
+            shift 2
+            ;;
+        --checkpoint-cache-dir)
+            CHECKPOINT_CACHE_DIR="$2"
+            shift 2
+            ;;
+        --checkpoint-allow-non-cassandra)
+            CHECKPOINT_ALLOW_NON_CASSANDRA="$2"
+            shift 2
+            ;;
+        --checkpoint-workload-only-benchmark)
+            CHECKPOINT_WORKLOAD_ONLY_BENCHMARK="$2"
+            shift 2
+            ;;
+        --dry-run)
+            DRY_RUN=true
+            shift 1
+            ;;
         --skip-build)
             SKIP_BUILD=true
             shift 1
@@ -333,9 +403,6 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
-
-require_cmd docker
-ensure_docker_compose
 
 if [[ -n "${JOB_ID}" ]]; then
     assign_job "${JOB_ID}"
@@ -364,6 +431,22 @@ case "${SYSTEM}" in
         ;;
 esac
 
+validate_bool "--enable-checkpoint-restore" "${ENABLE_CHECKPOINT_RESTORE}"
+validate_bool "--checkpoint-reuse" "${CHECKPOINT_REUSE}"
+validate_bool "--checkpoint-all-lanes" "${CHECKPOINT_ALL_LANES}"
+validate_bool "--checkpoint-allow-non-cassandra" "${CHECKPOINT_ALLOW_NON_CASSANDRA}"
+validate_bool "--checkpoint-workload-only-benchmark" "${CHECKPOINT_WORKLOAD_ONLY_BENCHMARK}"
+
+if [[ "${CHECKPOINT_REUSE}" == true && "${ENABLE_CHECKPOINT_RESTORE}" != true ]]; then
+    die "--checkpoint-reuse true requires --enable-checkpoint-restore true"
+fi
+if [[ "${ENABLE_CHECKPOINT_RESTORE}" == true ]]; then
+    [[ "${TESTING_MODE}" == "5" ]] || die "--enable-checkpoint-restore is only supported with --testing-mode 5"
+    if [[ "${SYSTEM}" != "cassandra" && "${CHECKPOINT_ALLOW_NON_CASSANDRA}" != true ]]; then
+        die "--enable-checkpoint-restore for ${SYSTEM} requires --checkpoint-allow-non-cassandra true"
+    fi
+fi
+
 if [[ -z "${RUN_NAME}" ]]; then
     RUN_NAME="${SYSTEM}_${ORIGINAL_VERSION}_to_${UPGRADED_VERSION}_cloudlab_$(date '+%Y%m%d_%H%M%S')"
 fi
@@ -374,34 +457,41 @@ LAUNCH_LOG="${LAUNCH_DIR}/launch.log"
 
 log "Job setup: ${SYSTEM} ${ORIGINAL_VERSION} -> ${UPGRADED_VERSION}" | tee -a "${LAUNCH_LOG}"
 
-if [[ "${SKIP_DOCKER_BUILD}" == false ]]; then
-    build_required_images 2>&1 | tee -a "${LAUNCH_LOG}"
+if [[ "${DRY_RUN}" == false ]]; then
+    require_cmd docker
+    ensure_docker_compose
+
+    if [[ "${SKIP_DOCKER_BUILD}" == false ]]; then
+        build_required_images 2>&1 | tee -a "${LAUNCH_LOG}"
+    else
+        log "Skipping docker image build (--skip-docker-build/--skip-pull)" | tee -a "${LAUNCH_LOG}"
+    fi
+
+    if [[ "${SKIP_BUILD}" == false ]]; then
+        JAVA11_BUILD_HOME="$(resolve_java11_home)" || die "Java 11 not found. Install openjdk-11-jdk or set JAVA11_HOME."
+        log "Preparing runtime dependencies (./gradlew copyDependencies)" | tee -a "${LAUNCH_LOG}"
+        (
+            cd "${ROOT_DIR}"
+            JAVA_HOME="${JAVA11_BUILD_HOME}" PATH="${JAVA11_BUILD_HOME}/bin:${PATH}" ./gradlew copyDependencies
+        ) 2>&1 | tee -a "${LAUNCH_LOG}"
+
+        log "Building Java classes (./gradlew classes -x test)" | tee -a "${LAUNCH_LOG}"
+        (
+            cd "${ROOT_DIR}"
+            JAVA_HOME="${JAVA11_BUILD_HOME}" PATH="${JAVA11_BUILD_HOME}/bin:${PATH}" ./gradlew classes -x test
+        ) 2>&1 | tee -a "${LAUNCH_LOG}"
+    else
+        log "Skipping Java build (--skip-build)" | tee -a "${LAUNCH_LOG}"
+    fi
+
+    ensure_bidirectional_image_tags
+
+    if [[ "${SYSTEM}" == "hdfs" ]]; then
+        ensure_hdfs_tmp_root_writable
+        ensure_hdfs_example_files
+    fi
 else
-    log "Skipping docker image build (--skip-docker-build/--skip-pull)" | tee -a "${LAUNCH_LOG}"
-fi
-
-if [[ "${SKIP_BUILD}" == false ]]; then
-    JAVA11_BUILD_HOME="$(resolve_java11_home)" || die "Java 11 not found. Install openjdk-11-jdk or set JAVA11_HOME."
-    log "Preparing runtime dependencies (./gradlew copyDependencies)" | tee -a "${LAUNCH_LOG}"
-    (
-        cd "${ROOT_DIR}"
-        JAVA_HOME="${JAVA11_BUILD_HOME}" PATH="${JAVA11_BUILD_HOME}/bin:${PATH}" ./gradlew copyDependencies
-    ) 2>&1 | tee -a "${LAUNCH_LOG}"
-
-    log "Building Java classes (./gradlew classes -x test)" | tee -a "${LAUNCH_LOG}"
-    (
-        cd "${ROOT_DIR}"
-        JAVA_HOME="${JAVA11_BUILD_HOME}" PATH="${JAVA11_BUILD_HOME}/bin:${PATH}" ./gradlew classes -x test
-    ) 2>&1 | tee -a "${LAUNCH_LOG}"
-else
-    log "Skipping Java build (--skip-build)" | tee -a "${LAUNCH_LOG}"
-fi
-
-ensure_bidirectional_image_tags
-
-if [[ "${SYSTEM}" == "hdfs" ]]; then
-    ensure_hdfs_tmp_root_writable
-    ensure_hdfs_example_files
+    log "Dry run: skipping Docker build/checks, Java build, HDFS temp setup, and runner execution" | tee -a "${LAUNCH_LOG}"
 fi
 
 RUNNER_CMD=(
@@ -414,6 +504,13 @@ RUNNER_CMD=(
     --clients "${CLIENTS}"
     --testing-mode "${TESTING_MODE}"
     --diff-lane-timeout-sec "${DIFF_LANE_TIMEOUT_SEC}"
+    --enable-checkpoint-restore "${ENABLE_CHECKPOINT_RESTORE}"
+    --checkpoint-reuse "${CHECKPOINT_REUSE}"
+    --checkpoint-selected-nodes "${CHECKPOINT_SELECTED_NODES}"
+    --checkpoint-all-lanes "${CHECKPOINT_ALL_LANES}"
+    --checkpoint-cache-dir "${CHECKPOINT_CACHE_DIR}"
+    --checkpoint-allow-non-cassandra "${CHECKPOINT_ALLOW_NON_CASSANDRA}"
+    --checkpoint-workload-only-benchmark "${CHECKPOINT_WORKLOAD_ONLY_BENCHMARK}"
     --run-name "${RUN_NAME}"
 )
 # Mode-dependent trace arguments
@@ -427,6 +524,28 @@ if [[ -n "${NODE_NUM}" ]]; then
 fi
 if [[ "${SYSTEM}" == "hbase" && -n "${HBASE_DAEMON_RETRY_TIMES}" ]]; then
     RUNNER_CMD+=(--hbase-daemon-retry-times "${HBASE_DAEMON_RETRY_TIMES}")
+fi
+
+if [[ "${DRY_RUN}" == true ]]; then
+    rendered_runner_cmd="$(render_cmd "${RUNNER_CMD[@]}")"
+    printf '%s\n' "${rendered_runner_cmd}" > "${LAUNCH_DIR}/dry_run_runner_cmd.txt"
+    cat > "${LAUNCH_DIR}/dry_run_summary.txt" <<DRYSUM
+dry_run: true
+system: ${SYSTEM}
+original_version: ${ORIGINAL_VERSION}
+upgraded_version: ${UPGRADED_VERSION}
+testing_mode: ${TESTING_MODE}
+enable_checkpoint_restore: ${ENABLE_CHECKPOINT_RESTORE}
+checkpoint_reuse: ${CHECKPOINT_REUSE}
+checkpoint_selected_nodes: ${CHECKPOINT_SELECTED_NODES}
+checkpoint_all_lanes: ${CHECKPOINT_ALL_LANES}
+checkpoint_allow_non_cassandra: ${CHECKPOINT_ALLOW_NON_CASSANDRA}
+checkpoint_workload_only_benchmark: ${CHECKPOINT_WORKLOAD_ONLY_BENCHMARK}
+runner_command_file: ${LAUNCH_DIR}/dry_run_runner_cmd.txt
+DRYSUM
+    log "Dry-run runner command: ${rendered_runner_cmd}" | tee -a "${LAUNCH_LOG}"
+    log "Dry-run summary: ${LAUNCH_DIR}/dry_run_summary.txt" | tee -a "${LAUNCH_LOG}"
+    exit 0
 fi
 
 # Snapshot candidate counts before runner so phase6_summary reflects this run only

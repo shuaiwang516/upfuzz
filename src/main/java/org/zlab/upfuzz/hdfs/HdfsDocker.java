@@ -15,6 +15,7 @@ import org.apache.logging.log4j.Logger;
 import org.zlab.net.tracker.Trace;
 import org.zlab.upfuzz.docker.Docker;
 import org.zlab.upfuzz.docker.DockerCluster;
+import org.zlab.upfuzz.docker.DockerMeta;
 import org.zlab.upfuzz.fuzzingengine.Config;
 import org.zlab.upfuzz.fuzzingengine.LogInfo;
 import org.zlab.upfuzz.utils.Utilities;
@@ -85,6 +86,69 @@ public class HdfsDocker extends Docker {
         return "datanode" + (index - 2);
     }
 
+    private boolean hasServerRuntimeTraceEndpoint() {
+        // The SecondaryNameNode currently registers branch coverage but does
+        // not consistently initialize the runtime trace socket. Keep daemon
+        // trace collection for it and avoid repeated refused RPCs.
+        return index != 1;
+    }
+
+    @Override
+    protected String checkpointHardStopCommand() {
+        return "";
+    }
+
+    private String checkpointDaemonName() {
+        if (index == 0)
+            return "namenode";
+        if (index == 1)
+            return "secondarynamenode";
+        return "datanode";
+    }
+
+    @Override
+    public void stopServicesForCheckpoint()
+            throws IOException, InterruptedException {
+        String hdfsProcessPattern = "org[.]apache[.]hadoop|"
+                + "FsShell[D]aemon|hdfs[_]shell[_]init";
+        String command = "set +e; "
+                + "supervisorctl stop upfuzz_hdfs:*; "
+                + "source /usr/bin/set_env; "
+                + "if [ -x \"$HADOOP_HOME/sbin/hadoop-daemon.sh\" ]; then "
+                + "\"$HADOOP_HOME/sbin/hadoop-daemon.sh\" stop "
+                + checkpointDaemonName() + "; "
+                + "fi; "
+                + "for i in $(seq 1 20); do "
+                + "leftovers=$(pgrep -fa '" + hdfsProcessPattern
+                + "' || true); "
+                + "[ -z \"$leftovers\" ] && break; "
+                + "sleep 1; "
+                + "done; "
+                + "leftovers=$(pgrep -fa '" + hdfsProcessPattern
+                + "' || true); "
+                + "if [ -n \"$leftovers\" ]; then "
+                + "echo 'leftover hdfs processes after graceful stop:'; "
+                + "echo \"$leftovers\"; "
+                + "pkill -TERM -f '" + hdfsProcessPattern + "' || true; "
+                + "sleep 2; "
+                + "leftovers=$(pgrep -fa '" + hdfsProcessPattern
+                + "' || true); "
+                + "if [ -n \"$leftovers\" ]; then "
+                + "echo 'leftover hdfs processes after TERM:'; "
+                + "echo \"$leftovers\"; "
+                + "pkill -KILL -f '" + hdfsProcessPattern + "' || true; "
+                + "fi; "
+                + "fi";
+
+        Process stopProcess = runInContainer(new String[] {
+                "/bin/bash", "-c", command
+        });
+        String output = Utilities.readProcess(stopProcess);
+        stopProcess.waitFor();
+        logger.info("[CHECKPOINT] Stopped HDFS services in {}: {}",
+                containerName, output.trim());
+    }
+
     @Override
     public java.util.List<String> getHostnameAliases() {
         if (index == 0) {
@@ -112,6 +176,13 @@ public class HdfsDocker extends Docker {
         formatMap.put("formatCoveragePort",
                 Integer.toString(Config.instance.formatCoveragePort));
         formatMap.put("executorID", executorID);
+        String defaultImageName = "upfuzz_" + system + ":"
+                + configOriginalVersion + "_" + configUpgradedVersion;
+        formatMap.put("imageName", composeImageName(defaultImageName));
+        formatMap.put("checkpointReuseInitCommand",
+                usesCheckpointReuseImage()
+                        ? "mkdir -p /var/log/hdfs && touch /var/log/hdfs/.formatted && "
+                        : "");
         StringSubstitutor sub = new StringSubstitutor(formatMap);
         this.composeYaml = sub.replace(template);
 
@@ -154,12 +225,14 @@ public class HdfsDocker extends Docker {
                         index, e.toString());
             }
         }
-        // Also clear server-side trace (port 62000)
-        try {
-            super.clearTrace();
-        } catch (Exception e) {
-            logger.warn("HDFS server clearTrace failed on node {}: {}",
-                    index, e.toString());
+        // Also clear server-side trace (port 62000) where the runtime exists.
+        if (hasServerRuntimeTraceEndpoint()) {
+            try {
+                super.clearTrace();
+            } catch (Exception e) {
+                logger.warn("HDFS server clearTrace failed on node {}: {}",
+                        index, e.toString());
+            }
         }
     }
 
@@ -184,17 +257,19 @@ public class HdfsDocker extends Docker {
         }
 
         // 2. Collect from runtime socket (RECV events from NameNode/DataNode)
-        try {
-            serverTrace = super.collectTrace();
-            logger.debug(
-                    "[HKLOG] HDFS server trace collected on node {}, size={}",
-                    index,
-                    serverTrace != null ? serverTrace.size() : 0);
-        } catch (Exception e) {
-            logger.debug(
-                    "HDFS server trace collection failed on node {} (may be "
-                            + "expected if server Runtime not initialized): {}",
-                    index, e.toString());
+        if (hasServerRuntimeTraceEndpoint()) {
+            try {
+                serverTrace = super.collectTrace();
+                logger.debug(
+                        "[HKLOG] HDFS server trace collected on node {}, size={}",
+                        index,
+                        serverTrace != null ? serverTrace.size() : 0);
+            } catch (Exception e) {
+                logger.debug(
+                        "HDFS server trace collection failed on node {} (may be "
+                                + "expected if server Runtime not initialized): {}",
+                        index, e.toString());
+            }
         }
 
         // 3. Merge both traces by timestamp
@@ -223,6 +298,7 @@ public class HdfsDocker extends Docker {
                 // ",weights=" + hdfsHome + "/diff_func.txt" +
                 ",sessionid=" + system + "-" + executorID + "_"
                 + type + "-" + index +
+                checkpointRestoreJavaOptionsSuffix() +
                 "\"";
 
         env = new String[] {
@@ -304,6 +380,7 @@ public class HdfsDocker extends Docker {
                 // ",weights=" + hdfsHome + "/diff_func.txt" +
                 ",sessionid=" + system + "-" + executorID + "_"
                 + type + "-" + index +
+                checkpointRestoreJavaOptionsSuffix() +
                 "\"";
 
         // hdfsDaemonPort ^= 1;
@@ -323,6 +400,14 @@ public class HdfsDocker extends Docker {
                 "NET_TRACE_NODE_ROLE=" + getNodeRole()
         };
         setEnvironment();
+    }
+
+    @Override
+    public void prepareCheckpointReuseVersion(
+            DockerMeta.DockerVersion dockerVersion) throws Exception {
+        if (dockerVersion == DockerMeta.DockerVersion.upgraded) {
+            prepareUpgradeEnv();
+        }
     }
 
     public void waitSafeModeInterval() {
@@ -374,6 +459,7 @@ public class HdfsDocker extends Docker {
                 // ",weights=" + hdfsHome + "/diff_func.txt" +
                 ",sessionid=" + system + "-" + executorID + "_"
                 + type + "-" + index +
+                checkpointRestoreJavaOptionsSuffix() +
                 "\"";
 
         // hdfsDaemonPort ^= 1;
@@ -435,8 +521,8 @@ public class HdfsDocker extends Docker {
     static String template = ""
             + "    DC3N${index}:\n"
             + "        container_name: hdfs-${configOriginalVersion}_${configUpgradedVersion}_${executorID}_N${index}\n"
-            + "        image: upfuzz_${system}:${configOriginalVersion}_${configUpgradedVersion}\n"
-            + "        command: bash -c 'sleep 0 && /usr/bin/supervisord'\n"
+            + "        image: ${imageName}\n"
+            + "        command: bash -c '${checkpointReuseInitCommand}sleep 0 && /usr/bin/supervisord'\n"
             + "        networks:\n"
             + "            ${networkName}:\n"
             + "                ipv4_address: ${networkIP}\n"

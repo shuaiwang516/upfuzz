@@ -16,6 +16,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.zlab.upfuzz.docker.Docker;
 import org.zlab.upfuzz.docker.DockerCluster;
+import org.zlab.upfuzz.docker.DockerMeta;
 import org.zlab.upfuzz.fuzzingengine.Config;
 import org.zlab.upfuzz.fuzzingengine.LogInfo;
 import org.zlab.upfuzz.fuzzingengine.packet.ValidationResult;
@@ -94,6 +95,130 @@ public class HBaseDocker extends Docker {
     }
 
     @Override
+    protected String checkpointHardStopCommand() {
+        String hbaseProcessPattern = "org[.]apache[.]hadoop|"
+                + "org[.]apache[.]hbase|"
+                + "org[.]jruby|"
+                + "J[p]s|"
+                + "[s]leep 5|"
+                + "H[M]aster|"
+                + "H[R]egionServer|"
+                + "H[Q]uorumPeer|"
+                + "hbase_daemon[.]py|"
+                + "hbase-daemon-init[.]sh|"
+                + "hbase-daemon[.]sh|"
+                + "hbase-init[.]sh|"
+                + "hbase [s]hell|"
+                + "HBaseShell[D]aemon|"
+                + "hbase[_]shell";
+        return "pkill -TERM -f '" + hbaseProcessPattern + "' || true; "
+                + "sleep 2; "
+                + "pkill -KILL -f '" + hbaseProcessPattern + "' || true; "
+                + "for i in 1 2 3 4 5; do "
+                + "leftovers=$(pgrep -fa '" + hbaseProcessPattern
+                + "' || true); "
+                + "[ -z \"$leftovers\" ] && break; "
+                + "echo \"$leftovers\"; "
+                + "pkill -KILL -f '" + hbaseProcessPattern + "' || true; "
+                + "sleep 1; "
+                + "done; "
+                + "ps -eo pid,ppid,stat,comm,args";
+    }
+
+    @Override
+    public void stopServicesForCheckpoint()
+            throws IOException, InterruptedException {
+        Process stopProcess = runInContainer(new String[] {
+                "/bin/bash", "-c",
+                "supervisorctl stop all || true"
+        });
+        String output = Utilities.readProcess(stopProcess);
+        stopProcess.waitFor();
+        logger.info("[CHECKPOINT] Stopped all HBase container services in {}: {}",
+                containerName, output.trim());
+
+        Process hardStopProcess = runInContainer(new String[] {
+                "/bin/bash", "-c", checkpointHardStopCommand()
+        });
+        String hardStopOutput = Utilities.readProcess(hardStopProcess);
+        hardStopProcess.waitFor();
+        logger.info("[CHECKPOINT] HBase checkpoint process table in {}: {}",
+                containerName, hardStopOutput.trim());
+    }
+
+    @Override
+    public void prepareReusableCheckpointImage()
+            throws IOException, InterruptedException {
+        Process cleanProcess = runInContainer(new String[] {
+                "/bin/bash", "-c",
+                "rm -rf /usr/local/zookeeper/* "
+                        + "/tmp/hbase-* /tmp/Jetty_* /tmp/hsperfdata_* "
+                        + "/tmp/upfuzz-hbase-status "
+                        + "/tmp/upfuzz-supervisor-status; "
+                        + "mkdir -p /usr/local/zookeeper; "
+                        + "ps -eo pid,ppid,stat,comm,args"
+        });
+        String output = Utilities.readProcess(cleanProcess);
+        cleanProcess.waitFor();
+        if (cleanProcess.exitValue() != 0) {
+            throw new IOException(String.format(
+                    "preparing HBase reusable checkpoint image failed for %s: %s",
+                    containerName, output));
+        }
+        logger.info(
+                "[CHECKPOINT_REUSE] Prepared HBase reusable image state in {}: {}",
+                containerName, output.trim());
+    }
+
+    @Override
+    public void restartContainerAfterCheckpointRestore()
+            throws IOException, InterruptedException {
+        super.restartContainerAfterCheckpointRestore();
+
+        Process startProcess = runInContainer(new String[] {
+                "/bin/bash", "-c",
+                "ready=0; "
+                        + "for i in $(seq 1 60); do "
+                        + "supervisorctl status >/tmp/upfuzz-supervisor-status 2>&1 "
+                        + "&& { ready=1; break; }; "
+                        + "sleep 1; "
+                        + "done; "
+                        + "[ \"$ready\" = 1 ] || "
+                        + "{ cat /tmp/upfuzz-supervisor-status; exit 1; }; "
+                        + "ensure_started() { "
+                        + "name=\"$1\"; "
+                        + "status=$(supervisorctl status \"$name\" 2>&1 || true); "
+                        + "echo \"$status\" | grep -Eq '[[:space:]]+(RUNNING|STARTING)' "
+                        + "|| supervisorctl start \"$name\"; "
+                        + "}; "
+                        + "ensure_started sshd; "
+                        + "ensure_started upfuzz_hbase:hbase; "
+                        + "ensure_started upfuzz_hbase:hbase_daemon; "
+                        + "for i in $(seq 1 60); do "
+                        + "supervisorctl status > /tmp/upfuzz-hbase-status; "
+                        + "grep -Eq '^upfuzz_hbase:hbase_daemon[[:space:]]+RUNNING' "
+                        + "/tmp/upfuzz-hbase-status && break; "
+                        + "ensure_started upfuzz_hbase:hbase; "
+                        + "ensure_started upfuzz_hbase:hbase_daemon; "
+                        + "sleep 1; "
+                        + "done; "
+                        + "grep -Eq '^upfuzz_hbase:hbase_daemon[[:space:]]+RUNNING' "
+                        + "/tmp/upfuzz-hbase-status || "
+                        + "{ supervisorctl status; exit 1; }; "
+                        + "supervisorctl status"
+        });
+        String output = Utilities.readProcess(startProcess);
+        startProcess.waitFor();
+        if (startProcess.exitValue() != 0) {
+            throw new IOException(String.format(
+                    "starting HBase services after checkpoint restore failed for %s: %s",
+                    containerName, output));
+        }
+        logger.info("[CHECKPOINT] Started HBase services in restored {}: {}",
+                containerName, output.trim());
+    }
+
+    @Override
     public String formatComposeYaml() {
         Map<String, String> formatMap = new HashMap<>();
 
@@ -116,6 +241,9 @@ public class HBaseDocker extends Docker {
         formatMap.put("serviceName", serviceName);
         formatMap.put("HadoopIP", DockerCluster.getKthIP(hostIP, 100));
         formatMap.put("daemonPort", Integer.toString(HBaseDaemonPort));
+        String defaultImageName = "upfuzz_" + system + ":"
+                + configOriginalVersion + "_" + configUpgradedVersion;
+        formatMap.put("imageName", composeImageName(defaultImageName));
         if (index == 0) {
             formatMap.put("HBaseMaster", "true");
             formatMap.put("depDockerID", "DEPN100");
@@ -167,9 +295,11 @@ public class HBaseDocker extends Docker {
                     ",output=dfe,address=" + hostIP + ",port=" + agentPort +
                     ",sessionid=" + system + "-" + executorID + "_"
                     + type + "-" + index +
+                    checkpointRestoreJavaOptionsSuffix() +
                     "\"";
         } else {
-            javaToolOpts = "JAVA_TOOL_OPTIONS=\"\"";
+            javaToolOpts = "JAVA_TOOL_OPTIONS=\""
+                    + checkpointRestoreJavaOptions() + "\"";
         }
 
         int originalMajorVersion = extractMajorVersion(originalVersion);
@@ -223,10 +353,137 @@ public class HBaseDocker extends Docker {
         waitForRegionServerRejoinedFromMaster();
     }
 
-    private void waitForMasterAndClusterReady(String phase) throws Exception {
+    public void waitForMasterAndClusterReady(String phase) throws Exception {
         waitForMasterControlPlaneReady();
         waitForMasterReportsClusterHealthy(
                 hbaseDockerCluster.getExpectedRegionServerCount(), phase);
+    }
+
+    public void waitForCheckpointFunctionalReadiness(String phase)
+            throws Exception {
+        final int maxAttempts = Math.max(1,
+                Config.getConf().hbaseDaemonRetryTimes);
+        final int sleepMillis = 5000;
+        Exception lastException = null;
+        ValidationResult lastProbe = null;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            String probeTable = checkpointProbeTableName(attempt);
+            try {
+                ValidationResult status = execCommandStructured(
+                        "status 'simple'");
+                lastProbe = status;
+                if (!isSuccessfulNonTransientProbe(status)) {
+                    logger.info(String.format(
+                            "Node[%d] checkpoint functional probe %d/%d not ready during %s at status: %s",
+                            index, attempt, maxAttempts, phase,
+                            summarizeProbe(status)));
+                    Thread.sleep(sleepMillis);
+                    continue;
+                }
+
+                ValidationResult namespaces = execCommandStructured(
+                        "list_namespace");
+                lastProbe = namespaces;
+                if (!isSuccessfulNonTransientProbe(namespaces)) {
+                    logger.info(String.format(
+                            "Node[%d] checkpoint functional probe %d/%d not ready during %s at list_namespace: %s",
+                            index, attempt, maxAttempts, phase,
+                            summarizeProbe(namespaces)));
+                    Thread.sleep(sleepMillis);
+                    continue;
+                }
+
+                ValidationResult tables = execCommandStructured("list");
+                lastProbe = tables;
+                if (!isSuccessfulNonTransientProbe(tables)) {
+                    logger.info(String.format(
+                            "Node[%d] checkpoint functional probe %d/%d not ready during %s at list: %s",
+                            index, attempt, maxAttempts, phase,
+                            summarizeProbe(tables)));
+                    Thread.sleep(sleepMillis);
+                    continue;
+                }
+
+                runCheckpointTableRoundTrip(probeTable);
+                logger.info(String.format(
+                        "Node[%d] checkpoint functional readiness passed after %d attempts during %s",
+                        index, attempt, phase));
+                return;
+            } catch (Exception e) {
+                lastException = e;
+                logger.info(String.format(
+                        "Node[%d] checkpoint functional probe %d/%d failed during %s: %s",
+                        index, attempt, maxAttempts, phase, e.toString()));
+                bestEffortDropCheckpointProbeTable(probeTable);
+                Thread.sleep(sleepMillis);
+            }
+        }
+
+        String reason = lastException != null
+                ? lastException.toString()
+                : summarizeProbe(lastProbe);
+        throw new IOException(
+                "HBase checkpoint restore timed out waiting for functional readiness ("
+                        + phase + "): " + reason);
+    }
+
+    private boolean isSuccessfulNonTransientProbe(ValidationResult probe) {
+        if (probe == null || !probe.isSuccess()) {
+            return false;
+        }
+        String mergedLower = safeLower(safe(probe.stdout) + "\n"
+                + safe(probe.stderr));
+        return !isMasterTransient(mergedLower)
+                && !containsMetaUnavailable(mergedLower);
+    }
+
+    private boolean containsMetaUnavailable(String mergedLower) {
+        return mergedLower.contains("notservingregionexception")
+                || mergedLower.contains("hbase:meta")
+                        && mergedLower.contains("not online");
+    }
+
+    private void runCheckpointTableRoundTrip(String tableName)
+            throws Exception {
+        bestEffortDropCheckpointProbeTable(tableName);
+        requireCheckpointProbeSuccess(
+                execCommandStructured("create '" + tableName + "', 'cf'"),
+                "create", tableName);
+        requireCheckpointProbeSuccess(
+                execCommandStructured("disable '" + tableName + "'"),
+                "disable", tableName);
+        requireCheckpointProbeSuccess(
+                execCommandStructured("drop '" + tableName + "'"),
+                "drop", tableName);
+    }
+
+    private void requireCheckpointProbeSuccess(ValidationResult result,
+            String op, String tableName) throws IOException {
+        if (isSuccessfulNonTransientProbe(result)) {
+            return;
+        }
+        throw new IOException(String.format(
+                "checkpoint readiness table probe failed during %s %s: %s",
+                op, tableName, summarizeProbe(result)));
+    }
+
+    private void bestEffortDropCheckpointProbeTable(String tableName) {
+        try {
+            execCommandStructured("disable '" + tableName + "'");
+        } catch (Exception ignored) {
+        }
+        try {
+            execCommandStructured("drop '" + tableName + "'");
+        } catch (Exception ignored) {
+        }
+    }
+
+    private String checkpointProbeTableName(int attempt) {
+        String executor = executorID == null ? "unknown" : executorID;
+        executor = executor.replaceAll("[^A-Za-z0-9_]", "_");
+        return "upfuzz_restore_probe_" + executor + "_" + index + "_"
+                + attempt;
     }
 
     private void waitForMasterControlPlaneReady() throws Exception {
@@ -365,6 +622,8 @@ public class HBaseDocker extends Docker {
         final int maxAttempts = Math.max(1,
                 Config.getConf().hbaseDaemonRetryTimes);
         final int sleepMillis = 5000;
+        final boolean checkpointReuseExecution = isCheckpointReuseExecutionPhase(
+                phase);
         ValidationResult lastProbe = null;
         Exception lastException = null;
 
@@ -378,6 +637,7 @@ public class HBaseDocker extends Docker {
                 String mergedLower = safeLower(merged);
                 Integer liveServers = extractLiveServerCount(merged);
                 Integer deadServers = extractDeadServerCount(merged);
+                Integer onlineRegions = extractOnlineRegionCount(merged);
                 boolean transientState = isMasterTransient(mergedLower);
                 Boolean detailedHostsReady = null;
                 if (liveServers == null && expectedRegionServers > 0) {
@@ -388,15 +648,59 @@ public class HBaseDocker extends Docker {
                                 && liveServers >= expectedRegionServers)
                         || Boolean.TRUE.equals(detailedHostsReady);
                 boolean deadReady = deadServers == null || deadServers == 0;
+                if (checkpointReuseExecution && status.isSuccess()
+                        && !transientState && liveReady && !deadReady) {
+                    boolean clearSucceeded = bestEffortClearDeadServers(attempt,
+                            phase, deadServers);
+                    if (clearSucceeded) {
+                        ValidationResult postClear = execCommandStructured(
+                                "status 'simple'");
+                        String postClearMerged = safe(postClear.stdout) + "\n"
+                                + safe(postClear.stderr);
+                        String postClearMergedLower = safeLower(
+                                postClearMerged);
+                        Integer postClearLiveServers = extractLiveServerCount(
+                                postClearMerged);
+                        Integer postClearDeadServers = extractDeadServerCount(
+                                postClearMerged);
+                        Integer postClearOnlineRegions = extractOnlineRegionCount(
+                                postClearMerged);
+                        boolean postClearTransient = isMasterTransient(
+                                postClearMergedLower);
+                        boolean postClearLiveReady = expectedRegionServers == 0
+                                || (postClearLiveServers != null
+                                        && postClearLiveServers >= expectedRegionServers);
+                        boolean postClearDeadReady = postClearDeadServers == null
+                                || postClearDeadServers == 0;
+                        if (postClear.isSuccess() && !postClearTransient
+                                && postClearLiveReady && postClearDeadReady) {
+                            logger.info(String.format(
+                                    "Node[%d] master-side cluster health ready after %d attempts (%s): liveServers=%s, deadServers=%s, onlineRegions=%s, expectedRegionServers=%d, detailedHostsReady=%s, staleDeadServersCleared=true",
+                                    index, attempt, phase,
+                                    postClearLiveServers == null ? "NA"
+                                            : postClearLiveServers.toString(),
+                                    postClearDeadServers == null ? "NA"
+                                            : postClearDeadServers.toString(),
+                                    postClearOnlineRegions == null ? "NA"
+                                            : postClearOnlineRegions.toString(),
+                                    expectedRegionServers,
+                                    detailedHostsReady == null ? "NA"
+                                            : detailedHostsReady.toString()));
+                            return;
+                        }
+                    }
+                }
 
                 if (status.isSuccess() && !transientState && liveReady
                         && deadReady) {
                     logger.info(String.format(
-                            "Node[%d] master-side cluster health ready after %d attempts (%s): liveServers=%s, deadServers=%s, expectedRegionServers=%d, detailedHostsReady=%s",
+                            "Node[%d] master-side cluster health ready after %d attempts (%s): liveServers=%s, deadServers=%s, onlineRegions=%s, expectedRegionServers=%d, detailedHostsReady=%s",
                             index, attempt, phase,
                             liveServers == null ? "NA" : liveServers.toString(),
                             deadServers == null ? "NA"
                                     : deadServers.toString(),
+                            onlineRegions == null ? "NA"
+                                    : onlineRegions.toString(),
                             expectedRegionServers,
                             detailedHostsReady == null ? "NA"
                                     : detailedHostsReady.toString()));
@@ -404,11 +708,13 @@ public class HBaseDocker extends Docker {
                 }
 
                 logger.info(String.format(
-                        "Node[%d] master-side health %d/%d not ready (%s): exit=%d,class=%s,transient=%s,liveServers=%s,deadServers=%s,expectedRegionServers=%d,detailedHostsReady=%s,sample=%s",
+                        "Node[%d] master-side health %d/%d not ready (%s): exit=%d,class=%s,transient=%s,liveServers=%s,deadServers=%s,onlineRegions=%s,expectedRegionServers=%d,detailedHostsReady=%s,sample=%s",
                         index, attempt, maxAttempts, phase, status.exitCode,
                         status.failureClass, transientState,
                         liveServers == null ? "NA" : liveServers.toString(),
                         deadServers == null ? "NA" : deadServers.toString(),
+                        onlineRegions == null ? "NA"
+                                : onlineRegions.toString(),
                         expectedRegionServers,
                         detailedHostsReady == null ? "NA"
                                 : detailedHostsReady.toString(),
@@ -436,6 +742,36 @@ public class HBaseDocker extends Docker {
         throw new IOException(
                 "HBase rolling upgrade timed out waiting for cluster health from master side ("
                         + phase + "): " + reason);
+    }
+
+    private boolean isCheckpointReuseExecutionPhase(String phase) {
+        if (phase != null && phase.contains("reusable checkpoint cache")) {
+            return true;
+        }
+        return usesCheckpointReuseImage();
+    }
+
+    private boolean bestEffortClearDeadServers(int attempt, String phase,
+            Integer deadServers) {
+        if (index != 0 || deadServers == null || deadServers <= 0) {
+            return false;
+        }
+        try {
+            ValidationResult clear = execCommandStructured(
+                    "clear_deadservers");
+            logger.info(String.format(
+                    "Node[%d] attempted clear_deadservers during %s at health attempt %d (previousDeadServers=%d): exit=%d,class=%s,sample=%s",
+                    index, phase, attempt, deadServers, clear.exitCode,
+                    clear.failureClass,
+                    compactText(safe(clear.stdout) + "\n"
+                            + safe(clear.stderr))));
+            return clear.isSuccess();
+        } catch (Exception e) {
+            logger.info(String.format(
+                    "Node[%d] failed to clear stale dead servers during %s at health attempt %d: %s",
+                    index, phase, attempt, e.toString()));
+            return false;
+        }
     }
 
     private void bestEffortRestartMasterIfDown(int attempt, String phase) {
@@ -646,6 +982,16 @@ public class HBaseDocker extends Docker {
         return extractCountByPattern(text, "(\\d+)\\s+dead\\b");
     }
 
+    private Integer extractOnlineRegionCount(String text) {
+        Integer value = extractCountByPattern(text,
+                "numberOfOnlineRegions\\s*=\\s*(\\d+)");
+        if (value != null) {
+            return value;
+        }
+        return extractCountByPattern(text,
+                "(\\d+)\\s+online\\s+regions?\\b");
+    }
+
     private Integer extractCountByPattern(String text, String regex) {
         Pattern pattern = Pattern.compile(regex, Pattern.CASE_INSENSITIVE);
         Matcher matcher = pattern.matcher(safe(text));
@@ -754,9 +1100,11 @@ public class HBaseDocker extends Docker {
                     ",output=dfe,address=" + hostIP + ",port=" + agentPort +
                     ",sessionid=" + system + "-" + executorID + "_" + type +
                     "-" + index +
+                    checkpointRestoreJavaOptionsSuffix() +
                     "\"";
         } else {
-            javaToolOpts = "JAVA_TOOL_OPTIONS=\"\"";
+            javaToolOpts = "JAVA_TOOL_OPTIONS=\""
+                    + checkpointRestoreJavaOptions() + "\"";
         }
         HBaseDaemonPort ^= 1;
 
@@ -774,6 +1122,14 @@ public class HBaseDocker extends Docker {
                 "NET_TRACE_NODE_ID=" + executorID + "-N" + index,
                 "NET_TRACE_NODE_ROLE=" + getNodeRole() };
         setEnvironment();
+    }
+
+    @Override
+    public void prepareCheckpointReuseVersion(
+            DockerMeta.DockerVersion dockerVersion) throws Exception {
+        if (dockerVersion == DockerMeta.DockerVersion.upgraded) {
+            prepareUpgradeEnv();
+        }
     }
 
     private int extractMajorVersion(String version) {
@@ -961,7 +1317,7 @@ public class HBaseDocker extends Docker {
     static String template = "" // TODO
             + "    ${serviceName}:\n"
             + "        container_name: hbase-${configOriginalVersion}_${configUpgradedVersion}_${executorID}_N${index}\n"
-            + "        image: upfuzz_${system}:${configOriginalVersion}_${configUpgradedVersion}\n"
+            + "        image: ${imageName}\n"
             + "        command: bash -c 'sleep 0 && source /usr/bin/set_env && /usr/bin/supervisord'\n"
             + "        networks:\n"
             + "            ${networkName}:\n"

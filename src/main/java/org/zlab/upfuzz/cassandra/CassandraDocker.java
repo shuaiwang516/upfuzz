@@ -12,6 +12,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.zlab.upfuzz.docker.Docker;
 import org.zlab.upfuzz.docker.DockerCluster;
+import org.zlab.upfuzz.docker.DockerMeta;
 import org.zlab.upfuzz.fuzzingengine.Config;
 import org.zlab.upfuzz.fuzzingengine.LogInfo;
 import org.zlab.upfuzz.utils.Utilities;
@@ -97,6 +98,11 @@ public class CassandraDocker extends Docker {
                 Integer.toString(Config.instance.formatCoveragePort));
         formatMap.put("executorID", executorID);
         formatMap.put("serviceName", serviceName);
+        String defaultImageName = Config.getConf().testSingleVersion
+                ? "upfuzz_" + system + ":" + configOriginalVersion
+                : "upfuzz_" + system + ":" + configOriginalVersion + "_"
+                        + configUpgradedVersion;
+        formatMap.put("imageName", composeImageName(defaultImageName));
 
         StringSubstitutor sub = new StringSubstitutor(formatMap);
         if (Config.getConf().testSingleVersion)
@@ -193,6 +199,7 @@ public class CassandraDocker extends Docker {
                 ",output=dfe,address=" + hostIP + ",port=" + agentPort +
                 ",sessionid=" + system + "-" + executorID + "_"
                 + type + "-" + index +
+                checkpointRestoreJavaOptionsSuffix() +
                 "\"";
 
         // Only enable format coverage before version change
@@ -272,10 +279,19 @@ public class CassandraDocker extends Docker {
                 ",output=dfe,address=" + hostIP + ",port=" + agentPort +
                 ",sessionid=" + system + "-" + executorID + "_" + type +
                 "-" + index +
+                checkpointRestoreJavaOptionsSuffix() +
                 "\"";
         cqlshDaemonPort ^= 1;
 
         handleEnv(upgradedVersion, cassandraHome, cassandraConf, false);
+    }
+
+    @Override
+    public void prepareCheckpointReuseVersion(
+            DockerMeta.DockerVersion dockerVersion) throws Exception {
+        if (dockerVersion == DockerMeta.DockerVersion.upgraded) {
+            prepareUpgradeEnv();
+        }
     }
 
     public void prepareDowngradeEnv() throws IOException {
@@ -296,6 +312,7 @@ public class CassandraDocker extends Docker {
                 ",output=dfe,address=" + hostIP + ",port=" + agentPort +
                 ",sessionid=" + system + "-" + executorID + "_"
                 + type + "-" + index +
+                checkpointRestoreJavaOptionsSuffix() +
                 "\"";
         cqlshDaemonPort ^= 1;
 
@@ -386,7 +403,7 @@ public class CassandraDocker extends Docker {
     static String singleVersionTemplate = ""
             + "    ${serviceName}:\n"
             + "        container_name: cassandra-${configOriginalVersion}_${executorID}_N${index}\n"
-            + "        image: upfuzz_${system}:${configOriginalVersion}\n"
+            + "        image: ${imageName}\n"
             + "        command: bash -c 'sleep 0 && /usr/bin/supervisord'\n"
             + "        networks:\n"
             + "            ${networkName}:\n"
@@ -420,7 +437,7 @@ public class CassandraDocker extends Docker {
     static String template = ""
             + "    ${serviceName}:\n"
             + "        container_name: cassandra-${configOriginalVersion}_${configUpgradedVersion}_${executorID}_N${index}\n"
-            + "        image: upfuzz_${system}:${configOriginalVersion}_${configUpgradedVersion}\n"
+            + "        image: ${imageName}\n"
             + "        command: bash -c 'sleep 0 && /usr/bin/supervisord'\n"
             + "        networks:\n"
             + "            ${networkName}:\n"

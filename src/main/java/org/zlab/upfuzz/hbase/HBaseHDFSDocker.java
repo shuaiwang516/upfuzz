@@ -80,6 +80,8 @@ public class HBaseHDFSDocker extends Docker {
         formatMap.put("agentPort", Integer.toString(agentPort));
         formatMap.put("executorID", executorID);
         formatMap.put("HadoopIP", networkIP);
+        formatMap.put("imageName",
+                composeImageName("upfuzz_hdfs:hadoop-2.10.2"));
         StringSubstitutor sub = new StringSubstitutor(formatMap);
         this.composeYaml = sub.replace(template);
 
@@ -92,6 +94,18 @@ public class HBaseHDFSDocker extends Docker {
         // hdfsShell = new HDFSShellDaemon(getNetworkIP(), hdfsDaemonPort,
         // executorID, this);
         return 0;
+    }
+
+    @Override
+    protected String checkpointSupervisorGroup() {
+        return "hdfs";
+    }
+
+    @Override
+    protected String checkpointHardStopCommand() {
+        return "pkill -TERM -f 'org[.]apache[.]hadoop|FsShell[D]aemon|hdfs[_]shell[_]init' || true; "
+                + "sleep 2; "
+                + "pkill -KILL -f 'org[.]apache[.]hadoop|FsShell[D]aemon|hdfs[_]shell[_]init' || true";
     }
 
     private void setEnvironment() throws IOException {
@@ -125,6 +139,7 @@ public class HBaseHDFSDocker extends Docker {
                 ",weights=" + hdfsHome + "/diff_func.txt" +
                 ",sessionid=" + system + "-" + executorID + "_"
                 + type + "-" + index +
+                checkpointRestoreJavaOptionsSuffix() +
                 "\"";
 
         env = new String[] {
@@ -180,6 +195,7 @@ public class HBaseHDFSDocker extends Docker {
                 ",weights=" + hdfsHome + "/diff_func.txt" +
                 ",sessionid=" + system + "-" + executorID + "_"
                 + type + "-" + index +
+                checkpointRestoreJavaOptionsSuffix() +
                 "\"";
 
         // hdfsDaemonPort ^= 1;
@@ -241,6 +257,7 @@ public class HBaseHDFSDocker extends Docker {
                 ",weights=" + hdfsHome + "/diff_func.txt" +
                 ",sessionid=" + system + "-" + executorID + "_"
                 + type + "-" + index +
+                checkpointRestoreJavaOptionsSuffix() +
                 "\"";
 
         // hdfsDaemonPort ^= 1;
@@ -295,7 +312,7 @@ public class HBaseHDFSDocker extends Docker {
             + "    DEPN${index}:\n"
             + "        container_name: hdfs-${originalVersion}_${upgradedVersion}_${executorID}_N${index}\n"
             // TODO: depend system & version
-            + "        image: upfuzz_hdfs:hadoop-2.10.2\n"
+            + "        image: ${imageName}\n"
             + "        command: bash -c 'sleep 0 && source /usr/bin/set_env && /usr/bin/supervisord'\n"
             + "        networks:\n"
             + "            ${networkName}:\n"

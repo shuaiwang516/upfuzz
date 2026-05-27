@@ -47,7 +47,7 @@ Options:
   --machine-list <path>       Machine list file (default: scripts/cloudlab-runner/machine_list.txt).
   --remote-repo <path>        Upfuzz repo path on remote machines.
   --run-prefix <prefix>       Prefix for distributed run names.
-  --dry-run                   Print distribution commands without executing.
+  --dry-run                   In distribute mode, print SSH launch commands; in single mode, pass --dry-run to run_cloudlab_job.sh.
   --rounds <N>                Override rounds limit (default: 2147483647).
   --timeout-sec <N>           Override timeout (default: 2147483647 sec).
   --run-name <name>           Explicit run name (single mode) or default run-prefix (distribute mode).
@@ -356,6 +356,12 @@ fi
 if [[ "${DISTRIBUTE}" == true ]]; then
     run_distributed
     exit 0
+fi
+
+if [[ "${DRY_RUN}" == true ]]; then
+    USE_TMUX=false
+    DETACH=false
+    PASSTHRU_ARGS+=(--dry-run)
 fi
 
 if [[ "${USE_TMUX}" == true ]]; then

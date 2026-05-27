@@ -57,6 +57,9 @@ public class HdfsDockerCluster extends DockerCluster {
             dockers[i] = new HdfsDocker(this, i);
             dockers[i].build();
         }
+        applyCheckpointReuseNodeVersions();
+        configureCheckpointImageOverrides(
+                executor.getCheckpointReuseImageOverrides());
         return true;
     }
 

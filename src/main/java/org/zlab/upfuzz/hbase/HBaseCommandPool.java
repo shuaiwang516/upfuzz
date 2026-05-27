@@ -162,9 +162,11 @@ public class HBaseCommandPool extends CommandPool {
                         ALTER_DELETE_FAMILY.class, DDL_WIGHT));
         commandClassList.add(
                 new AbstractMap.SimpleImmutableEntry<>(ALTER_STATUS.class, 5));
-        commandClassList.add(
-                new AbstractMap.SimpleImmutableEntry<>(CLONE_TABLE_SCHEMA.class,
-                        DDL_WIGHT));
+        if (!Config.getConf().enableCheckpointRestore) {
+            commandClassList.add(
+                    new AbstractMap.SimpleImmutableEntry<>(
+                            CLONE_TABLE_SCHEMA.class, DDL_WIGHT));
+        }
         commandClassList.add(
                 new AbstractMap.SimpleImmutableEntry<>(CREATE.class,
                         DDL_WIGHT));
@@ -198,12 +200,14 @@ public class HBaseCommandPool extends CommandPool {
         commandClassList.add(
                 new AbstractMap.SimpleImmutableEntry<>(PUT_NEW.class,
                         DML_WIGHT));
-        commandClassList.add(
-                new AbstractMap.SimpleImmutableEntry<>(TRUNCATE.class,
-                        DML_WIGHT));
-        commandClassList.add(
-                new AbstractMap.SimpleImmutableEntry<>(TRUNCATE_PRESERVE.class,
-                        DML_WIGHT));
+        if (!Config.getConf().enableCheckpointRestore) {
+            commandClassList.add(
+                    new AbstractMap.SimpleImmutableEntry<>(TRUNCATE.class,
+                            DML_WIGHT));
+            commandClassList.add(
+                    new AbstractMap.SimpleImmutableEntry<>(
+                            TRUNCATE_PRESERVE.class, DML_WIGHT));
+        }
         // ns
         commandClassList.add(
                 new AbstractMap.SimpleImmutableEntry<>(CREATE_NAMESPACE.class,
@@ -288,8 +292,10 @@ public class HBaseCommandPool extends CommandPool {
                 new AbstractMap.SimpleImmutableEntry<>(MAJOR_COMPACT.class, 5));
         commandClassList.add(
                 new AbstractMap.SimpleImmutableEntry<>(SPLIT.class, 5));
-        commandClassList.add(
-                new AbstractMap.SimpleImmutableEntry<>(WAL_ROLL.class, 5));
+        // Disabled until the generator can produce the full HBase server name
+        // form expected by the shell for these versions.
+        // commandClassList.add(
+        //         new AbstractMap.SimpleImmutableEntry<>(WAL_ROLL.class, 5));
         commandClassList.add(
                 new AbstractMap.SimpleImmutableEntry<>(ZK_DUMP.class, 5));
 

@@ -54,6 +54,13 @@ python3 scripts/cloudlab_launcher.py monitor --machines 1-6
 # Explicitly force mode 5 (not needed with the current 6-machine list)
 python3 scripts/cloudlab_launcher.py deploy --mode 5 --timeout-sec 43200
 
+# Mode 5 with checkpoint restore + reusable checkpoint caches.
+# HDFS/HBase assignments require the non-Cassandra opt-in after validation.
+python3 scripts/cloudlab_launcher.py deploy --mode 5 --timeout-sec 43200 \
+  --enable-checkpoint-restore true \
+  --checkpoint-reuse true \
+  --checkpoint-allow-non-cassandra true
+
 # Override all machines to mode 6 if you want a branch-only run
 python3 scripts/cloudlab_launcher.py deploy --mode 6 --timeout-sec 43200
 

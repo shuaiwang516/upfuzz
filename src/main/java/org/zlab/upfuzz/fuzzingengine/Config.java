@@ -511,6 +511,37 @@ public class Config {
         // feedback (old-old / rolling / new-new). Applied to all systems.
         public int differentialLaneTimeoutSec = 1200;
 
+        // --- Mode 5 checkpoint/restore startup acceleration ---
+        // Default false preserves the historical mode-5 behavior exactly:
+        // every lane starts from a fresh cluster and executes the full test
+        // plan. When true, only mode-5 differential rolling executions are
+        // allowed to use the checkpoint-aware startup path.
+        public boolean enableCheckpointRestore = false;
+        // Nodes included in the deterministic checkpoint prefix. The rolling
+        // lane upgrades these nodes before checkpointing; baseline lanes
+        // restart the same node set so trace stages remain aligned.
+        public int[] checkpointSelectedNodes = new int[] { 0 };
+        // Keep all three differential lanes on the checkpoint path. Turning
+        // this off is mainly for debugging the startup path and is not the
+        // recommended fuzzing configuration.
+        public boolean checkpointAllLanes = true;
+        // Directory used for checkpoint metadata/artifacts.
+        public String checkpointCacheDir = "fuzzing_storage/checkpoints";
+        // Persistent checkpoint cache reuse. Checkpoint mode starts lanes from
+        // committed image snapshots taken after the deterministic checkpoint
+        // prefix. This avoids depending on Docker/CRIU restore support while
+        // preserving online branch and network-trace guidance.
+        public boolean checkpointReuse = false;
+        // Initial support is intentionally Cassandra-first. HDFS/HBase have
+        // extra preparation and sidecar process constraints and should be
+        // enabled only after system-specific validation.
+        public boolean checkpointAllowNonCassandra = false;
+        // Deprecated compatibility knob. Checkpoint restore now always uses
+        // the fast post-checkpoint suffix for checkpointed lanes: execute
+        // workload events only, with no restart/upgrade/finalize lifecycle
+        // events after the checkpointed cluster is launched.
+        public boolean checkpointWorkloadOnlyBenchmark = false;
+
         public boolean printTrace = false;
 
         // --- Canonical trace similarity (Phase 4) ---

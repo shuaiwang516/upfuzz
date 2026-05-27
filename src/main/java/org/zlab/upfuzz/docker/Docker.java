@@ -13,6 +13,103 @@ import java.net.Socket;
 import java.util.concurrent.TimeUnit;
 
 public abstract class Docker extends DockerMeta implements IDocker {
+    private String checkpointReuseImageName;
+
+    public void setCheckpointReuseImageName(String imageName) {
+        checkpointReuseImageName = imageName;
+    }
+
+    protected String composeImageName(String defaultImageName) {
+        if (checkpointReuseImageName == null
+                || checkpointReuseImageName.isEmpty()) {
+            return defaultImageName;
+        }
+        return checkpointReuseImageName;
+    }
+
+    protected boolean usesCheckpointReuseImage() {
+        return checkpointReuseImageName != null
+                && !checkpointReuseImageName.isEmpty();
+    }
+
+    public void prepareCheckpointReuseVersion(DockerVersion dockerVersion)
+            throws Exception {
+        if (dockerVersion == DockerVersion.upgraded) {
+            throw new UnsupportedOperationException(String.format(
+                    "%s does not implement upgraded checkpoint-reuse startup",
+                    getClass().getSimpleName()));
+        }
+    }
+
+    protected String checkpointRestoreJavaOptions() {
+        if (!Config.getConf().enableCheckpointRestore)
+            return "";
+        if (!"cassandra".equals(system))
+            return "";
+        return "-Dio.netty.native.deleteLibAfterLoading=false "
+                + "-Dio.netty.native.workdir=/tmp/upfuzz-netty-native";
+    }
+
+    protected String checkpointRestoreJavaOptionsSuffix() {
+        String checkpointOptions = checkpointRestoreJavaOptions();
+        if (checkpointOptions.isEmpty())
+            return "";
+        return " " + checkpointOptions;
+    }
+
+    protected String checkpointSupervisorGroup() {
+        return "upfuzz_" + system;
+    }
+
+    protected String checkpointHardStopCommand() {
+        return "";
+    }
+
+    public void stopServicesForCheckpoint()
+            throws IOException, InterruptedException {
+        String group = checkpointSupervisorGroup();
+        if (group == null || group.isEmpty())
+            return;
+
+        Process stopProcess = runInContainer(new String[] {
+                "/bin/bash", "-c",
+                "supervisorctl stop " + group + ":* || true"
+        });
+        String output = Utilities.readProcess(stopProcess);
+        stopProcess.waitFor();
+        logger.info("[CHECKPOINT] Stopped services in {}: {}",
+                containerName, output.trim());
+
+        String hardStopCommand = checkpointHardStopCommand();
+        if (hardStopCommand == null || hardStopCommand.isEmpty())
+            return;
+
+        Process hardStopProcess = runInContainer(new String[] {
+                "/bin/bash", "-c", hardStopCommand
+        });
+        String hardStopOutput = Utilities.readProcess(hardStopProcess);
+        hardStopProcess.waitFor();
+        logger.info("[CHECKPOINT] Hard-stopped residual services in {}: {}",
+                containerName, hardStopOutput.trim());
+    }
+
+    public void prepareReusableCheckpointImage()
+            throws IOException, InterruptedException {
+    }
+
+    public void restartContainerAfterCheckpointRestore()
+            throws IOException, InterruptedException {
+        Process restartProcess = Utilities.exec(new String[] {
+                "docker", "restart", containerName
+        }, workdir);
+        String output = Utilities.readProcess(restartProcess);
+        if (restartProcess.exitValue() != 0) {
+            throw new IOException(String.format(
+                    "docker restart after checkpoint restore failed for %s: %s",
+                    containerName, output));
+        }
+        logger.info("[CHECKPOINT] Restarted {} after restore", containerName);
+    }
 
     public abstract void chmodDir() throws IOException, InterruptedException;
 

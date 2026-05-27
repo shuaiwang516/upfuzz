@@ -26,13 +26,23 @@ if [ -n "$UPFUZZ_CONTAINERS" ]; then
     
     if [ "$FORCE" = true ]; then
         echo "Force mode: removing containers without confirmation..."
-        echo "$UPFUZZ_CONTAINERS" | xargs -r docker rm -f
+        while IFS= read -r container; do
+            [ -n "$container" ] || continue
+            if ! timeout 20s docker rm -f "$container"; then
+                echo "Warning: timed out removing container $container"
+            fi
+        done <<< "$UPFUZZ_CONTAINERS"
     else
         read -p "Do you want to remove these containers? (y/N): " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             echo "Removing these containers..."
-            echo "$UPFUZZ_CONTAINERS" | xargs -r docker rm -f
+            while IFS= read -r container; do
+                [ -n "$container" ] || continue
+                if ! timeout 20s docker rm -f "$container"; then
+                    echo "Warning: timed out removing container $container"
+                fi
+            done <<< "$UPFUZZ_CONTAINERS"
         else
             echo "Skipping container removal."
         fi
@@ -43,7 +53,7 @@ fi
 
 echo "Cleaning up unused Docker resources..."
 
-docker network prune -f
-docker container prune -f
+timeout 20s docker network prune -f || echo "Warning: docker network prune timed out"
+timeout 20s docker container prune -f || echo "Warning: docker container prune timed out"
 
 echo "Cleanup completed!"

@@ -50,6 +50,7 @@ public class FuzzingClientDifferentialLaneWaitTest {
                 .collectDifferentialFeedbackPackets(
                         packet,
                         laneFutures,
+                        Collections.emptyMap(),
                         System.currentTimeMillis(),
                         100L);
 
@@ -82,6 +83,7 @@ public class FuzzingClientDifferentialLaneWaitTest {
                 .collectDifferentialFeedbackPackets(
                         packet,
                         laneFutures,
+                        Collections.emptyMap(),
                         System.currentTimeMillis(),
                         300L);
 

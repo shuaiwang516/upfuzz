@@ -58,6 +58,27 @@ Example for machine assigned HDFS 2.10.2 -> 3.3.6:
 scripts/cloudlab-runner/run_cloudlab_job.sh --job-id 5
 ```
 
+Checkpoint restore and persistent checkpoint-image reuse are opt-in. For
+Cassandra:
+
+```bash
+scripts/cloudlab-runner/run_cloudlab_job.sh \
+  --job-id 2 \
+  --enable-checkpoint-restore true \
+  --checkpoint-reuse true
+```
+
+For HDFS/HBase, checkpoint restore is still guarded by an explicit validation
+knob:
+
+```bash
+scripts/cloudlab-runner/run_cloudlab_job.sh \
+  --job-id 5 \
+  --enable-checkpoint-restore true \
+  --checkpoint-reuse true \
+  --checkpoint-allow-non-cassandra true
+```
+
 ## Continuous Fuzzing (No 1-2 Round Stop)
 
 Use the continuous wrapper:
@@ -114,9 +135,16 @@ scripts/cloudlab-runner/run_cloudlab_job.sh \
 - `--timeout-sec`: hard timeout.
 - `--hbase-daemon-retry-times`: HBase shell daemon retry attempts for startup-heavy environments.
 - `--node-num`: override node count; for HBase jobs default is 3 (`hmaster,hregion1,hregion2`).
+- `--enable-checkpoint-restore`: enable the mode-5 checkpoint startup path.
+- `--checkpoint-reuse`: enable persistent reusable checkpoint cache images; requires `--enable-checkpoint-restore true`.
+- `--checkpoint-selected-nodes`: comma-separated prefix node list, default `0`.
+- `--checkpoint-all-lanes`: checkpoint old-old, rolling, and new-new lanes, default `true`.
+- `--checkpoint-cache-dir`: checkpoint metadata/cache directory passed into the generated UpFuzz config.
+- `--checkpoint-allow-non-cassandra`: required to run checkpoint mode for HDFS/HBase.
 - `--skip-docker-build`: skip `scripts/docker/build_rolling_image_pair.sh`.
 - `--skip-build`: skip `./gradlew classes -x test`.
 - `--skip-pull`: deprecated alias for `--skip-docker-build`.
+- `--dry-run`: local/mock CloudLab launch check. It validates options, skips Docker/Gradle/runner execution, and writes `dry_run_runner_cmd.txt` plus `dry_run_summary.txt`.
 
 Manual pair mode (without job-id):
 

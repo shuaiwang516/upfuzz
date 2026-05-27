@@ -107,6 +107,34 @@ def build_assignments(machines, modes, machine_range, tag, timeout_sec):
     return assignments
 
 
+def checkpoint_flag_block(a: MachineAssignment, args) -> str:
+    if a.mode != 5:
+        return ""
+    flags = [
+        f"--enable-checkpoint-restore {args.enable_checkpoint_restore}",
+        f"--checkpoint-reuse {args.checkpoint_reuse}",
+        f"--checkpoint-selected-nodes {args.checkpoint_selected_nodes}",
+        f"--checkpoint-all-lanes {args.checkpoint_all_lanes}",
+        f"--checkpoint-cache-dir {args.checkpoint_cache_dir}",
+        f"--checkpoint-allow-non-cassandra {args.checkpoint_allow_non_cassandra}",
+        f"--checkpoint-workload-only-benchmark {args.checkpoint_workload_only_benchmark}",
+    ]
+    return "".join(f"  {flag} \\\n" for flag in flags)
+
+
+def validate_checkpoint_args(assignments: List[MachineAssignment], args):
+    if args.checkpoint_reuse == "true" and args.enable_checkpoint_restore != "true":
+        sys.exit("--checkpoint-reuse true requires --enable-checkpoint-restore true")
+    if args.enable_checkpoint_restore != "true":
+        return
+    if any(a.mode != 5 for a in assignments):
+        sys.exit("--enable-checkpoint-restore is only supported for mode 5 assignments")
+    if (args.checkpoint_allow_non_cassandra != "true"
+            and any(a.job["system"] != "cassandra" for a in assignments)):
+        sys.exit("--enable-checkpoint-restore for HDFS/HBase assignments requires "
+                 "--checkpoint-allow-non-cassandra true")
+
+
 # ─── SSH helpers ─────────────────────────────────────────────
 
 def ssh_quick(a: MachineAssignment, cmd: str, timeout: int = 30) -> str:
@@ -326,6 +354,7 @@ def cmd_launch(assignments: List[MachineAssignment], args):
     for a in assignments:
         trace_flags = ("--use-trace true --print-trace true --require-trace-signal"
                        if a.mode == 5 else "--use-trace false --print-trace false")
+        checkpoint_flags = checkpoint_flag_block(a, args)
         tmux_run(a, "fuzz", (
             f"cd {REMOTE_REPO}\n"
             f"rm -rf failure/* logs/* corpus/* 2>/dev/null\n"
@@ -337,6 +366,7 @@ def cmd_launch(assignments: List[MachineAssignment], args):
             f"  --timeout-sec {timeout_sec} \\\n"
             f"  --testing-mode {a.mode} \\\n"
             f"  {trace_flags} \\\n"
+            f"{checkpoint_flags}"
             f"  --run-name {a.run_name}\n"
         ))
 
@@ -465,6 +495,19 @@ def main():
     p.add_argument("--dest", type=str, default=None)
     p.add_argument("--continuous", action="store_true")
     p.add_argument("--interval", type=int, default=3600)
+    p.add_argument("--enable-checkpoint-restore", type=str, default="false",
+                   choices=["true", "false"])
+    p.add_argument("--checkpoint-reuse", type=str, default="false",
+                   choices=["true", "false"])
+    p.add_argument("--checkpoint-selected-nodes", type=str, default="0")
+    p.add_argument("--checkpoint-all-lanes", type=str, default="true",
+                   choices=["true", "false"])
+    p.add_argument("--checkpoint-cache-dir", type=str,
+                   default="fuzzing_storage/checkpoints")
+    p.add_argument("--checkpoint-allow-non-cassandra", type=str, default="false",
+                   choices=["true", "false"])
+    p.add_argument("--checkpoint-workload-only-benchmark", type=str,
+                   default="false", choices=["true", "false"])
     args = p.parse_args()
 
     machines = parse_machine_list(args.machine_list)
@@ -473,6 +516,7 @@ def main():
 
     assignments = build_assignments(machines, args.mode, args.machines,
                                     args.tag, args.timeout_sec)
+    validate_checkpoint_args(assignments, args)
 
     print(f"\n{'='*60}")
     print(f"  CloudLab Launcher — {args.command}")
@@ -480,6 +524,8 @@ def main():
     print(f"  Machines: {len(assignments)}  Tag: {args.tag}")
     if args.command in ("deploy", "launch"):
         print(f"  Timeout: {args.timeout_sec}s ({args.timeout_sec // 3600}h)")
+        print(f"  Checkpoint restore: {args.enable_checkpoint_restore}  "
+              f"reuse: {args.checkpoint_reuse}")
     print()
     for a in assignments:
         print(f"  {a.short_host:8s} → {a.job['system']:10s} "

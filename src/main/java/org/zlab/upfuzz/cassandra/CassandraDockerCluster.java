@@ -63,6 +63,9 @@ public class CassandraDockerCluster extends DockerCluster {
             dockers[i] = new CassandraDocker(this, i);
             dockers[i].build();
         }
+        applyCheckpointReuseNodeVersions();
+        configureCheckpointImageOverrides(
+                executor.getCheckpointReuseImageOverrides());
         return true;
     }
 

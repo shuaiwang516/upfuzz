@@ -4,6 +4,7 @@
 import json
 import optparse
 import os
+import re
 import socketserver
 import sys
 import time
@@ -22,6 +23,68 @@ MESSAGE_SIZE = 51200
 
 output_file = open('/var/log/supervisor/hbase_daemon.log', 'a', encoding='utf-8')
 output_file.write("test\n")
+
+STARTUP_PROMPT_PATTERNS = [
+    re.compile(r'hbase:\d{3}:\d+> $'),
+    re.compile(r'hbase\(main\):\d{3}:\d+> $'),
+]
+
+
+def _set_nonblocking(proc):
+    os.set_blocking(proc.stdout.fileno(), False)
+    os.set_blocking(proc.stderr.fileno(), False)
+    os.set_blocking(proc.stdin.fileno(), False)
+
+
+def _wait_for_startup_prompt(proc):
+    startup_deadline = time.time() + int(
+        os.getenv("HBASE_SHELL_STARTUP_TIMEOUT_SEC", "180"))
+    output = ''
+    errout = ''
+    while True:
+        newline = proc.stdout.read()
+        if newline is None or len(newline) == 0:
+            if proc.poll() is not None:
+                raise RuntimeError("hbase shell exited during startup")
+            if time.time() > startup_deadline:
+                output_file.write(
+                    "Timeout waiting for shell startup prompt; "
+                    "starting daemon socket anyway\n")
+                output_file.flush()
+                break
+            time.sleep(0.05)
+            continue
+        newline = newline.decode("utf-8")
+        output += newline
+        err_out = proc.stderr.read()
+        if err_out is not None and len(err_out) != 0:
+            errout += err_out.decode("utf-8")
+        if any(pattern.search(output) for pattern in STARTUP_PROMPT_PATTERNS):
+            break
+    return output, errout
+
+
+def restart_hbase_shell():
+    global process
+    global command_count
+    try:
+        process.kill()
+    except Exception:
+        pass
+    try:
+        process.wait(timeout=5)
+    except Exception:
+        pass
+    hbase_path = os.environ['HBASE_HOME'] + "/bin/hbase"
+    process = Popen([hbase_path, 'shell'], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+    _set_nonblocking(process)
+    command_count = 1
+    output, errout = _wait_for_startup_prompt(process)
+    output_file.write("restarted hbase shell after command timeout\n")
+    output_file.write(output + '\n')
+    output_file.write(errout + '\n')
+    output_file.flush()
+    command_count += 1
 
 def get_shell_within_docker():
     return os
@@ -91,18 +154,38 @@ class TCPHandler(socketserver.BaseRequestHandler):
                     print('here3')
                     next_shell_out = 'hbase:' + \
                         '{:0>3d}'.format(command_count) + ':0> '
+                    next_prompt_patterns = [
+                        re.compile(r'hbase:%03d:\d+> $' % command_count),
+                        re.compile(r'hbase\(main\):%03d:\d+> $' % command_count),
+                    ]
                     print('next_out:', next_shell_out)
                     output_file.write('next_out: ' + next_shell_out + '\n')
                     output_file.flush()
                     command_count += 1
+                    command_timeout_sec = int(
+                        os.getenv("HBASE_SHELL_COMMAND_TIMEOUT_SEC", "120"))
+                    command_deadline = time.time() + command_timeout_sec
 
                     while True:
+                        if time.time() > command_deadline:
+                            ret_err += (
+                                "ERROR: HBase shell command timed out after "
+                                + str(command_timeout_sec) + " seconds\n")
+                            output_file.write(ret_err)
+                            output_file.flush()
+                            restart_hbase_shell()
+                            break
                         newline = process.stdout.read()
                         if newline is None or len(newline) == 0:
+                            if process.poll() is not None:
+                                ret_err += "ERROR: HBase shell exited\n"
+                                restart_hbase_shell()
+                                break
                             err_out = process.stderr.read()
                             if err_out is not None and len(err_out) != 0:
                                 ret_err += err_out.decode("utf-8")
                                 output_file.write('stderr: ' + ret_err)
+                            time.sleep(0.05)
                             continue
                         newline = newline.decode("utf-8")
                         ret_out += newline
@@ -113,7 +196,8 @@ class TCPHandler(socketserver.BaseRequestHandler):
                         if err_out is not None and len(err_out) != 0:
                             ret_err += err_out.decode("utf-8")
                             output_file.write('stderr: ' + ret_err)
-                        if ret_out.endswith(next_shell_out) or ret_out.endswith(next_shell_out+'\n'):
+                        if any(pattern.search(ret_out)
+                               for pattern in next_prompt_patterns):
                             break
                     print("stdout of process: " + ret_out)
                     ret_out = '\n'.join(ret_out.split('\n')[1:-1])
@@ -122,7 +206,8 @@ class TCPHandler(socketserver.BaseRequestHandler):
                     # exit_code = process.returncode
                     # print("exit code = " + str(exit_code))
                 except Exception as e:
-                    print("exception pipe: " + e)
+                    print("exception pipe: " + str(e))
+                    ret_err += "ERROR: exception in hbase daemon pipe: " + str(e)
 
                 # message_out = ""
                 # message_err = ""
@@ -262,20 +347,7 @@ if __name__ == "__main__":
 
     command_count = 1
     next_shell_out = 'hbase:' + '{:0>3d}'.format(command_count) + ':0> '
-
-    output = ''
-    errout = ''
-    while True:
-        newline = process.stdout.read()
-        if newline is None or len(newline) == 0:
-            continue
-        newline = newline.decode("utf-8")
-        output += newline
-        err_out = process.stderr.read()
-        if err_out is not None and len(err_out) != 0:
-            errout += err_out.decode("utf-8")
-        if output.endswith(next_shell_out):
-            break
+    output, errout = _wait_for_startup_prompt(process)
     # process._stdin_write(b'version\n')
     # process.stdin.write(b'version\n')
     # process.stdin.write(b'version\n')

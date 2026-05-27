@@ -34,6 +34,13 @@ ENABLE_LOG_CHECK=true
 REQUIRE_TRACE_SIGNAL=false
 CASSANDRA_RETRY_TIMEOUT=300
 DIFF_LANE_TIMEOUT_SEC=1200
+ENABLE_CHECKPOINT_RESTORE=false
+CHECKPOINT_SELECTED_NODES="0"
+CHECKPOINT_ALL_LANES=true
+CHECKPOINT_CACHE_DIR="fuzzing_storage/checkpoints"
+CHECKPOINT_REUSE=false
+CHECKPOINT_ALLOW_NON_CASSANDRA=false
+CHECKPOINT_WORKLOAD_ONLY_BENCHMARK=false
 HBASE_DAEMON_RETRY_TIMES=40
 NODE_NUM=""
 FIXED_CONFIG_IDX=-1
@@ -73,6 +80,13 @@ Options:
   --clients <N>                          Number of clients to launch (default: ${CLIENTS})
   --testing-mode <3|5|6>                 3=example testplan, 5=rolling-only, 6=rolling-only branch-only (default: ${TESTING_MODE})
   --diff-lane-timeout-sec <sec>          Differential lane timeout for all systems (default: ${DIFF_LANE_TIMEOUT_SEC})
+  --enable-checkpoint-restore <true|false> Enable mode-5 Docker checkpoint startup path (default: ${ENABLE_CHECKPOINT_RESTORE})
+  --checkpoint-selected-nodes <csv>      Node indexes for checkpoint prefix, e.g. 0 or 0,1 (default: ${CHECKPOINT_SELECTED_NODES})
+  --checkpoint-all-lanes <true|false>    Apply checkpoint prefix to old-old, rolling, and new-new lanes (default: ${CHECKPOINT_ALL_LANES})
+  --checkpoint-cache-dir <path>          Checkpoint artifact directory for Java config (default: ${CHECKPOINT_CACHE_DIR})
+  --checkpoint-reuse <true|false>        Reserve persistent checkpoint reuse knob in config (default: ${CHECKPOINT_REUSE})
+  --checkpoint-allow-non-cassandra <true|false> Allow checkpoint mode for HDFS/HBase after validation (default: ${CHECKPOINT_ALLOW_NON_CASSANDRA})
+  --checkpoint-workload-only-benchmark <true|false> Deprecated compatibility knob; checkpoint restore always executes only workload events after restore (default: ${CHECKPOINT_WORKLOAD_ONLY_BENCHMARK})
   --cassandra-retry-timeout <sec>        Cassandra cqlsh retry timeout (default: ${CASSANDRA_RETRY_TIMEOUT})
   --hbase-daemon-retry-times <N>         HBase shell daemon retry attempts (default: ${HBASE_DAEMON_RETRY_TIMES})
   --use-trace <true|false>               Enable network trace collection (default: ${USE_TRACE})
@@ -132,6 +146,23 @@ bool_json() {
     else
         echo "false"
     fi
+}
+
+json_int_array_from_csv() {
+    local csv="$1"
+    local out="["
+    local sep=""
+    local item
+    IFS=',' read -r -a _items <<< "${csv}"
+    for item in "${_items[@]}"; do
+        item="$(echo "${item}" | tr -d '[:space:]')"
+        [[ "${item}" =~ ^[0-9]+$ ]] || die "checkpoint node indexes must be non-negative integers (got: ${item})"
+        out+="${sep}${item}"
+        sep=","
+    done
+    [[ "${out}" != "[" ]] || die "--checkpoint-selected-nodes cannot be empty"
+    out+="]"
+    echo "${out}"
 }
 
 is_port_in_use() {
@@ -354,6 +385,11 @@ write_config_json() {
     local print_trace_json
     local branch_json
     local logcheck_json
+    local checkpoint_restore_json
+    local checkpoint_all_lanes_json
+    local checkpoint_reuse_json
+    local checkpoint_allow_non_cassandra_json
+    local checkpoint_workload_only_json
     diff_json="$(bool_json "${USE_DIFF}")"
     trace_json="$(bool_json "${USE_TRACE}")"
     print_trace_json="$(bool_json "${PRINT_TRACE}")"
@@ -361,6 +397,11 @@ write_config_json() {
     canonical_msg_identity_json="$(bool_json "${USE_CANONICAL_MESSAGE_IDENTITY}")"
     branch_json="$(bool_json "${USE_BRANCH_COVERAGE}")"
     logcheck_json="$(bool_json "${ENABLE_LOG_CHECK}")"
+    checkpoint_restore_json="$(bool_json "${ENABLE_CHECKPOINT_RESTORE}")"
+    checkpoint_all_lanes_json="$(bool_json "${CHECKPOINT_ALL_LANES}")"
+    checkpoint_reuse_json="$(bool_json "${CHECKPOINT_REUSE}")"
+    checkpoint_allow_non_cassandra_json="$(bool_json "${CHECKPOINT_ALLOW_NON_CASSANDRA}")"
+    checkpoint_workload_only_json="$(bool_json "${CHECKPOINT_WORKLOAD_ONLY_BENCHMARK}")"
 
     local phase5_block
     phase5_block="$(build_phase5_block \
@@ -390,6 +431,13 @@ write_config_json() {
   "testSingleVersion" : false,
   "testingMode" : ${TESTING_MODE},
   "differentialExecution" : ${diff_json},
+  "enableCheckpointRestore" : ${checkpoint_restore_json},
+  "checkpointSelectedNodes" : ${CHECKPOINT_SELECTED_NODES_JSON},
+  "checkpointAllLanes" : ${checkpoint_all_lanes_json},
+  "checkpointCacheDir" : "${CHECKPOINT_CACHE_DIR}",
+  "checkpointReuse" : ${checkpoint_reuse_json},
+  "checkpointAllowNonCassandra" : ${checkpoint_allow_non_cassandra_json},
+  "checkpointWorkloadOnlyBenchmark" : ${checkpoint_workload_only_json},
   "useTrace" : ${trace_json},
   "printTrace" : ${print_trace_json},
   "useCanonicalTraceSimilarity" : ${canonical_trace_json},
@@ -449,6 +497,13 @@ JSON
   "testSingleVersion" : false,
   "testingMode" : ${TESTING_MODE},
   "differentialExecution" : ${diff_json},
+  "enableCheckpointRestore" : ${checkpoint_restore_json},
+  "checkpointSelectedNodes" : ${CHECKPOINT_SELECTED_NODES_JSON},
+  "checkpointAllLanes" : ${checkpoint_all_lanes_json},
+  "checkpointCacheDir" : "${CHECKPOINT_CACHE_DIR}",
+  "checkpointReuse" : ${checkpoint_reuse_json},
+  "checkpointAllowNonCassandra" : ${checkpoint_allow_non_cassandra_json},
+  "checkpointWorkloadOnlyBenchmark" : ${checkpoint_workload_only_json},
   "useTrace" : ${trace_json},
   "printTrace" : ${print_trace_json},
   "useCanonicalTraceSimilarity" : ${canonical_trace_json},
@@ -503,6 +558,13 @@ JSON
   "testSingleVersion" : false,
   "testingMode" : ${TESTING_MODE},
   "differentialExecution" : ${diff_json},
+  "enableCheckpointRestore" : ${checkpoint_restore_json},
+  "checkpointSelectedNodes" : ${CHECKPOINT_SELECTED_NODES_JSON},
+  "checkpointAllLanes" : ${checkpoint_all_lanes_json},
+  "checkpointCacheDir" : "${CHECKPOINT_CACHE_DIR}",
+  "checkpointReuse" : ${checkpoint_reuse_json},
+  "checkpointAllowNonCassandra" : ${checkpoint_allow_non_cassandra_json},
+  "checkpointWorkloadOnlyBenchmark" : ${checkpoint_workload_only_json},
   "useTrace" : ${trace_json},
   "printTrace" : ${print_trace_json},
   "useCanonicalTraceSimilarity" : ${canonical_trace_json},
@@ -591,6 +653,34 @@ while [[ $# -gt 0 ]]; do
             ;;
         --diff-lane-timeout-sec)
             DIFF_LANE_TIMEOUT_SEC="$2"
+            shift 2
+            ;;
+        --enable-checkpoint-restore)
+            ENABLE_CHECKPOINT_RESTORE="$2"
+            shift 2
+            ;;
+        --checkpoint-selected-nodes)
+            CHECKPOINT_SELECTED_NODES="$2"
+            shift 2
+            ;;
+        --checkpoint-all-lanes)
+            CHECKPOINT_ALL_LANES="$2"
+            shift 2
+            ;;
+        --checkpoint-cache-dir)
+            CHECKPOINT_CACHE_DIR="$2"
+            shift 2
+            ;;
+        --checkpoint-reuse)
+            CHECKPOINT_REUSE="$2"
+            shift 2
+            ;;
+        --checkpoint-allow-non-cassandra)
+            CHECKPOINT_ALLOW_NON_CASSANDRA="$2"
+            shift 2
+            ;;
+        --checkpoint-workload-only-benchmark)
+            CHECKPOINT_WORKLOAD_ONLY_BENCHMARK="$2"
             shift 2
             ;;
         --hbase-daemon-retry-times)
@@ -815,7 +905,58 @@ case "${ENABLE_FLOW_TUPLE_DUMP}" in
     *) die "--enable-flow-tuple-dump must be true|false (got: ${ENABLE_FLOW_TUPLE_DUMP})" ;;
 esac
 
+case "${ENABLE_CHECKPOINT_RESTORE}" in
+    true|false) ;;
+    *) die "--enable-checkpoint-restore must be true|false (got: ${ENABLE_CHECKPOINT_RESTORE})" ;;
+esac
+case "${CHECKPOINT_ALL_LANES}" in
+    true|false) ;;
+    *) die "--checkpoint-all-lanes must be true|false (got: ${CHECKPOINT_ALL_LANES})" ;;
+esac
+case "${CHECKPOINT_REUSE}" in
+    true|false) ;;
+    *) die "--checkpoint-reuse must be true|false (got: ${CHECKPOINT_REUSE})" ;;
+esac
+case "${CHECKPOINT_ALLOW_NON_CASSANDRA}" in
+    true|false) ;;
+    *) die "--checkpoint-allow-non-cassandra must be true|false (got: ${CHECKPOINT_ALLOW_NON_CASSANDRA})" ;;
+esac
+case "${CHECKPOINT_WORKLOAD_ONLY_BENCHMARK}" in
+    true|false) ;;
+    *) die "--checkpoint-workload-only-benchmark must be true|false (got: ${CHECKPOINT_WORKLOAD_ONLY_BENCHMARK})" ;;
+esac
+
 [[ "${FLOW_TUPLE_DUMP_TOP_K}" =~ ^[0-9]+$ ]] || die "--flow-tuple-dump-top-k must be a non-negative integer (got: ${FLOW_TUPLE_DUMP_TOP_K})"
+
+CHECKPOINT_SELECTED_NODES_JSON="$(json_int_array_from_csv "${CHECKPOINT_SELECTED_NODES}")"
+IFS=',' read -r -a _checkpoint_nodes <<< "${CHECKPOINT_SELECTED_NODES}"
+for _checkpoint_node in "${_checkpoint_nodes[@]}"; do
+    _checkpoint_node="$(echo "${_checkpoint_node}" | tr -d '[:space:]')"
+    if (( _checkpoint_node >= NODE_NUM )); then
+        die "--checkpoint-selected-nodes contains ${_checkpoint_node}, but node-num=${NODE_NUM}"
+    fi
+done
+
+if [[ "${ENABLE_CHECKPOINT_RESTORE}" == true ]]; then
+    [[ "${TESTING_MODE}" == "5" ]] || die "--enable-checkpoint-restore is only supported with --testing-mode 5"
+    [[ "${USE_DIFF}" == true ]] || die "--enable-checkpoint-restore requires differentialExecution/--diff mode"
+    if [[ "${SYSTEM}" != "cassandra" && "${CHECKPOINT_ALLOW_NON_CASSANDRA}" != true ]]; then
+        die "--enable-checkpoint-restore is Cassandra-first; pass --checkpoint-allow-non-cassandra true only after validating ${SYSTEM}"
+    fi
+    if ! docker checkpoint --help >/dev/null 2>&1; then
+        log "Docker checkpoint CLI is unavailable; checkpoint mode will use image snapshot backend"
+    fi
+    docker_exp="$(docker version --format '{{.Server.Experimental}}' 2>/dev/null || true)"
+    if [[ "${docker_exp}" != "true" ]]; then
+        log "Docker daemon experimental mode is ${docker_exp:-unknown}; checkpoint mode will use image snapshot backend"
+    fi
+fi
+if [[ "${CHECKPOINT_REUSE}" == true && "${ENABLE_CHECKPOINT_RESTORE}" != true ]]; then
+    die "--checkpoint-reuse true requires --enable-checkpoint-restore true"
+fi
+if [[ "${CHECKPOINT_WORKLOAD_ONLY_BENCHMARK}" == true && "${ENABLE_CHECKPOINT_RESTORE}" != true ]]; then
+    die "--checkpoint-workload-only-benchmark requires --enable-checkpoint-restore true"
+fi
 
 # Phase 5: auto-derive a family-map profile path when the user did not
 # pass --family-map-profile explicitly. Empty string falls back to "no
@@ -873,6 +1014,13 @@ DIFFERENTIAL_EXECUTION=${USE_DIFF}
 CASSANDRA_RETRY_TIMEOUT=${CASSANDRA_RETRY_TIMEOUT}
 DIFF_LANE_TIMEOUT_SEC=${DIFF_LANE_TIMEOUT_SEC}
 HBASE_DAEMON_RETRY_TIMES=${HBASE_DAEMON_RETRY_TIMES}
+ENABLE_CHECKPOINT_RESTORE=${ENABLE_CHECKPOINT_RESTORE}
+CHECKPOINT_SELECTED_NODES=${CHECKPOINT_SELECTED_NODES}
+CHECKPOINT_ALL_LANES=${CHECKPOINT_ALL_LANES}
+CHECKPOINT_CACHE_DIR=${CHECKPOINT_CACHE_DIR}
+CHECKPOINT_REUSE=${CHECKPOINT_REUSE}
+CHECKPOINT_ALLOW_NON_CASSANDRA=${CHECKPOINT_ALLOW_NON_CASSANDRA}
+CHECKPOINT_WORKLOAD_ONLY_BENCHMARK=${CHECKPOINT_WORKLOAD_ONLY_BENCHMARK}
 USE_TRACE=${USE_TRACE}
 PRINT_TRACE=${PRINT_TRACE}
 USE_CANONICAL_TRACE=${USE_CANONICAL_TRACE}
@@ -1131,6 +1279,11 @@ clients: ${CLIENTS}
 node_num: ${NODE_NUM}
 testing_mode: ${TESTING_MODE}
 differential_execution: ${USE_DIFF}
+enable_checkpoint_restore: ${ENABLE_CHECKPOINT_RESTORE}
+checkpoint_reuse: ${CHECKPOINT_REUSE}
+checkpoint_selected_nodes: ${CHECKPOINT_SELECTED_NODES}
+checkpoint_all_lanes: ${CHECKPOINT_ALL_LANES}
+checkpoint_workload_only_benchmark: ${CHECKPOINT_WORKLOAD_ONLY_BENCHMARK}
 server_port: ${SERVER_PORT}
 client_port: ${CLIENT_PORT}
 new_failure_dirs: ${new_failure_count}

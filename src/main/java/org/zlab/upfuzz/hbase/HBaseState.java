@@ -114,6 +114,17 @@ public class HBaseState extends State {
         return Utilities.strings2Parameters(table2families.keySet());
     }
 
+    public Set<Parameter> getDisabledTables() {
+        Set<String> disabledTables = new HashSet<>();
+        for (Map.Entry<String, Boolean> entry : table2enable.entrySet()) {
+            if (Boolean.FALSE.equals(entry.getValue())
+                    && table2families.containsKey(entry.getKey())) {
+                disabledTables.add(entry.getKey());
+            }
+        }
+        return Utilities.strings2Parameters(disabledTables);
+    }
+
     // namespace
     public void addNamespace(String namespace) {
         if (!namespace2tables.containsKey(namespace)) {

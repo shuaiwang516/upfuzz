@@ -4,9 +4,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.concurrent.*;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.Set;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -25,19 +27,32 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
 
     private final Executor executor;
     private final TestPlanPacket testPlanPacket;
+    private final String differentialLaneName;
 
     int CLUSTER_START_RETRY = 3;
 
     public RegularTestPlanThread(Executor executor,
             TestPlanPacket testPlanPacket) {
+        this(executor, testPlanPacket, null);
+    }
+
+    public RegularTestPlanThread(Executor executor,
+            TestPlanPacket testPlanPacket, String differentialLaneName) {
         this.executor = executor;
         this.testPlanPacket = testPlanPacket;
+        this.differentialLaneName = differentialLaneName;
     }
 
     public boolean startUpExecutor() {
         for (int i = 0; i < CLUSTER_START_RETRY; i++) {
             try {
-                if (executor.startup()) {
+                boolean started = Config.getConf().enableCheckpointRestore
+                        && differentialLaneName != null
+                                ? CheckpointStartup.startup(executor,
+                                        testPlanPacket,
+                                        differentialLaneName)
+                                : executor.startup();
+                if (started) {
                     if (Config.getConf().debug) {
                         logger.info(
                                 "[Fuzzing Client] started up executor after trial "
@@ -52,6 +67,30 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
         }
         logger.error("original version cluster cannot start up");
         return false;
+    }
+
+    private void configureCheckpointInitialStage() {
+        if (!Config.getConf().enableCheckpointRestore
+                || differentialLaneName == null) {
+            return;
+        }
+        if (!Config.getConf().checkpointAllLanes
+                && !LANE_ROLLING.equals(differentialLaneName)) {
+            return;
+        }
+
+        Set<Integer> normalizedNodes = FuzzingClient
+                .getCheckpointSelectedNodeSet();
+        Set<Integer> rawUpgradedNodes = new LinkedHashSet<>();
+        if (LANE_ROLLING.equals(differentialLaneName)) {
+            rawUpgradedNodes.addAll(normalizedNodes);
+        } else if (LANE_ONLY_NEW.equals(differentialLaneName)) {
+            for (int i = 0; i < executor.nodeNum; i++) {
+                rawUpgradedNodes.add(i);
+            }
+        }
+        executor.configureCheckpointInitialStage(normalizedNodes,
+                rawUpgradedNodes);
     }
 
     public void tearDownExecutor() {
@@ -171,13 +210,26 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
 
     @Override
     public TestPlanFeedbackPacket call() throws Exception {
+        boolean executorStartedForThisCall = false;
+        try {
 
         String testPlanPacketStr = recordTestPlanPacket(testPlanPacket);
         int nodeNum = testPlanPacket.getNodeNum();
+        String laneName = differentialLaneName == null ? "single"
+                : differentialLaneName;
 
+        long callStartMs = System.currentTimeMillis();
+        long startupStartMs = callStartMs;
         boolean startUpStatus = startUpExecutor();
+        long startupMs = System.currentTimeMillis() - startupStartMs;
+        logger.info(
+                "[CHECKPOINT_TIMING] lane={} phase=startup_ms value={} checkpointRestore={} workloadOnly={}",
+                laneName, startupMs,
+                Config.getConf().enableCheckpointRestore,
+                FuzzingClient.isFastCheckpointSuffixLane(differentialLaneName));
         if (!startUpStatus)
             return null;
+        executorStartedForThisCall = true;
 
         // LOG checking1
         long curTime2 = System.currentTimeMillis();
@@ -198,7 +250,20 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
             Utilities.sleepAndExit(36000);
         }
 
+        configureCheckpointInitialStage();
+        long executeStartMs = System.currentTimeMillis();
         boolean status = executor.execute(testPlanPacket.getTestPlan());
+        long executeMs = System.currentTimeMillis() - executeStartMs;
+        logger.info(
+                "[CHECKPOINT_TIMING] lane={} phase=execute_ms value={} event_count={} status={} workloadOnly={}",
+                laneName, executeMs,
+                testPlanPacket.getTestPlan().getEvents().size(), status,
+                FuzzingClient.isFastCheckpointSuffixLane(differentialLaneName));
+        logger.info(
+                "[CHECKPOINT_TIMING] lane={} phase=startup_plus_execute_ms value={} startup_ms={} execute_ms={} event_count={} status={} workloadOnly={}",
+                laneName, startupMs + executeMs, startupMs, executeMs,
+                testPlanPacket.getTestPlan().getEvents().size(), status,
+                FuzzingClient.isFastCheckpointSuffixLane(differentialLaneName));
 
         if (Config.getConf().keepClusterAfterExecutingTestplan) {
             logger.info(
@@ -401,9 +466,15 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
             logger.info("[Fuzzing Client] Call to teardown executor");
         }
         tearDownExecutor();
+        executorStartedForThisCall = false;
         if (Config.getConf().debug) {
             logger.info("[Fuzzing Client] Executor torn down");
         }
         return testPlanFeedbackPacket;
+        } finally {
+            if (executorStartedForThisCall) {
+                tearDownExecutor();
+            }
+        }
     }
 }

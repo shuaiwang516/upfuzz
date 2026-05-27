@@ -38,6 +38,9 @@ import static org.zlab.upfuzz.nyx.MiniClientMain.setTestType;
 
 public class FuzzingClient {
     static Logger logger = LogManager.getLogger(FuzzingClient.class);
+    public static final String LANE_ONLY_OLD = "OnlyOld";
+    public static final String LANE_ROLLING = "Rolling";
+    public static final String LANE_ONLY_NEW = "OnlyNew";
 
     public Executor executor;
     public Path configDirPath;
@@ -1371,16 +1374,29 @@ public class FuzzingClient {
         // For only old exec or only new exec
         TestPlanPacket testPlanPacketWithoutUpgrade = replaceUpgradeEventWithRestart(
                 testPlanPacket);
+        TestPlanPacket onlyOldPacket = testPlanPacketWithoutUpgrade;
+        TestPlanPacket rollingPacket = testPlanPacket;
+        TestPlanPacket onlyNewPacket = testPlanPacketWithoutUpgrade;
+        if (Config.getConf().enableCheckpointRestore) {
+            rollingPacket = prepareFastCheckpointLaneTestPlan(testPlanPacket,
+                    true, LANE_ROLLING);
+            if (Config.getConf().checkpointAllLanes) {
+                onlyOldPacket = prepareFastCheckpointLaneTestPlan(
+                        testPlanPacketWithoutUpgrade, false, LANE_ONLY_OLD);
+                onlyNewPacket = prepareFastCheckpointLaneTestPlan(
+                        testPlanPacketWithoutUpgrade, false, LANE_ONLY_NEW);
+            }
+        }
 
         Future<TestPlanFeedbackPacket> futureOnlyOld = executorService
                 .submit(new RegularTestPlanThread(executors[0],
-                        testPlanPacketWithoutUpgrade));
+                        onlyOldPacket, LANE_ONLY_OLD));
         Future<TestPlanFeedbackPacket> futureRolling = executorService
                 .submit(new RegularTestPlanThread(executors[1],
-                        testPlanPacket));
+                        rollingPacket, LANE_ROLLING));
         Future<TestPlanFeedbackPacket> futureNew = executorService
                 .submit(new RegularTestPlanThread(executors[2],
-                        testPlanPacketWithoutUpgrade));
+                        onlyNewPacket, LANE_ONLY_NEW));
 
         long diffPacketTimeoutSec = Config.getConf().differentialLaneTimeoutSec;
         // Backward compatibility: if not configured, preserve historical
@@ -1396,13 +1412,18 @@ public class FuzzingClient {
 
         try {
             Map<String, Future<TestPlanFeedbackPacket>> laneFutures = new LinkedHashMap<>();
-            laneFutures.put("OnlyOld", futureOnlyOld);
-            laneFutures.put("Rolling", futureRolling);
-            laneFutures.put("OnlyNew", futureNew);
+            laneFutures.put(LANE_ONLY_OLD, futureOnlyOld);
+            laneFutures.put(LANE_ROLLING, futureRolling);
+            laneFutures.put(LANE_ONLY_NEW, futureNew);
+            Map<String, Executor> laneExecutors = new LinkedHashMap<>();
+            laneExecutors.put(LANE_ONLY_OLD, executors[0]);
+            laneExecutors.put(LANE_ROLLING, executors[1]);
+            laneExecutors.put(LANE_ONLY_NEW, executors[2]);
 
             TestPlanFeedbackPacket[] testPlanFeedbackPackets = collectDifferentialFeedbackPackets(
                     testPlanPacket,
                     laneFutures,
+                    laneExecutors,
                     packetStartMs,
                     laneTimeoutMs);
 
@@ -1419,6 +1440,7 @@ public class FuzzingClient {
     static TestPlanFeedbackPacket[] collectDifferentialFeedbackPackets(
             TestPlanPacket testPlanPacket,
             Map<String, Future<TestPlanFeedbackPacket>> laneFutures,
+            Map<String, Executor> laneExecutors,
             long packetStartMs,
             long laneTimeoutMs) {
         String[] laneOrder = { "OnlyOld", "Rolling", "OnlyNew" };
@@ -1468,6 +1490,7 @@ public class FuzzingClient {
                     logger.error("[HKLOG] differential lane " + lane
                             + " timed out while waiting for feedback");
                     future.cancel(true);
+                    teardownTimedOutLane(lane, laneExecutors);
                     lanePackets.put(lane, buildFallbackDiffFeedback(
                             testPlanPacket,
                             lane,
@@ -1500,6 +1523,7 @@ public class FuzzingClient {
                         if (future != null) {
                             future.cancel(true);
                         }
+                        teardownTimedOutLane(lane, laneExecutors);
                         lanePackets.put(lane, buildFallbackDiffFeedback(
                                 testPlanPacket,
                                 lane,
@@ -1524,6 +1548,28 @@ public class FuzzingClient {
             orderedPackets[laneIndex.get(lane)] = lanePacket;
         }
         return orderedPackets;
+    }
+
+    private static void teardownTimedOutLane(String lane,
+            Map<String, Executor> laneExecutors) {
+        if (laneExecutors == null) {
+            return;
+        }
+        Executor executor = laneExecutors.get(lane);
+        if (executor == null) {
+            return;
+        }
+        try {
+            logger.warn(
+                    "[HKLOG] tearing down timed-out differential lane {}",
+                    lane);
+            executor.teardown();
+            executor.clearState();
+        } catch (Exception e) {
+            logger.warn(
+                    "[HKLOG] teardown failed for timed-out differential lane {}: {}",
+                    lane, e.toString());
+        }
     }
 
     private static TestPlanFeedbackPacket collectFinishedLaneFeedback(
@@ -2170,6 +2216,100 @@ public class FuzzingClient {
             }
         }
         updatedTestPlanPacket.getTestPlan().events = updatedEvents;
+        return updatedTestPlanPacket;
+    }
+
+    public static Set<Integer> getCheckpointSelectedNodeSet() {
+        Set<Integer> selectedNodes = new LinkedHashSet<>();
+        int[] configuredNodes = Config.getConf().checkpointSelectedNodes;
+        if (configuredNodes == null || configuredNodes.length == 0) {
+            selectedNodes.add(0);
+            return selectedNodes;
+        }
+        for (int nodeIndex : configuredNodes) {
+            if (nodeIndex < 0 || nodeIndex >= Config.getConf().nodeNum) {
+                throw new IllegalArgumentException(String.format(
+                        "checkpointSelectedNodes contains node %d but nodeNum=%d",
+                        nodeIndex, Config.getConf().nodeNum));
+            }
+            selectedNodes.add(nodeIndex);
+        }
+        return selectedNodes;
+    }
+
+    public static TestPlanPacket prepareCheckpointLaneTestPlan(
+            TestPlanPacket testPlanPacket, boolean rollingLane) {
+        TestPlanPacket updatedTestPlanPacket = SerializationUtils
+                .clone(testPlanPacket);
+        Set<Integer> selectedNodes = getCheckpointSelectedNodeSet();
+        List<Event> updatedEvents = new LinkedList<>();
+
+        for (Event event : updatedTestPlanPacket.getTestPlan().events) {
+            if (event instanceof PrepareUpgrade
+                    || event instanceof HDFSStopSNN) {
+                // These lifecycle steps are part of the deterministic
+                // checkpoint prefix. FinalizeUpgrade is not part of the prefix
+                // transform; the fast checkpoint suffix strips it later.
+                continue;
+            }
+
+            if (rollingLane && event instanceof UpgradeOp
+                    && selectedNodes.contains(((UpgradeOp) event).nodeIndex)) {
+                continue;
+            }
+
+            if (!rollingLane && event instanceof RestartFailure
+                    && selectedNodes
+                            .contains(((RestartFailure) event).nodeIndex)) {
+                continue;
+            }
+
+            updatedEvents.add(event);
+        }
+
+        updatedTestPlanPacket.getTestPlan().events = updatedEvents;
+        return updatedTestPlanPacket;
+    }
+
+    public static TestPlanPacket prepareFastCheckpointLaneTestPlan(
+            TestPlanPacket testPlanPacket, boolean rollingLane,
+            String laneName) {
+        TestPlanPacket checkpointSuffix = prepareCheckpointLaneTestPlan(
+                testPlanPacket, rollingLane);
+        return stripPostCheckpointLifecycleEvents(checkpointSuffix, laneName);
+    }
+
+    public static boolean isFastCheckpointSuffixLane(String laneName) {
+        return Config.getConf() != null
+                && Config.getConf().enableCheckpointRestore
+                && laneName != null
+                && (Config.getConf().checkpointAllLanes
+                        || LANE_ROLLING.equals(laneName));
+    }
+
+    public static TestPlanPacket stripPostCheckpointLifecycleEvents(
+            TestPlanPacket testPlanPacket, String laneName) {
+        TestPlanPacket updatedTestPlanPacket = SerializationUtils
+                .clone(testPlanPacket);
+        List<Event> updatedEvents = new LinkedList<>();
+        int removedEvents = 0;
+
+        for (Event event : updatedTestPlanPacket.getTestPlan().events) {
+            if (event instanceof RestartFailure
+                    || event instanceof UpgradeOp
+                    || event instanceof PrepareUpgrade
+                    || event instanceof FinalizeUpgrade
+                    || event instanceof HDFSStopSNN) {
+                removedEvents++;
+                continue;
+            }
+            updatedEvents.add(event);
+        }
+
+        updatedTestPlanPacket.getTestPlan().events = updatedEvents;
+        logger.info(
+                "[CHECKPOINT_FAST_SUFFIX] Lane {} stripped {} post-checkpoint restart/upgrade lifecycle events; remaining events={}",
+                laneName, removedEvents, updatedEvents.size());
         return updatedTestPlanPacket;
     }
 }

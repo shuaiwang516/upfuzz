@@ -188,9 +188,6 @@ public class HBaseShellDaemon extends ShellDaemon {
     }
 
     private static String classifyHBaseFailure(HBasePacket cp) {
-        if (cp.exitValue == 0 && cp.error.isEmpty()) {
-            return "OK";
-        }
         String err = cp.error + cp.message;
         if (err.contains("NoSuchColumnFamilyException"))
             return "NoSuchColumnFamily";
@@ -210,6 +207,9 @@ public class HBaseShellDaemon extends ShellDaemon {
             return "RegionException";
         if (err.contains("ERROR:") || err.contains("ERROR"))
             return "HBaseError";
+        if (cp.exitValue == 0 && cp.error.isEmpty()) {
+            return "OK";
+        }
         if (cp.exitValue != 0)
             return "NonZeroExit";
         return "UNKNOWN";
