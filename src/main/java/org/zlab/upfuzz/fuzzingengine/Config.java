@@ -11,6 +11,10 @@ import org.zlab.net.tracker.CanonicalKeyMode;
  */
 public class Config {
 
+    public static final String ROLLING_GENERATION_POLICY_GUIDED = "guided";
+    public static final String ROLLING_GENERATION_POLICY_PURE_RANDOM =
+            "pure_random";
+
     public static Configuration instance;
 
     public static Configuration getConf() {
@@ -108,6 +112,12 @@ public class Config {
 
         // 95% get seed from corpus, 5% generate new seed
         public double getSeedFromCorpusRatio = 0.95;
+
+        // Rolling-only fuzzing input generation policy. "guided" is the
+        // existing mode-5 corpus/mutation scheduler; "pure_random" generates
+        // a fresh random seed and test plan for every queued rolling round.
+        public String rollingGenerationPolicy =
+                ROLLING_GENERATION_POLICY_GUIDED;
 
         // ---------------- Mutation ---------------
         // For the first firstMutationSeedLimit seeds added
@@ -897,6 +907,7 @@ public class Config {
         }
 
         public void normalizeModeFlags() {
+            normalizeRollingGenerationPolicy();
             if (testingMode == 6) {
                 differentialExecution = true;
                 useBranchCoverage = true;
@@ -909,6 +920,41 @@ public class Config {
                 // Preserve mode-5 oracle semantics:
                 // do not force enableLogCheck on or off here.
             }
+        }
+
+        public boolean usePureRandomRollingGeneration() {
+            return ROLLING_GENERATION_POLICY_PURE_RANDOM.equals(
+                    normalizedRollingGenerationPolicy());
+        }
+
+        public boolean useGuidedRollingGeneration() {
+            return ROLLING_GENERATION_POLICY_GUIDED.equals(
+                    normalizedRollingGenerationPolicy());
+        }
+
+        private String normalizedRollingGenerationPolicy() {
+            if (rollingGenerationPolicy == null
+                    || rollingGenerationPolicy.trim().isEmpty()) {
+                return ROLLING_GENERATION_POLICY_GUIDED;
+            }
+            return rollingGenerationPolicy.trim()
+                    .toLowerCase(java.util.Locale.ROOT);
+        }
+
+        private void normalizeRollingGenerationPolicy() {
+            String normalized = normalizedRollingGenerationPolicy();
+            if (!ROLLING_GENERATION_POLICY_GUIDED.equals(normalized)
+                    && !ROLLING_GENERATION_POLICY_PURE_RANDOM
+                            .equals(normalized)) {
+                throw new IllegalArgumentException(
+                        "rollingGenerationPolicy must be '"
+                                + ROLLING_GENERATION_POLICY_GUIDED
+                                + "' or '"
+                                + ROLLING_GENERATION_POLICY_PURE_RANDOM
+                                + "' (got: "
+                                + rollingGenerationPolicy + ")");
+            }
+            rollingGenerationPolicy = normalized;
         }
 
         /**

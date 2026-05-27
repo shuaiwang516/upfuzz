@@ -15,6 +15,7 @@ TARGET_ROUNDS=2
 TIMEOUT_SEC=3600
 CLIENTS=1
 TESTING_MODE=3
+ROLLING_GENERATION_POLICY="guided"
 USE_DIFF=true
 USE_TRACE=true
 PRINT_TRACE=false
@@ -79,6 +80,7 @@ Options:
   --timeout-sec <N>                      Max runtime in seconds (default: ${TIMEOUT_SEC})
   --clients <N>                          Number of clients to launch (default: ${CLIENTS})
   --testing-mode <3|5|6>                 3=example testplan, 5=rolling-only, 6=rolling-only branch-only (default: ${TESTING_MODE})
+  --rolling-generation-policy <guided|pure_random> Mode-5/6 input generation policy (default: ${ROLLING_GENERATION_POLICY})
   --diff-lane-timeout-sec <sec>          Differential lane timeout for all systems (default: ${DIFF_LANE_TIMEOUT_SEC})
   --enable-checkpoint-restore <true|false> Enable mode-5 Docker checkpoint startup path (default: ${ENABLE_CHECKPOINT_RESTORE})
   --checkpoint-selected-nodes <csv>      Node indexes for checkpoint prefix, e.g. 0 or 0,1 (default: ${CHECKPOINT_SELECTED_NODES})
@@ -430,6 +432,7 @@ write_config_json() {
   "saveCorpusToDisk" : true,
   "testSingleVersion" : false,
   "testingMode" : ${TESTING_MODE},
+  "rollingGenerationPolicy" : "${ROLLING_GENERATION_POLICY}",
   "differentialExecution" : ${diff_json},
   "enableCheckpointRestore" : ${checkpoint_restore_json},
   "checkpointSelectedNodes" : ${CHECKPOINT_SELECTED_NODES_JSON},
@@ -496,6 +499,7 @@ JSON
   "saveCorpusToDisk" : true,
   "testSingleVersion" : false,
   "testingMode" : ${TESTING_MODE},
+  "rollingGenerationPolicy" : "${ROLLING_GENERATION_POLICY}",
   "differentialExecution" : ${diff_json},
   "enableCheckpointRestore" : ${checkpoint_restore_json},
   "checkpointSelectedNodes" : ${CHECKPOINT_SELECTED_NODES_JSON},
@@ -557,6 +561,7 @@ JSON
   "saveCorpusToDisk" : true,
   "testSingleVersion" : false,
   "testingMode" : ${TESTING_MODE},
+  "rollingGenerationPolicy" : "${ROLLING_GENERATION_POLICY}",
   "differentialExecution" : ${diff_json},
   "enableCheckpointRestore" : ${checkpoint_restore_json},
   "checkpointSelectedNodes" : ${CHECKPOINT_SELECTED_NODES_JSON},
@@ -645,6 +650,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --testing-mode)
             TESTING_MODE="$2"
+            shift 2
+            ;;
+        --rolling-generation-policy)
+            ROLLING_GENERATION_POLICY="$2"
             shift 2
             ;;
         --cassandra-retry-timeout)
@@ -814,6 +823,16 @@ if [[ "${TESTING_MODE}" == "6" ]]; then
     USE_CANONICAL_MESSAGE_IDENTITY=false
     PRINT_TRACE=false
     REQUIRE_TRACE_SIGNAL=false
+fi
+
+case "${ROLLING_GENERATION_POLICY}" in
+    guided|pure_random) ;;
+    *) die "--rolling-generation-policy must be guided|pure_random (got: ${ROLLING_GENERATION_POLICY})" ;;
+esac
+if [[ "${ROLLING_GENERATION_POLICY}" == "pure_random" \
+        && "${TESTING_MODE}" != "5" \
+        && "${TESTING_MODE}" != "6" ]]; then
+    die "--rolling-generation-policy pure_random is only supported with --testing-mode 5 or 6"
 fi
 
 require_cmd docker
@@ -1010,6 +1029,7 @@ TARGET_ROUNDS=${TARGET_ROUNDS}
 TIMEOUT_SEC=${TIMEOUT_SEC}
 CLIENTS=${CLIENTS}
 TESTING_MODE=${TESTING_MODE}
+ROLLING_GENERATION_POLICY=${ROLLING_GENERATION_POLICY}
 DIFFERENTIAL_EXECUTION=${USE_DIFF}
 CASSANDRA_RETRY_TIMEOUT=${CASSANDRA_RETRY_TIMEOUT}
 DIFF_LANE_TIMEOUT_SEC=${DIFF_LANE_TIMEOUT_SEC}
@@ -1278,6 +1298,7 @@ stop_reason: ${stop_reason}
 clients: ${CLIENTS}
 node_num: ${NODE_NUM}
 testing_mode: ${TESTING_MODE}
+rolling_generation_policy: ${ROLLING_GENERATION_POLICY}
 differential_execution: ${USE_DIFF}
 enable_checkpoint_restore: ${ENABLE_CHECKPOINT_RESTORE}
 checkpoint_reuse: ${CHECKPOINT_REUSE}

@@ -673,6 +673,18 @@ public class FuzzingServer {
         } else if (Config.getConf().testingMode == 5
                 || Config.getConf().testingMode == 6) {
             // Only test rolling upgrade using test plans
+            if (isPureRandomRollingMode()) {
+                if (testPlanPackets.isEmpty()
+                        && !generateAndEnqueuePureRandomRollingTestPlans(
+                                Config.getConf().testPlanGenerationNum,
+                                100)) {
+                    throw new RuntimeException(
+                            "Pure-random rolling generation failed: unable to generate any rolling test plan");
+                }
+                assert !testPlanPackets.isEmpty();
+                return testPlanPackets.poll();
+            }
+
             if (testPlanPackets.isEmpty()) {
                 if (!fuzzRollingTestPlan()) {
                     if (!bootstrapRollingSeedCorpusForMode5()) {
@@ -1050,6 +1062,55 @@ public class FuzzingServer {
         }
 
         return mutateAndEnqueueExistingTestPlan(queuedTestPlan);
+    }
+
+    private boolean isPureRandomRollingMode() {
+        return (Config.getConf().testingMode == 5
+                || Config.getConf().testingMode == 6)
+                && Config.getConf().usePureRandomRollingGeneration();
+    }
+
+    private boolean generateAndEnqueuePureRandomRollingTestPlans(
+            int requestedCount, int maxGenerationRetry) {
+        int targetCount = Math.max(1, requestedCount);
+        int enqueued = 0;
+        for (int i = 0; i < targetCount; i++) {
+            TestPlan testPlan = null;
+            int configIdx = -1;
+            for (int j = 0; j < maxGenerationRetry; j++) {
+                configIdx = configGen.generateConfig();
+                Seed seed = Seed.generateSeed(commandPool, stateClass,
+                        configIdx, testID);
+                if (seed == null) {
+                    continue;
+                }
+                testPlan = generateTestPlan(
+                        new RollingSeed(seed, new LinkedList<>()));
+                if (testPlan != null) {
+                    testPlan.lineageTestId = -1;
+                    break;
+                }
+            }
+            if (testPlan == null) {
+                logger.warn(
+                        "Pure-random rolling generation skipped one plan after {} attempts",
+                        maxGenerationRetry);
+                continue;
+            }
+
+            testID2TestPlan.put(testID, testPlan);
+            testPlanPackets.add(new TestPlanPacket(
+                    Config.getConf().system,
+                    testID++, "test" + configIdx, testPlan));
+            enqueued++;
+        }
+
+        if (enqueued > 0) {
+            logger.info(
+                    "Pure-random rolling generation enqueued {} fresh test plan(s)",
+                    enqueued);
+        }
+        return enqueued > 0;
     }
 
     private boolean mutateAndEnqueueExistingTestPlan(
@@ -1863,7 +1924,8 @@ public class FuzzingServer {
                 addToCorpus = true;
                 curUpCoverageAfterUpgrade.merge(fb.upgradedCodeCoverage);
             }
-            if (addToCorpus) {
+            if (addToCorpus
+                    && !isPureRandomRollingMode()) {
                 testPlanCorpus.addTestPlan(
                         testID2TestPlan
                                 .get(testPlanFeedbackPacket.testPacketID));
@@ -3135,6 +3197,12 @@ public class FuzzingServer {
             if (parentLineageRoot >= 0) {
                 testPlanCorpus.notifyWeakCandidatePayoff(parentLineageRoot);
             }
+        }
+
+        if (addToCorpus && isPureRandomRollingMode()) {
+            addToCorpus = false;
+            logger.info(
+                    "Pure-random rolling generation measured an interesting round but skipped corpus admission");
         }
 
         boolean traceSignatureSuppressed = false;
