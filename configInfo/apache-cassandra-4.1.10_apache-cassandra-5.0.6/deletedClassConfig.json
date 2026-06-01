@@ -1,0 +1,1 @@
+["compaction_tombstone_warning_threshold","commitlog_sync_batch_window_in_ms","concurrent_replicates","native_transport_max_negotiable_protocol_version","compaction_large_partition_warning_threshold","keyspace_count_warn_threshold","table_count_warn_threshold","commitlog_periodic_queue_size"]
