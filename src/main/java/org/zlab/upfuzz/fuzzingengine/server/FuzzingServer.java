@@ -86,6 +86,9 @@ import static org.zlab.upfuzz.utils.Utilities.rand;
 public class FuzzingServer {
     static Logger logger = LogManager.getLogger(FuzzingServer.class);
     public static final String EXAMPLE_ORACLE_SKIP_TOKEN = "__UPFUZZ_ORACLE_SKIP__";
+    private static final int BOOTSTRAP_ROLLING_SEED_COUNT = 10;
+    private static final int BOOTSTRAP_INITIAL_PLANS_PER_SEED = 1;
+    private static final int BOOTSTRAP_MAX_GENERATION_RETRY = 100;
 
     int fixedTestIndex = 0;
 
@@ -689,12 +692,7 @@ public class FuzzingServer {
                 if (!fuzzRollingTestPlan()) {
                     if (!bootstrapRollingSeedCorpusForMode5()) {
                         throw new RuntimeException(
-                                "Mode 5 bootstrap failed: unable to generate rolling seed");
-                    }
-
-                    if (!fuzzRollingTestPlan() || testPlanPackets.isEmpty()) {
-                        throw new RuntimeException(
-                                "Mode 5 bootstrap succeeded but failed to generate any rolling test plan");
+                                "Mode 5/6 bootstrap failed: unable to generate 10 independent rolling seed/test-plan pairs");
                     }
                 }
             }
@@ -708,38 +706,85 @@ public class FuzzingServer {
 
     private boolean bootstrapRollingSeedCorpusForMode5() {
         logger.info(
-                "Mode 5 bootstrap: generating rolling seed for differential rolling-upgrade execution");
+                "Mode 5/6 bootstrap: generating {} independent rolling seed(s) "
+                        + "with {} initial plan(s) each",
+                BOOTSTRAP_ROLLING_SEED_COUNT,
+                BOOTSTRAP_INITIAL_PLANS_PER_SEED);
 
-        Seed seed = corpus.getSeed();
-        if (seed == null) {
-            int configIdx = configGen.generateConfig();
-            int maxGenLimit = 100;
-            int genCount = 0;
-            while (seed == null && genCount < maxGenLimit) {
-                seed = Seed.generateSeed(commandPool, stateClass,
+        int generatedSeeds = 0;
+        int generatedPlans = 0;
+        for (int seedSlot = 0; seedSlot < BOOTSTRAP_ROLLING_SEED_COUNT; seedSlot++) {
+            boolean generatedPair = false;
+            for (int attempt = 0; attempt < BOOTSTRAP_MAX_GENERATION_RETRY; attempt++) {
+                int configIdx = configGen.generateConfig();
+                Seed seed = Seed.generateSeed(commandPool, stateClass,
                         configIdx, testID);
-                genCount++;
+                if (!isValidBootstrapRollingSeed(seed)) {
+                    continue;
+                }
+
+                RollingSeed rollingSeed = new RollingSeed(seed,
+                        new LinkedList<>());
+                List<TestPlan> initialPlans = new ArrayList<>();
+                for (int planIdx = 0; planIdx < BOOTSTRAP_INITIAL_PLANS_PER_SEED; planIdx++) {
+                    TestPlan testPlan = generateTestPlan(rollingSeed);
+                    if (testPlan == null) {
+                        initialPlans.clear();
+                        break;
+                    }
+                    testPlan.lineageTestId = -1;
+                    initialPlans.add(testPlan);
+                }
+                if (initialPlans.size() != BOOTSTRAP_INITIAL_PLANS_PER_SEED) {
+                    continue;
+                }
+
+                rollingSeedCorpus.addSeed(rollingSeed);
+                for (TestPlan testPlan : initialPlans) {
+                    testID2TestPlan.put(testID, testPlan);
+                    testPlanPackets.add(new TestPlanPacket(
+                            Config.getConf().system,
+                            testID++, "test" + configIdx, testPlan));
+                    generatedPlans++;
+                }
+                generatedSeeds++;
+                generatedPair = true;
+                break;
             }
 
-            if (seed == null) {
+            if (!generatedPair) {
                 logger.warn(
-                        "Mode 5 bootstrap failed: seed generation exhausted {} attempts",
-                        maxGenLimit);
+                        "Mode 5/6 bootstrap failed at seed slot {} after {} attempts; "
+                                + "generated {}/{} seed(s) and {} initial plan(s)",
+                        seedSlot, BOOTSTRAP_MAX_GENERATION_RETRY,
+                        generatedSeeds, BOOTSTRAP_ROLLING_SEED_COUNT,
+                        generatedPlans);
                 return false;
             }
         }
 
-        if (seed.originalCommandSequence == null
-                || seed.validationCommandSequence == null) {
+        if (generatedSeeds != BOOTSTRAP_ROLLING_SEED_COUNT
+                || generatedPlans != BOOTSTRAP_ROLLING_SEED_COUNT
+                        * BOOTSTRAP_INITIAL_PLANS_PER_SEED) {
             logger.warn(
-                    "Mode 5 bootstrap failed: generated seed has null command sequence");
+                    "Mode 5/6 bootstrap generated incomplete startup wave: "
+                            + "seeds={}, plans={}",
+                    generatedSeeds, generatedPlans);
             return false;
         }
 
-        rollingSeedCorpus.addSeed(new RollingSeed(seed, new LinkedList<>()));
         logger.info(
-                "Mode 5 bootstrap imported 1 generated seed into rollingSeedCorpus");
+                "Mode 5/6 bootstrap enqueued {} initial rolling plan(s) from {} independent seed(s)",
+                generatedPlans, generatedSeeds);
         return true;
+    }
+
+    private static boolean isValidBootstrapRollingSeed(Seed seed) {
+        return seed != null
+                && seed.originalCommandSequence != null
+                && seed.originalCommandSequence.commands != null
+                && seed.validationCommandSequence != null
+                && seed.validationCommandSequence.commands != null;
     }
 
     public MixedTestPacket generateMixedTestPacket() {
