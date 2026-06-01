@@ -252,7 +252,8 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
 
         configureCheckpointInitialStage();
         long executeStartMs = System.currentTimeMillis();
-        boolean status = executor.execute(testPlanPacket.getTestPlan());
+        boolean status = executor.execute(testPlanPacket.getTestPlan(),
+                laneName);
         long executeMs = System.currentTimeMillis() - executeStartMs;
         logger.info(
                 "[CHECKPOINT_TIMING] lane={} phase=execute_ms value={} event_count={} status={} workloadOnly={}",

@@ -466,7 +466,14 @@ public abstract class Executor implements IExecutor {
     }
 
     public boolean execute(TestPlan testPlan) {
+        return execute(testPlan, null);
+    }
+
+    public boolean execute(TestPlan testPlan, String timingLaneName) {
         boolean status = true;
+        String laneName = timingLaneName == null ? "single" : timingLaneName;
+        RealWorkloadTiming realTiming = new RealWorkloadTiming(laneName);
+        long executeStartMs = System.currentTimeMillis();
 
         // Initialize windowed trace state
         traceWindows.clear();
@@ -552,6 +559,8 @@ public abstract class Executor implements IExecutor {
 
         for (eventIdx = 0; eventIdx < testPlan.getEvents().size(); eventIdx++) {
             Event event = testPlan.getEvents().get(eventIdx);
+            DisruptiveEventCategory category = DisruptiveEventCategory
+                    .classify(event);
             logger.info(String.format("\nhandle %s\n", event));
 
             if (eventIdx != 0) {
@@ -560,7 +569,10 @@ public abstract class Executor implements IExecutor {
                         logger.info(
                                 String.format("command interval = %d ms",
                                         event.interval));
+                    long sleepStartMs = System.currentTimeMillis();
                     Thread.sleep(event.interval);
+                    realTiming.recordSleep(category,
+                            System.currentTimeMillis() - sleepStartMs);
                 } catch (InterruptedException e) {
                     logger.error("sleep interrupted");
                     for (StackTraceElement stackTraceElement : e
@@ -571,8 +583,6 @@ public abstract class Executor implements IExecutor {
             }
 
             long initTime = System.currentTimeMillis();
-            DisruptiveEventCategory category = DisruptiveEventCategory
-                    .classify(event);
 
             if (category.isDisruptive()) {
                 // === CLOSE current window (if open) ===
@@ -585,6 +595,8 @@ public abstract class Executor implements IExecutor {
                 boolean eventOk = executeDisruptiveEvent(event, initTime);
                 if (!eventOk) {
                     status = false;
+                    realTiming.recordDisruptiveEvent(event, category,
+                            System.currentTimeMillis() - initTime, false);
                     break;
                 }
 
@@ -603,6 +615,8 @@ public abstract class Executor implements IExecutor {
                     // Mark next window as fault-affected (non-comparable)
                     currentStageKind = TraceWindow.StageKind.FAULT_RECOVERY;
                 }
+                realTiming.recordDisruptiveEvent(event, category,
+                        System.currentTimeMillis() - initTime, true);
                 // Window stays closed until next workload event
             } else {
                 // === WORKLOAD event ===
@@ -613,8 +627,12 @@ public abstract class Executor implements IExecutor {
                 boolean eventOk = executeWorkloadEvent(event, initTime);
                 if (!eventOk) {
                     status = false;
+                    realTiming.recordWorkloadEvent(event, eventIdx,
+                            System.currentTimeMillis() - initTime, false);
                     break;
                 }
+                realTiming.recordWorkloadEvent(event, eventIdx,
+                        System.currentTimeMillis() - initTime, true);
             }
         }
 
@@ -624,7 +642,101 @@ public abstract class Executor implements IExecutor {
             closeWindow(snapshot, "ROUND_END", -1);
         }
 
+        realTiming.logSummary(status, testPlan.getEvents().size(),
+                System.currentTimeMillis() - executeStartMs);
         return status;
+    }
+
+    private final class RealWorkloadTiming {
+        private final String laneName;
+        private long firstWorkloadStartMs = -1L;
+        private long lastWorkloadEndMs = -1L;
+        private int firstWorkloadIdx = -1;
+        private int lastWorkloadIdx = -1;
+        private int workloadEvents = 0;
+        private long workloadCommandMs = 0L;
+        private long stageAdvancingMs = 0L;
+        private long lifecycleOnlyMs = 0L;
+        private long faultMs = 0L;
+        private long faultRecoveryMs = 0L;
+        private long totalSleepMs = 0L;
+        private long workloadPreEventSleepMs = 0L;
+        private long disruptivePreEventSleepMs = 0L;
+
+        private RealWorkloadTiming(String laneName) {
+            this.laneName = laneName;
+        }
+
+        private void recordSleep(DisruptiveEventCategory category,
+                long sleepMs) {
+            totalSleepMs += sleepMs;
+            if (category == DisruptiveEventCategory.WORKLOAD) {
+                workloadPreEventSleepMs += sleepMs;
+            } else {
+                disruptivePreEventSleepMs += sleepMs;
+            }
+        }
+
+        private void recordWorkloadEvent(Event event, int eventIdx,
+                long elapsedMs, boolean status) {
+            long eventEndMs = System.currentTimeMillis();
+            long eventStartMs = eventEndMs - elapsedMs;
+            if (firstWorkloadStartMs < 0L) {
+                firstWorkloadStartMs = eventStartMs;
+                firstWorkloadIdx = eventIdx;
+            }
+            lastWorkloadEndMs = eventEndMs;
+            lastWorkloadIdx = eventIdx;
+            workloadEvents++;
+            workloadCommandMs += elapsedMs;
+
+            int nodeIndex = event instanceof ShellCommand
+                    ? ((ShellCommand) event).getNodeIndex()
+                    : -1;
+            logger.info(
+                    "[REAL_WORKLOAD_EVENT_TIMING] lane={} executor={} idx={} event_class={} node={} elapsed_ms={} status={}",
+                    laneName, executorID, eventIdx,
+                    event.getClass().getSimpleName(), nodeIndex, elapsedMs,
+                    status);
+        }
+
+        private void recordDisruptiveEvent(Event event,
+                DisruptiveEventCategory category, long elapsedMs,
+                boolean status) {
+            if (category == DisruptiveEventCategory.STAGE_ADVANCING) {
+                stageAdvancingMs += elapsedMs;
+            } else if (category == DisruptiveEventCategory.LIFECYCLE_ONLY) {
+                lifecycleOnlyMs += elapsedMs;
+            } else if (category == DisruptiveEventCategory.FAULT) {
+                faultMs += elapsedMs;
+            } else if (category == DisruptiveEventCategory.FAULT_RECOVERY) {
+                faultRecoveryMs += elapsedMs;
+            }
+            logger.info(
+                    "[REAL_WORKLOAD_DISRUPTIVE_TIMING] lane={} executor={} idx={} category={} event_class={} elapsed_ms={} status={}",
+                    laneName, executorID, eventIdx, category,
+                    event.getClass().getSimpleName(), elapsedMs, status);
+        }
+
+        private void logSummary(boolean status, int totalEvents,
+                long totalExecuteMs) {
+            long workloadWindowMs = 0L;
+            if (firstWorkloadStartMs >= 0L && lastWorkloadEndMs >= 0L) {
+                workloadWindowMs = lastWorkloadEndMs - firstWorkloadStartMs;
+            }
+            long workloadOverheadInsideWindowMs = Math.max(0L,
+                    workloadWindowMs - workloadCommandMs);
+            long disruptiveMs = stageAdvancingMs + lifecycleOnlyMs + faultMs
+                    + faultRecoveryMs;
+            logger.info(
+                    "[REAL_WORKLOAD_TIMING] lane={} executor={} total_events={} workload_events={} first_workload_idx={} last_workload_idx={} workload_window_ms={} workload_command_ms={} workload_overhead_inside_window_ms={} total_execute_ms={} total_sleep_ms={} workload_pre_event_sleep_ms={} disruptive_pre_event_sleep_ms={} disruptive_ms={} stage_advancing_ms={} lifecycle_only_ms={} fault_ms={} fault_recovery_ms={} status={}",
+                    laneName, executorID, totalEvents, workloadEvents,
+                    firstWorkloadIdx, lastWorkloadIdx, workloadWindowMs,
+                    workloadCommandMs, workloadOverheadInsideWindowMs,
+                    totalExecuteMs, totalSleepMs, workloadPreEventSleepMs,
+                    disruptivePreEventSleepMs, disruptiveMs, stageAdvancingMs,
+                    lifecycleOnlyMs, faultMs, faultRecoveryMs, status);
+        }
     }
 
     private boolean executeDisruptiveEvent(Event event, long initTime) {
