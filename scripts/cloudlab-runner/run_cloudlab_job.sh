@@ -31,12 +31,12 @@ CHECKPOINT_CACHE_DIR="fuzzing_storage/checkpoints"
 CHECKPOINT_REUSE=false
 CHECKPOINT_ALLOW_NON_CASSANDRA=false
 CHECKPOINT_WORKLOAD_ONLY_BENCHMARK=false
-VERIFY_CONFIG=true
-TEST_BOUNDARY_CONFIG=true
-TEST_ADDED_CONFIG=true
-TEST_DELETED_CONFIG=true
-TEST_COMMON_CONFIG=true
-TEST_REMAIN_CONFIG=true
+VERIFY_CONFIG=false
+TEST_BOUNDARY_CONFIG=false
+TEST_ADDED_CONFIG=false
+TEST_DELETED_CONFIG=false
+TEST_COMMON_CONFIG=false
+TEST_REMAIN_CONFIG=false
 TEST_BOUNDARY_UPGRADE_CONFIG_RATIO=1
 TEST_UPGRADE_CONFIG_RATIO=0.4
 TEST_REMAIN_UPGRADE_CONFIG_RATIO=0.4
@@ -72,15 +72,15 @@ Options:
                                      Allow checkpoint mode for HDFS/HBase after validation (default: false)
   --checkpoint-workload-only-benchmark <true|false>
                                      Deprecated compatibility knob passed through to UpFuzz (default: false)
-  --enable-file-config-mutator       Enable boundary/added/deleted/common/remain config mutation (default)
+  --enable-file-config-mutator       Enable boundary/added/deleted/common/remain config mutation
   --disable-file-config-mutator      Disable file-level config mutation and config verification
-  --verify-config <true|false>       Verify generated config before execution (default: true)
+  --verify-config <true|false>       Verify generated config before execution (default: false)
   --test-boundary-config <true|false>
-                                     Mutate boundary-related upgrade configs (default: true)
-  --test-added-config <true|false>   Mutate configs added by upgraded version (default: true)
-  --test-deleted-config <true|false> Mutate configs deleted from upgraded version (default: true)
-  --test-common-config <true|false>  Mutate configs common to both versions (default: true)
-  --test-remain-config <true|false>  Mutate remaining old/new configs (default: true)
+                                     Mutate boundary-related upgrade configs (default: false)
+  --test-added-config <true|false>   Mutate configs added by upgraded version (default: false)
+  --test-deleted-config <true|false> Mutate configs deleted from upgraded version (default: false)
+  --test-common-config <true|false>  Mutate configs common to both versions (default: false)
+  --test-remain-config <true|false>  Mutate remaining old/new configs (default: false)
   --test-boundary-upgrade-config-ratio <N>
                                      Boundary config mutation ratio (default: 1)
   --test-upgrade-config-ratio <N>    Added/deleted/common config mutation ratio (default: 0.4)

@@ -581,13 +581,13 @@ def main():
                    default="false", choices=["true", "false"])
     p.add_argument("--enable-file-config-mutator",
                    dest="enable_file_config_mutator",
-                   action="store_true", default=True,
-                   help="Enable boundary/added/deleted/common/remain file-level config mutation (default)")
+                   action="store_true", default=False,
+                   help="Enable boundary/added/deleted/common/remain file-level config mutation")
     p.add_argument("--disable-file-config-mutator",
                    dest="enable_file_config_mutator",
                    action="store_false",
                    help="Disable file-level config mutation for this launch")
-    p.add_argument("--verify-config", type=str, default="true",
+    p.add_argument("--verify-config", type=str, default="false",
                    choices=["true", "false"],
                    help="Pass through verifyConfig when config mutation is enabled")
     args = p.parse_args()
