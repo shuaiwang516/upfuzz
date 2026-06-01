@@ -51,6 +51,21 @@ JOBS = [
      "upgraded": "hadoop-3.4.2"},
 ]
 
+CONFIGINFO_PAIRS = [
+    "apache-cassandra-3.11.19_apache-cassandra-4.1.10",
+    "apache-cassandra-4.1.10_apache-cassandra-5.0.6",
+    "hbase-2.5.13_hbase-2.6.4",
+    "hbase-2.6.4_hbase-4.0.0-alpha-1-SNAPSHOT",
+    "hadoop-2.10.2_hadoop-3.3.6",
+    "hadoop-3.3.6_hadoop-3.4.2",
+]
+
+LOCAL_OVERLAY_PATHS = [
+    "scripts/runner/run_rolling_fuzzing.sh",
+    "scripts/cloudlab-runner/run_cloudlab_job.sh",
+    "scripts/cloudlab-runner/run_cloudlab_fuzz_job.sh",
+]
+
 
 @dataclass
 class MachineAssignment:
@@ -152,7 +167,7 @@ def scp_to(a: MachineAssignment, local_path: str, remote_path: str):
     """Copy a file to a remote machine."""
     subprocess.run(
         ["scp"] + SSH_OPTS.split()[:4] + [local_path, f"{a.ssh}:{remote_path}"],
-        capture_output=True, timeout=30)
+        check=True, capture_output=True, timeout=120)
 
 
 def tmux_run(a: MachineAssignment, session: str, script_content: str):
@@ -227,6 +242,54 @@ def require_success(results, stage: str):
         for label in failed:
             print(f"  - {label}")
         sys.exit(1)
+
+
+def sync_local_upfuzz_overlay(assignments: List[MachineAssignment]):
+    """Copy local runner/configInfo changes over the remote git checkout."""
+    overlay_paths = list(LOCAL_OVERLAY_PATHS)
+    overlay_paths.extend(f"configInfo/{pair}" for pair in CONFIGINFO_PAIRS)
+
+    missing = [p for p in overlay_paths if not (ROOT_DIR / p).exists()]
+    if missing:
+        print("\n[ERROR] Local overlay is missing required paths:")
+        for p in missing:
+            print(f"  - {p}")
+        sys.exit(1)
+
+    with tempfile.NamedTemporaryFile(
+            suffix=".tar.gz", delete=False, prefix="upfuzz_overlay_") as f:
+        overlay_tar = f.name
+    try:
+        subprocess.run(
+            ["tar", "-C", str(ROOT_DIR), "-czf", overlay_tar] + overlay_paths,
+            check=True)
+
+        print("\n[Sync] Copying local runner/configInfo overlay...")
+        remote_tar = "/tmp/upfuzz_config_mutator_overlay.tar.gz"
+
+        def sync_one(a: MachineAssignment):
+            scp_to(a, overlay_tar, remote_tar)
+            cmd = (
+                f"test -d {REMOTE_REPO}/.git && "
+                f"tar -xzf {remote_tar} -C {REMOTE_REPO} && "
+                f"chmod +x {REMOTE_REPO}/scripts/runner/run_rolling_fuzzing.sh "
+                f"{REMOTE_REPO}/scripts/cloudlab-runner/run_cloudlab_job.sh "
+                f"{REMOTE_REPO}/scripts/cloudlab-runner/run_cloudlab_fuzz_job.sh && "
+                f"find {REMOTE_REPO}/configInfo -maxdepth 1 -mindepth 1 -type d | wc -l"
+            )
+            return a, ssh_quick(a, cmd, timeout=120)
+
+        with ThreadPoolExecutor(max_workers=len(assignments)) as pool:
+            futs = {pool.submit(sync_one, a): a for a in assignments}
+            for fut in as_completed(futs):
+                a, out = fut.result()
+                last = out.splitlines()[-1] if out else "(no output)"
+                print(f"  {a.label}: configInfo dirs={last}")
+    finally:
+        try:
+            os.unlink(overlay_tar)
+        except OSError:
+            pass
 
 
 def parallel_quick(assignments, cmd_fn, desc=""):
@@ -350,11 +413,18 @@ def cmd_launch(assignments: List[MachineAssignment], args):
     """Launch fuzzing campaigns."""
     timeout_sec = args.timeout_sec
     print(f"\n[Launch] Starting campaigns (timeout={timeout_sec}s, tag={args.tag})...")
+    sync_local_upfuzz_overlay(assignments)
 
     for a in assignments:
         trace_flags = ("--use-trace true --print-trace true --require-trace-signal"
                        if a.mode == 5 else "--use-trace false --print-trace false")
         checkpoint_flags = checkpoint_flag_block(a, args)
+        config_mutator_flags = ""
+        if args.enable_file_config_mutator:
+            config_mutator_flags = (
+                f"  --enable-file-config-mutator \\\n"
+                f"  --verify-config {args.verify_config} \\\n"
+            )
         tmux_run(a, "fuzz", (
             f"cd {REMOTE_REPO}\n"
             f"rm -rf failure/* logs/* corpus/* 2>/dev/null\n"
@@ -367,6 +437,7 @@ def cmd_launch(assignments: List[MachineAssignment], args):
             f"  --testing-mode {a.mode} \\\n"
             f"  {trace_flags} \\\n"
             f"{checkpoint_flags}"
+            f"{config_mutator_flags}"
             f"  --run-name {a.run_name}\n"
         ))
 
@@ -508,6 +579,17 @@ def main():
                    choices=["true", "false"])
     p.add_argument("--checkpoint-workload-only-benchmark", type=str,
                    default="false", choices=["true", "false"])
+    p.add_argument("--enable-file-config-mutator",
+                   dest="enable_file_config_mutator",
+                   action="store_true", default=True,
+                   help="Enable boundary/added/deleted/common/remain file-level config mutation (default)")
+    p.add_argument("--disable-file-config-mutator",
+                   dest="enable_file_config_mutator",
+                   action="store_false",
+                   help="Disable file-level config mutation for this launch")
+    p.add_argument("--verify-config", type=str, default="true",
+                   choices=["true", "false"],
+                   help="Pass through verifyConfig when config mutation is enabled")
     args = p.parse_args()
 
     machines = parse_machine_list(args.machine_list)
@@ -526,6 +608,8 @@ def main():
         print(f"  Timeout: {args.timeout_sec}s ({args.timeout_sec // 3600}h)")
         print(f"  Checkpoint restore: {args.enable_checkpoint_restore}  "
               f"reuse: {args.checkpoint_reuse}")
+        print(f"  File config mutator: {args.enable_file_config_mutator}  "
+              f"verifyConfig: {args.verify_config}")
     print()
     for a in assignments:
         print(f"  {a.short_host:8s} → {a.job['system']:10s} "

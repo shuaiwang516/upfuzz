@@ -17,6 +17,7 @@ ROUNDS=1
 TIMEOUT_SEC=3600
 CLIENTS=1
 TESTING_MODE=5
+ROLLING_GENERATION_POLICY="guided"
 NODE_NUM=""
 DIFF_LANE_TIMEOUT_SEC=1200
 HBASE_DAEMON_RETRY_TIMES=""
@@ -30,6 +31,15 @@ CHECKPOINT_CACHE_DIR="fuzzing_storage/checkpoints"
 CHECKPOINT_REUSE=false
 CHECKPOINT_ALLOW_NON_CASSANDRA=false
 CHECKPOINT_WORKLOAD_ONLY_BENCHMARK=false
+VERIFY_CONFIG=true
+TEST_BOUNDARY_CONFIG=true
+TEST_ADDED_CONFIG=true
+TEST_DELETED_CONFIG=true
+TEST_COMMON_CONFIG=true
+TEST_REMAIN_CONFIG=true
+TEST_BOUNDARY_UPGRADE_CONFIG_RATIO=1
+TEST_UPGRADE_CONFIG_RATIO=0.4
+TEST_REMAIN_UPGRADE_CONFIG_RATIO=0.4
 
 usage() {
     cat <<'USAGE'
@@ -46,6 +56,8 @@ Options:
   --timeout-sec <N>                  Runner timeout in seconds (default: 3600)
   --clients <N>                      Number of clients (default: 1)
   --testing-mode <N>                 Upfuzz testing mode (default: 5)
+  --rolling-generation-policy <guided|pure_random>
+                                     Mode-5/6 input generation policy (default: guided)
   --diff-lane-timeout-sec <sec>      Differential lane timeout for all systems (default: 1200)
   --hbase-daemon-retry-times <N>     Override hbaseDaemonRetryTimes in generated config (HBase only)
   --node-num <N>                     Override node number (default for HBase jobs: 3)
@@ -60,6 +72,20 @@ Options:
                                      Allow checkpoint mode for HDFS/HBase after validation (default: false)
   --checkpoint-workload-only-benchmark <true|false>
                                      Deprecated compatibility knob passed through to UpFuzz (default: false)
+  --enable-file-config-mutator       Enable boundary/added/deleted/common/remain config mutation (default)
+  --disable-file-config-mutator      Disable file-level config mutation and config verification
+  --verify-config <true|false>       Verify generated config before execution (default: true)
+  --test-boundary-config <true|false>
+                                     Mutate boundary-related upgrade configs (default: true)
+  --test-added-config <true|false>   Mutate configs added by upgraded version (default: true)
+  --test-deleted-config <true|false> Mutate configs deleted from upgraded version (default: true)
+  --test-common-config <true|false>  Mutate configs common to both versions (default: true)
+  --test-remain-config <true|false>  Mutate remaining old/new configs (default: true)
+  --test-boundary-upgrade-config-ratio <N>
+                                     Boundary config mutation ratio (default: 1)
+  --test-upgrade-config-ratio <N>    Added/deleted/common config mutation ratio (default: 0.4)
+  --test-remain-upgrade-config-ratio <N>
+                                     Remaining config mutation ratio (default: 0.4)
   --dry-run                          Mock a CloudLab launch locally: validate and print runner command only
   --skip-docker-build                Skip docker image build step
   --skip-build                       Skip './gradlew classes -x test'
@@ -90,6 +116,31 @@ validate_bool() {
         true|false) ;;
         *) die "${name} must be true|false (got: ${value})" ;;
     esac
+}
+
+validate_nonnegative_number() {
+    local name="$1"
+    local value="$2"
+    [[ "${value}" =~ ^([0-9]+([.][0-9]+)?|[.][0-9]+)$ ]] \
+        || die "${name} must be a non-negative number (got: ${value})"
+}
+
+enable_file_config_mutator() {
+    VERIFY_CONFIG=true
+    TEST_BOUNDARY_CONFIG=true
+    TEST_ADDED_CONFIG=true
+    TEST_DELETED_CONFIG=true
+    TEST_COMMON_CONFIG=true
+    TEST_REMAIN_CONFIG=true
+}
+
+disable_file_config_mutator() {
+    VERIFY_CONFIG=false
+    TEST_BOUNDARY_CONFIG=false
+    TEST_ADDED_CONFIG=false
+    TEST_DELETED_CONFIG=false
+    TEST_COMMON_CONFIG=false
+    TEST_REMAIN_CONFIG=false
 }
 
 render_cmd() {
@@ -329,6 +380,10 @@ while [[ $# -gt 0 ]]; do
             TESTING_MODE="$2"
             shift 2
             ;;
+        --rolling-generation-policy)
+            ROLLING_GENERATION_POLICY="$2"
+            shift 2
+            ;;
         --diff-lane-timeout-sec)
             DIFF_LANE_TIMEOUT_SEC="$2"
             shift 2
@@ -372,6 +427,50 @@ while [[ $# -gt 0 ]]; do
             ;;
         --checkpoint-workload-only-benchmark)
             CHECKPOINT_WORKLOAD_ONLY_BENCHMARK="$2"
+            shift 2
+            ;;
+        --enable-file-config-mutator)
+            enable_file_config_mutator
+            shift 1
+            ;;
+        --disable-file-config-mutator)
+            disable_file_config_mutator
+            shift 1
+            ;;
+        --verify-config)
+            VERIFY_CONFIG="$2"
+            shift 2
+            ;;
+        --test-boundary-config)
+            TEST_BOUNDARY_CONFIG="$2"
+            shift 2
+            ;;
+        --test-added-config)
+            TEST_ADDED_CONFIG="$2"
+            shift 2
+            ;;
+        --test-deleted-config)
+            TEST_DELETED_CONFIG="$2"
+            shift 2
+            ;;
+        --test-common-config)
+            TEST_COMMON_CONFIG="$2"
+            shift 2
+            ;;
+        --test-remain-config)
+            TEST_REMAIN_CONFIG="$2"
+            shift 2
+            ;;
+        --test-boundary-upgrade-config-ratio)
+            TEST_BOUNDARY_UPGRADE_CONFIG_RATIO="$2"
+            shift 2
+            ;;
+        --test-upgrade-config-ratio)
+            TEST_UPGRADE_CONFIG_RATIO="$2"
+            shift 2
+            ;;
+        --test-remain-upgrade-config-ratio)
+            TEST_REMAIN_UPGRADE_CONFIG_RATIO="$2"
             shift 2
             ;;
         --dry-run)
@@ -436,6 +535,25 @@ validate_bool "--checkpoint-reuse" "${CHECKPOINT_REUSE}"
 validate_bool "--checkpoint-all-lanes" "${CHECKPOINT_ALL_LANES}"
 validate_bool "--checkpoint-allow-non-cassandra" "${CHECKPOINT_ALLOW_NON_CASSANDRA}"
 validate_bool "--checkpoint-workload-only-benchmark" "${CHECKPOINT_WORKLOAD_ONLY_BENCHMARK}"
+validate_bool "--verify-config" "${VERIFY_CONFIG}"
+validate_bool "--test-boundary-config" "${TEST_BOUNDARY_CONFIG}"
+validate_bool "--test-added-config" "${TEST_ADDED_CONFIG}"
+validate_bool "--test-deleted-config" "${TEST_DELETED_CONFIG}"
+validate_bool "--test-common-config" "${TEST_COMMON_CONFIG}"
+validate_bool "--test-remain-config" "${TEST_REMAIN_CONFIG}"
+validate_nonnegative_number "--test-boundary-upgrade-config-ratio" "${TEST_BOUNDARY_UPGRADE_CONFIG_RATIO}"
+validate_nonnegative_number "--test-upgrade-config-ratio" "${TEST_UPGRADE_CONFIG_RATIO}"
+validate_nonnegative_number "--test-remain-upgrade-config-ratio" "${TEST_REMAIN_UPGRADE_CONFIG_RATIO}"
+
+case "${ROLLING_GENERATION_POLICY}" in
+    guided|pure_random) ;;
+    *) die "--rolling-generation-policy must be guided|pure_random (got: ${ROLLING_GENERATION_POLICY})" ;;
+esac
+if [[ "${ROLLING_GENERATION_POLICY}" == "pure_random" \
+        && "${TESTING_MODE}" != "5" \
+        && "${TESTING_MODE}" != "6" ]]; then
+    die "--rolling-generation-policy pure_random is only supported with --testing-mode 5 or 6"
+fi
 
 if [[ "${CHECKPOINT_REUSE}" == true && "${ENABLE_CHECKPOINT_RESTORE}" != true ]]; then
     die "--checkpoint-reuse true requires --enable-checkpoint-restore true"
@@ -503,6 +621,7 @@ RUNNER_CMD=(
     --timeout-sec "${TIMEOUT_SEC}"
     --clients "${CLIENTS}"
     --testing-mode "${TESTING_MODE}"
+    --rolling-generation-policy "${ROLLING_GENERATION_POLICY}"
     --diff-lane-timeout-sec "${DIFF_LANE_TIMEOUT_SEC}"
     --enable-checkpoint-restore "${ENABLE_CHECKPOINT_RESTORE}"
     --checkpoint-reuse "${CHECKPOINT_REUSE}"
@@ -511,6 +630,15 @@ RUNNER_CMD=(
     --checkpoint-cache-dir "${CHECKPOINT_CACHE_DIR}"
     --checkpoint-allow-non-cassandra "${CHECKPOINT_ALLOW_NON_CASSANDRA}"
     --checkpoint-workload-only-benchmark "${CHECKPOINT_WORKLOAD_ONLY_BENCHMARK}"
+    --verify-config "${VERIFY_CONFIG}"
+    --test-boundary-config "${TEST_BOUNDARY_CONFIG}"
+    --test-added-config "${TEST_ADDED_CONFIG}"
+    --test-deleted-config "${TEST_DELETED_CONFIG}"
+    --test-common-config "${TEST_COMMON_CONFIG}"
+    --test-remain-config "${TEST_REMAIN_CONFIG}"
+    --test-boundary-upgrade-config-ratio "${TEST_BOUNDARY_UPGRADE_CONFIG_RATIO}"
+    --test-upgrade-config-ratio "${TEST_UPGRADE_CONFIG_RATIO}"
+    --test-remain-upgrade-config-ratio "${TEST_REMAIN_UPGRADE_CONFIG_RATIO}"
     --run-name "${RUN_NAME}"
 )
 # Mode-dependent trace arguments
@@ -535,12 +663,22 @@ system: ${SYSTEM}
 original_version: ${ORIGINAL_VERSION}
 upgraded_version: ${UPGRADED_VERSION}
 testing_mode: ${TESTING_MODE}
+rolling_generation_policy: ${ROLLING_GENERATION_POLICY}
 enable_checkpoint_restore: ${ENABLE_CHECKPOINT_RESTORE}
 checkpoint_reuse: ${CHECKPOINT_REUSE}
 checkpoint_selected_nodes: ${CHECKPOINT_SELECTED_NODES}
 checkpoint_all_lanes: ${CHECKPOINT_ALL_LANES}
 checkpoint_allow_non_cassandra: ${CHECKPOINT_ALLOW_NON_CASSANDRA}
 checkpoint_workload_only_benchmark: ${CHECKPOINT_WORKLOAD_ONLY_BENCHMARK}
+verify_config: ${VERIFY_CONFIG}
+test_boundary_config: ${TEST_BOUNDARY_CONFIG}
+test_added_config: ${TEST_ADDED_CONFIG}
+test_deleted_config: ${TEST_DELETED_CONFIG}
+test_common_config: ${TEST_COMMON_CONFIG}
+test_remain_config: ${TEST_REMAIN_CONFIG}
+test_boundary_upgrade_config_ratio: ${TEST_BOUNDARY_UPGRADE_CONFIG_RATIO}
+test_upgrade_config_ratio: ${TEST_UPGRADE_CONFIG_RATIO}
+test_remain_upgrade_config_ratio: ${TEST_REMAIN_UPGRADE_CONFIG_RATIO}
 runner_command_file: ${LAUNCH_DIR}/dry_run_runner_cmd.txt
 DRYSUM
     log "Dry-run runner command: ${rendered_runner_cmd}" | tee -a "${LAUNCH_LOG}"
@@ -616,6 +754,7 @@ if [[ -f "${SUMMARY_FILE}" ]]; then
     cat > "${LAUNCH_DIR}/phase6_summary.txt" <<P6SUM
 git_sha: ${_git_sha}
 testing_mode: ${TESTING_MODE}
+rolling_generation_policy: ${ROLLING_GENERATION_POLICY}
 system: ${SYSTEM}
 original_version: ${ORIGINAL_VERSION}
 upgraded_version: ${UPGRADED_VERSION}

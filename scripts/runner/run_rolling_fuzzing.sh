@@ -33,6 +33,15 @@ ROLLING_MISSING_FRACTION_THRESHOLD=0.05
 USE_BRANCH_COVERAGE=true
 ENABLE_LOG_CHECK=true
 REQUIRE_TRACE_SIGNAL=false
+VERIFY_CONFIG=false
+TEST_BOUNDARY_CONFIG=false
+TEST_ADDED_CONFIG=false
+TEST_DELETED_CONFIG=false
+TEST_COMMON_CONFIG=false
+TEST_REMAIN_CONFIG=false
+TEST_BOUNDARY_UPGRADE_CONFIG_RATIO=1
+TEST_UPGRADE_CONFIG_RATIO=0.4
+TEST_REMAIN_UPGRADE_CONFIG_RATIO=0.4
 CASSANDRA_RETRY_TIMEOUT=300
 DIFF_LANE_TIMEOUT_SEC=1200
 ENABLE_CHECKPOINT_RESTORE=false
@@ -50,6 +59,7 @@ CLIENT_PORT=7400
 SERVER_START_TIMEOUT_SEC=120
 RUN_NAME=""
 SKIP_PRE_CLEAN=false
+GENERATE_CONFIG_ONLY=false
 # Phase 5 system-level preset + version-aware classifier profile.
 # Default AUTO resolves on the Java side from the JSON `system` field.
 TRACE_SYSTEM_PRESET="AUTO"
@@ -107,6 +117,16 @@ Options:
   --use-branch-coverage <true|false>     Enable branch coverage signals (default: ${USE_BRANCH_COVERAGE})
   --enable-log-check <true|false>        Enable error-log oracle (default: ${ENABLE_LOG_CHECK})
   --require-trace-signal                 Fail if trace signal is missing when --use-trace=true
+  --enable-file-config-mutator           Enable boundary/added/deleted/common/remain config mutation
+  --verify-config <true|false>           Verify generated config before executing a plan (default: ${VERIFY_CONFIG})
+  --test-boundary-config <true|false>    Mutate boundary-related upgrade configs (default: ${TEST_BOUNDARY_CONFIG})
+  --test-added-config <true|false>       Mutate configs added by upgraded version (default: ${TEST_ADDED_CONFIG})
+  --test-deleted-config <true|false>     Mutate configs deleted from upgraded version (default: ${TEST_DELETED_CONFIG})
+  --test-common-config <true|false>      Mutate configs common to both versions (default: ${TEST_COMMON_CONFIG})
+  --test-remain-config <true|false>      Mutate remaining old/new configs (default: ${TEST_REMAIN_CONFIG})
+  --test-boundary-upgrade-config-ratio <N> Boundary config mutation ratio (default: ${TEST_BOUNDARY_UPGRADE_CONFIG_RATIO})
+  --test-upgrade-config-ratio <N>        Added/deleted/common config mutation ratio (default: ${TEST_UPGRADE_CONFIG_RATIO})
+  --test-remain-upgrade-config-ratio <N> Remaining config mutation ratio (default: ${TEST_REMAIN_UPGRADE_CONFIG_RATIO})
   --server-port <port>                   Server port (default: ${SERVER_PORT}, auto-shift if busy)
   --client-port <port>                   Client port (default: ${CLIENT_PORT}, auto-shift if busy)
   --server-start-timeout-sec <N>         Max wait for server port listen before client launch (default: ${SERVER_START_TIMEOUT_SEC})
@@ -114,6 +134,7 @@ Options:
   --fixed-config-idx <N>                 Force example-testplan config index test<N> (default: random)
   --run-name <name>                      Result folder name (default: auto generated)
   --skip-pre-clean                       Skip pre-run clean.sh
+  --generate-config-only                 Validate arguments, write config.json/metadata.env, and exit before launch
   --trace-system-preset <name>           Phase 5 system preset (default: ${TRACE_SYSTEM_PRESET}). Values: AUTO|GENERIC|CASSANDRA|HDFS|HBASE
   --family-map-profile <path>            Phase 5 long-tail family-map profile YAML (default: auto-derived from prebuild family-maps if present)
   --enable-flow-tuple-dump <true|false>  Emit trace_window_classifier_inputs.csv for TraceReplay metadata tier (default: ${ENABLE_FLOW_TUPLE_DUMP})
@@ -147,6 +168,69 @@ bool_json() {
         echo "true"
     else
         echo "false"
+    fi
+}
+
+validate_bool() {
+    local name="$1"
+    local value="$2"
+    case "${value}" in
+        true|false) ;;
+        *) die "${name} must be true|false (got: ${value})" ;;
+    esac
+}
+
+validate_nonnegative_number() {
+    local name="$1"
+    local value="$2"
+    [[ "${value}" =~ ^([0-9]+([.][0-9]+)?|[.][0-9]+)$ ]] \
+        || die "${name} must be a non-negative number (got: ${value})"
+}
+
+file_config_mutator_enabled() {
+    [[ "${TEST_BOUNDARY_CONFIG}" == true \
+        || "${TEST_ADDED_CONFIG}" == true \
+        || "${TEST_DELETED_CONFIG}" == true \
+        || "${TEST_COMMON_CONFIG}" == true \
+        || "${TEST_REMAIN_CONFIG}" == true ]]
+}
+
+enable_file_config_mutator() {
+    TEST_BOUNDARY_CONFIG=true
+    TEST_ADDED_CONFIG=true
+    TEST_DELETED_CONFIG=true
+    TEST_COMMON_CONFIG=true
+    TEST_REMAIN_CONFIG=true
+}
+
+validate_file_config_info() {
+    file_config_mutator_enabled || return 0
+
+    local pair_dir="${ROOT_DIR}/configInfo/${ORIGINAL_VERSION}_${UPGRADED_VERSION}"
+    [[ -d "${pair_dir}" ]] || die "File-level config mutator requested but configInfo directory is missing: ${pair_dir}"
+
+    local required=(
+        commonConfig.json
+        addedClassConfig.json
+        deletedClassConfig.json
+        oriConfig2Type.json
+        oriConfig2Init.json
+        oriEnum2Constant.json
+        upConfig2Type.json
+        upConfig2Init.json
+        upEnum2Constant.json
+    )
+    if [[ "${TEST_BOUNDARY_CONFIG}" == true ]]; then
+        required+=(boundaryRelatedConfig.json)
+    fi
+
+    local missing=()
+    local f
+    for f in "${required[@]}"; do
+        [[ -s "${pair_dir}/${f}" ]] || missing+=("${f}")
+    done
+    if (( ${#missing[@]} > 0 )); then
+        die "File-level config mutator requested but ${pair_dir} is missing/empty: ${missing[*]}"
     fi
 }
 
@@ -392,6 +476,12 @@ write_config_json() {
     local checkpoint_reuse_json
     local checkpoint_allow_non_cassandra_json
     local checkpoint_workload_only_json
+    local verify_config_json
+    local test_boundary_config_json
+    local test_added_config_json
+    local test_deleted_config_json
+    local test_common_config_json
+    local test_remain_config_json
     diff_json="$(bool_json "${USE_DIFF}")"
     trace_json="$(bool_json "${USE_TRACE}")"
     print_trace_json="$(bool_json "${PRINT_TRACE}")"
@@ -404,6 +494,12 @@ write_config_json() {
     checkpoint_reuse_json="$(bool_json "${CHECKPOINT_REUSE}")"
     checkpoint_allow_non_cassandra_json="$(bool_json "${CHECKPOINT_ALLOW_NON_CASSANDRA}")"
     checkpoint_workload_only_json="$(bool_json "${CHECKPOINT_WORKLOAD_ONLY_BENCHMARK}")"
+    verify_config_json="$(bool_json "${VERIFY_CONFIG}")"
+    test_boundary_config_json="$(bool_json "${TEST_BOUNDARY_CONFIG}")"
+    test_added_config_json="$(bool_json "${TEST_ADDED_CONFIG}")"
+    test_deleted_config_json="$(bool_json "${TEST_DELETED_CONFIG}")"
+    test_common_config_json="$(bool_json "${TEST_COMMON_CONFIG}")"
+    test_remain_config_json="$(bool_json "${TEST_REMAIN_CONFIG}")"
 
     local phase5_block
     phase5_block="$(build_phase5_block \
@@ -458,12 +554,15 @@ write_config_json() {
   "enableLogCheck" : ${logcheck_json},
   "useFormatCoverage" : false,
   "useVersionDelta" : false,
-  "verifyConfig" : false,
-  "testBoundaryConfig" : false,
-  "testAddedConfig" : false,
-  "testDeletedConfig" : false,
-  "testCommonConfig" : false,
-  "testRemainConfig" : false,
+  "verifyConfig" : ${verify_config_json},
+  "testBoundaryConfig" : ${test_boundary_config_json},
+  "testAddedConfig" : ${test_added_config_json},
+  "testDeletedConfig" : ${test_deleted_config_json},
+  "testCommonConfig" : ${test_common_config_json},
+  "testRemainConfig" : ${test_remain_config_json},
+  "testBoundaryUpgradeConfigRatio" : ${TEST_BOUNDARY_UPGRADE_CONFIG_RATIO},
+  "testUpgradeConfigRatio" : ${TEST_UPGRADE_CONFIG_RATIO},
+  "testRemainUpgradeConfigRatio" : ${TEST_REMAIN_UPGRADE_CONFIG_RATIO},
   "nyxMode" : false,
   "debug" : false,
   "useExampleTestPlan" : false,
@@ -525,7 +624,15 @@ JSON
   "enableLogCheck" : ${logcheck_json},
   "useFormatCoverage" : false,
   "useVersionDelta" : false,
-  "verifyConfig" : false,
+  "verifyConfig" : ${verify_config_json},
+  "testBoundaryConfig" : ${test_boundary_config_json},
+  "testAddedConfig" : ${test_added_config_json},
+  "testDeletedConfig" : ${test_deleted_config_json},
+  "testCommonConfig" : ${test_common_config_json},
+  "testRemainConfig" : ${test_remain_config_json},
+  "testBoundaryUpgradeConfigRatio" : ${TEST_BOUNDARY_UPGRADE_CONFIG_RATIO},
+  "testUpgradeConfigRatio" : ${TEST_UPGRADE_CONFIG_RATIO},
+  "testRemainUpgradeConfigRatio" : ${TEST_REMAIN_UPGRADE_CONFIG_RATIO},
   "nyxMode" : false,
   "debug" : false,
   "useExampleTestPlan" : false,
@@ -587,7 +694,15 @@ JSON
   "enableLogCheck" : ${logcheck_json},
   "useFormatCoverage" : false,
   "useVersionDelta" : false,
-  "verifyConfig" : false,
+  "verifyConfig" : ${verify_config_json},
+  "testBoundaryConfig" : ${test_boundary_config_json},
+  "testAddedConfig" : ${test_added_config_json},
+  "testDeletedConfig" : ${test_deleted_config_json},
+  "testCommonConfig" : ${test_common_config_json},
+  "testRemainConfig" : ${test_remain_config_json},
+  "testBoundaryUpgradeConfigRatio" : ${TEST_BOUNDARY_UPGRADE_CONFIG_RATIO},
+  "testUpgradeConfigRatio" : ${TEST_UPGRADE_CONFIG_RATIO},
+  "testRemainUpgradeConfigRatio" : ${TEST_REMAIN_UPGRADE_CONFIG_RATIO},
   "nyxMode" : false,
   "debug" : false,
   "useFixedCommand" : false,
@@ -760,6 +875,46 @@ while [[ $# -gt 0 ]]; do
             REQUIRE_TRACE_SIGNAL=true
             shift 1
             ;;
+        --enable-file-config-mutator)
+            enable_file_config_mutator
+            shift 1
+            ;;
+        --verify-config)
+            VERIFY_CONFIG="$2"
+            shift 2
+            ;;
+        --test-boundary-config)
+            TEST_BOUNDARY_CONFIG="$2"
+            shift 2
+            ;;
+        --test-added-config)
+            TEST_ADDED_CONFIG="$2"
+            shift 2
+            ;;
+        --test-deleted-config)
+            TEST_DELETED_CONFIG="$2"
+            shift 2
+            ;;
+        --test-common-config)
+            TEST_COMMON_CONFIG="$2"
+            shift 2
+            ;;
+        --test-remain-config)
+            TEST_REMAIN_CONFIG="$2"
+            shift 2
+            ;;
+        --test-boundary-upgrade-config-ratio)
+            TEST_BOUNDARY_UPGRADE_CONFIG_RATIO="$2"
+            shift 2
+            ;;
+        --test-upgrade-config-ratio)
+            TEST_UPGRADE_CONFIG_RATIO="$2"
+            shift 2
+            ;;
+        --test-remain-upgrade-config-ratio)
+            TEST_REMAIN_UPGRADE_CONFIG_RATIO="$2"
+            shift 2
+            ;;
         --server-port)
             SERVER_PORT="$2"
             shift 2
@@ -786,6 +941,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-pre-clean)
             SKIP_PRE_CLEAN=true
+            shift 1
+            ;;
+        --generate-config-only)
+            GENERATE_CONFIG_ONLY=true
             shift 1
             ;;
         --trace-system-preset)
@@ -860,6 +1019,17 @@ case "${SYSTEM}" in
         ;;
 esac
 
+validate_bool "--verify-config" "${VERIFY_CONFIG}"
+validate_bool "--test-boundary-config" "${TEST_BOUNDARY_CONFIG}"
+validate_bool "--test-added-config" "${TEST_ADDED_CONFIG}"
+validate_bool "--test-deleted-config" "${TEST_DELETED_CONFIG}"
+validate_bool "--test-common-config" "${TEST_COMMON_CONFIG}"
+validate_bool "--test-remain-config" "${TEST_REMAIN_CONFIG}"
+validate_nonnegative_number "--test-boundary-upgrade-config-ratio" "${TEST_BOUNDARY_UPGRADE_CONFIG_RATIO}"
+validate_nonnegative_number "--test-upgrade-config-ratio" "${TEST_UPGRADE_CONFIG_RATIO}"
+validate_nonnegative_number "--test-remain-upgrade-config-ratio" "${TEST_REMAIN_UPGRADE_CONFIG_RATIO}"
+validate_file_config_info
+
 if [[ "${SERVER_PORT}" -eq "${CLIENT_PORT}" ]]; then
     CLIENT_PORT=$((CLIENT_PORT + 1))
 fi
@@ -907,8 +1077,10 @@ if [[ "${SYSTEM}" == "hbase" ]]; then
     if ! docker image inspect "upfuzz_hdfs:hadoop-2.10.2" >/dev/null 2>&1; then
         die "Required dependency image for HBase is missing: upfuzz_hdfs:hadoop-2.10.2"
     fi
-    sanitize_hbase_cached_classpath_for_version "${ORIGINAL_VERSION}"
-    sanitize_hbase_cached_classpath_for_version "${UPGRADED_VERSION}"
+    if [[ "${GENERATE_CONFIG_ONLY}" == false ]]; then
+        sanitize_hbase_cached_classpath_for_version "${ORIGINAL_VERSION}"
+        sanitize_hbase_cached_classpath_for_version "${UPGRADED_VERSION}"
+    fi
 fi
 
 [[ "${FIXED_CONFIG_IDX}" =~ ^-?[0-9]+$ ]] || die "--fixed-config-idx must be an integer"
@@ -1056,6 +1228,15 @@ ROLLING_EXCLUSIVE_FRACTION_THRESHOLD=${ROLLING_EXCLUSIVE_FRACTION_THRESHOLD}
 ROLLING_MISSING_FRACTION_THRESHOLD=${ROLLING_MISSING_FRACTION_THRESHOLD}
 USE_BRANCH_COVERAGE=${USE_BRANCH_COVERAGE}
 ENABLE_LOG_CHECK=${ENABLE_LOG_CHECK}
+VERIFY_CONFIG=${VERIFY_CONFIG}
+TEST_BOUNDARY_CONFIG=${TEST_BOUNDARY_CONFIG}
+TEST_ADDED_CONFIG=${TEST_ADDED_CONFIG}
+TEST_DELETED_CONFIG=${TEST_DELETED_CONFIG}
+TEST_COMMON_CONFIG=${TEST_COMMON_CONFIG}
+TEST_REMAIN_CONFIG=${TEST_REMAIN_CONFIG}
+TEST_BOUNDARY_UPGRADE_CONFIG_RATIO=${TEST_BOUNDARY_UPGRADE_CONFIG_RATIO}
+TEST_UPGRADE_CONFIG_RATIO=${TEST_UPGRADE_CONFIG_RATIO}
+TEST_REMAIN_UPGRADE_CONFIG_RATIO=${TEST_REMAIN_UPGRADE_CONFIG_RATIO}
 SERVER_PORT=${SERVER_PORT}
 CLIENT_PORT=${CLIENT_PORT}
 NODE_NUM=${NODE_NUM}
@@ -1063,6 +1244,7 @@ FIXED_CONFIG_IDX=${FIXED_CONFIG_IDX}
 SERVER_START_TIMEOUT_SEC=${SERVER_START_TIMEOUT_SEC}
 RUN_NAME=${RUN_NAME}
 RUN_DIR=${RUN_DIR}
+GENERATE_CONFIG_ONLY=${GENERATE_CONFIG_ONLY}
 REQUIRE_TRACE_SIGNAL=${REQUIRE_TRACE_SIGNAL}
 TRACE_SYSTEM_PRESET=${TRACE_SYSTEM_PRESET}
 FAMILY_MAP_PROFILE=${FAMILY_MAP_PROFILE}
@@ -1070,6 +1252,38 @@ ENABLE_FLOW_TUPLE_DUMP=${ENABLE_FLOW_TUPLE_DUMP}
 FLOW_TUPLE_DUMP_TOP_K=${FLOW_TUPLE_DUMP_TOP_K}
 GIT_SHA=${GIT_SHA}
 META
+
+if [[ "${GENERATE_CONFIG_ONLY}" == true ]]; then
+    log "Generated config only; skipping pre-clean, server, and client launch"
+    cat > "${SUMMARY_PATH}" <<SUMMARY
+run_name: ${RUN_NAME}
+git_sha: ${GIT_SHA}
+system: ${SYSTEM}
+original_version: ${ORIGINAL_VERSION}
+upgraded_version: ${UPGRADED_VERSION}
+image_tag: ${IMAGE_TAG}
+config_path: ${CONFIG_PATH}
+target_rounds: ${TARGET_ROUNDS}
+clients: ${CLIENTS}
+node_num: ${NODE_NUM}
+testing_mode: ${TESTING_MODE}
+rolling_generation_policy: ${ROLLING_GENERATION_POLICY}
+differential_execution: ${USE_DIFF}
+trace_enabled: ${USE_TRACE}
+branch_coverage_enabled: ${USE_BRANCH_COVERAGE}
+verify_config: ${VERIFY_CONFIG}
+test_boundary_config: ${TEST_BOUNDARY_CONFIG}
+test_added_config: ${TEST_ADDED_CONFIG}
+test_deleted_config: ${TEST_DELETED_CONFIG}
+test_common_config: ${TEST_COMMON_CONFIG}
+test_remain_config: ${TEST_REMAIN_CONFIG}
+test_boundary_upgrade_config_ratio: ${TEST_BOUNDARY_UPGRADE_CONFIG_RATIO}
+test_upgrade_config_ratio: ${TEST_UPGRADE_CONFIG_RATIO}
+test_remain_upgrade_config_ratio: ${TEST_REMAIN_UPGRADE_CONFIG_RATIO}
+generate_config_only: true
+SUMMARY
+    exit 0
+fi
 
 if [[ "${SKIP_PRE_CLEAN}" == false ]]; then
     log "Running pre-clean to remove old upfuzz processes/containers"

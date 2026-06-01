@@ -23,6 +23,8 @@ HAS_LIST_JOBS=false
 USER_JOB_SELECTOR=false
 DISTRIBUTE=false
 DRY_RUN=false
+DISTRIBUTE_TESTING_MODES=""
+USER_TESTING_MODE=false
 
 PASSTHRU_ARGS=()
 
@@ -47,6 +49,7 @@ Options:
   --machine-list <path>       Machine list file (default: scripts/cloudlab-runner/machine_list.txt).
   --remote-repo <path>        Upfuzz repo path on remote machines.
   --run-prefix <prefix>       Prefix for distributed run names.
+  --testing-modes <csv>       In distribute mode, run each job once per mode, e.g. 5,6.
   --dry-run                   In distribute mode, print SSH launch commands; in single mode, pass --dry-run to run_cloudlab_job.sh.
   --rounds <N>                Override rounds limit (default: 2147483647).
   --timeout-sec <N>           Override timeout (default: 2147483647 sec).
@@ -119,31 +122,65 @@ extract_host_tag() {
     sanitize_name "${host}"
 }
 
+collect_testing_modes() {
+    local csv="$1"
+    local modes=()
+    local raw=()
+    local item
+    IFS=',' read -r -a raw <<< "${csv}"
+    for item in "${raw[@]}"; do
+        item="$(echo "${item}" | tr -d '[:space:]')"
+        case "${item}" in
+            5|6) modes+=("${item}") ;;
+            "") ;;
+            *) die "--testing-modes only supports 5 and 6 (got: ${item})" ;;
+        esac
+    done
+    if [[ "${#modes[@]}" -eq 0 ]]; then
+        die "--testing-modes cannot be empty"
+    fi
+    printf '%s\n' "${modes[@]}"
+}
+
 run_distributed() {
     command -v ssh >/dev/null 2>&1 || die "Missing command: ssh"
 
     if [[ "${USER_JOB_SELECTOR}" == true ]]; then
         die "--distribute cannot be combined with --job-id/--system/--original/--upgraded"
     fi
+    if [[ -n "${DISTRIBUTE_TESTING_MODES}" && "${USER_TESTING_MODE}" == true ]]; then
+        die "--testing-modes cannot be combined with --testing-mode"
+    fi
 
     local job_ids=()
     local machine_lines=()
+    local testing_modes=()
     mapfile -t job_ids < <(collect_job_ids)
     mapfile -t machine_lines < <(collect_machine_lines "${MACHINE_LIST}")
+    if [[ -n "${DISTRIBUTE_TESTING_MODES}" ]]; then
+        mapfile -t testing_modes < <(collect_testing_modes "${DISTRIBUTE_TESTING_MODES}")
+    fi
 
     local job_count="${#job_ids[@]}"
     local machine_count="${#machine_lines[@]}"
-
-    # Required gate for flexible future scaling:
-    # distribute when jobs <= machines; otherwise fail.
-    if (( job_count > machine_count )); then
-        die "job_num(${job_count}) > machine_num(${machine_count}); cannot distribute all jobs"
+    local assignment_count="${job_count}"
+    if [[ "${#testing_modes[@]}" -gt 0 ]]; then
+        assignment_count=$((job_count * ${#testing_modes[@]}))
     fi
 
-    if (( job_count < machine_count )); then
-        log "job_num(${job_count}) < machine_num(${machine_count}); using first ${job_count} machines"
+    # Required gate for flexible future scaling:
+    # distribute when assignments <= machines; otherwise fail.
+    if (( assignment_count > machine_count )); then
+        die "assignment_num(${assignment_count}) > machine_num(${machine_count}); cannot distribute all jobs"
+    fi
+
+    if (( assignment_count < machine_count )); then
+        log "assignment_num(${assignment_count}) < machine_num(${machine_count}); using first ${assignment_count} machines"
     else
-        log "job_num(${job_count}) == machine_num(${machine_count}); one job per machine"
+        log "assignment_num(${assignment_count}) == machine_num(${machine_count}); one assignment per machine"
+    fi
+    if [[ "${#testing_modes[@]}" -gt 0 ]]; then
+        log "Distributed testing modes: ${testing_modes[*]} (${job_count} jobs per mode)"
     fi
 
     local prefix
@@ -162,7 +199,7 @@ run_distributed() {
     local dispatch_log="${dist_dir}/dispatch.log"
 
     {
-        echo "job_id	machine	run_name	status	message"
+        echo "job_id	testing_mode	machine	run_name	status	message"
     } > "${dispatch_file}"
     : > "${dispatch_log}"
 
@@ -181,13 +218,29 @@ run_distributed() {
     done
 
     local failures=0
+    local assignment_idx=0
+    local mode_idx
     local idx
-    for ((idx = 0; idx < job_count; idx++)); do
+    local mode_list=()
+    if [[ "${#testing_modes[@]}" -gt 0 ]]; then
+        mode_list=("${testing_modes[@]}")
+    else
+        mode_list=("")
+    fi
+
+    for mode_idx in "${!mode_list[@]}"; do
+      local testing_mode="${mode_list[$mode_idx]}"
+      for ((idx = 0; idx < job_count; idx++)); do
         local job_id="${job_ids[$idx]}"
-        local machine_line="${machine_lines[$idx]}"
+        local machine_line="${machine_lines[$assignment_idx]}"
         local host_tag
         host_tag="$(extract_host_tag "${machine_line}")"
-        local run_name="${prefix}_job${job_id}_${host_tag}"
+        local run_name
+        if [[ -n "${testing_mode}" ]]; then
+            run_name="${prefix}_mode${testing_mode}_job${job_id}_${host_tag}"
+        else
+            run_name="${prefix}_job${job_id}_${host_tag}"
+        fi
         run_name="$(sanitize_name "${run_name}")"
 
         local ssh_cmd=()
@@ -198,26 +251,33 @@ run_distributed() {
         fi
 
         local remote_cmd
-        remote_cmd="cd $(printf '%q' "${REMOTE_REPO}") && scripts/cloudlab-runner/run_cloudlab_fuzz_job.sh --job-id ${job_id} --run-name $(printf '%q' "${run_name}") --detach${quoted_remote_args}"
+        if [[ -n "${testing_mode}" ]]; then
+            remote_cmd="cd $(printf '%q' "${REMOTE_REPO}") && scripts/cloudlab-runner/run_cloudlab_fuzz_job.sh --job-id ${job_id} --testing-mode ${testing_mode} --run-name $(printf '%q' "${run_name}") --detach${quoted_remote_args}"
+        else
+            remote_cmd="cd $(printf '%q' "${REMOTE_REPO}") && scripts/cloudlab-runner/run_cloudlab_fuzz_job.sh --job-id ${job_id} --run-name $(printf '%q' "${run_name}") --detach${quoted_remote_args}"
+        fi
 
-        log "Dispatch job ${job_id} -> ${machine_line} (run=${run_name})" | tee -a "${dispatch_log}"
+        log "Dispatch job ${job_id}${testing_mode:+ mode ${testing_mode}} -> ${machine_line} (run=${run_name})" | tee -a "${dispatch_log}"
 
         if [[ "${DRY_RUN}" == true ]]; then
             {
-                printf "DRYRUN\t%s\t%s\t%s\n" "${machine_line}" "${job_id}" "${remote_cmd}"
+                printf "DRYRUN\t%s\t%s\t%s\t%s\n" "${machine_line}" "${job_id}" "${testing_mode:-default}" "${remote_cmd}"
             } >> "${dispatch_log}"
-            printf "%s\t%s\t%s\t%s\t%s\n" "${job_id}" "${machine_line}" "${run_name}" "DRYRUN" "not executed" >> "${dispatch_file}"
+            printf "%s\t%s\t%s\t%s\t%s\t%s\n" "${job_id}" "${testing_mode:-default}" "${machine_line}" "${run_name}" "DRYRUN" "not executed" >> "${dispatch_file}"
+            assignment_idx=$((assignment_idx + 1))
             continue
         fi
 
         local per_log="${dist_dir}/${run_name}.dispatch.log"
         if "${ssh_cmd[@]}" "${remote_cmd}" > "${per_log}" 2>&1; then
-            printf "%s\t%s\t%s\t%s\t%s\n" "${job_id}" "${machine_line}" "${run_name}" "OK" "launched" >> "${dispatch_file}"
+            printf "%s\t%s\t%s\t%s\t%s\t%s\n" "${job_id}" "${testing_mode:-default}" "${machine_line}" "${run_name}" "OK" "launched" >> "${dispatch_file}"
         else
             failures=$((failures + 1))
-            printf "%s\t%s\t%s\t%s\t%s\n" "${job_id}" "${machine_line}" "${run_name}" "FAILED" "ssh/launch failed" >> "${dispatch_file}"
+            printf "%s\t%s\t%s\t%s\t%s\t%s\n" "${job_id}" "${testing_mode:-default}" "${machine_line}" "${run_name}" "FAILED" "ssh/launch failed" >> "${dispatch_file}"
             log "Dispatch failed for job ${job_id} on ${machine_line}; see ${per_log}" | tee -a "${dispatch_log}"
         fi
+        assignment_idx=$((assignment_idx + 1))
+      done
     done
 
     log "Dispatch mapping saved: ${dispatch_file}" | tee -a "${dispatch_log}"
@@ -309,6 +369,15 @@ while [[ $# -gt 0 ]]; do
             ;;
         --run-prefix)
             RUN_PREFIX="$2"
+            shift 2
+            ;;
+        --testing-modes)
+            DISTRIBUTE_TESTING_MODES="$2"
+            shift 2
+            ;;
+        --testing-mode)
+            USER_TESTING_MODE=true
+            PASSTHRU_ARGS+=("$1" "$2")
             shift 2
             ;;
         --dry-run)
