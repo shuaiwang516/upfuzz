@@ -645,7 +645,7 @@ RUNNER_CMD=(
 if [[ "${TESTING_MODE}" == "6" ]]; then
     RUNNER_CMD+=(--use-trace false --print-trace false)
 else
-    RUNNER_CMD+=(--use-trace true --print-trace true --require-trace-signal)
+    RUNNER_CMD+=(--use-trace true --print-trace false --require-trace-signal)
 fi
 if [[ -n "${NODE_NUM}" ]]; then
     RUNNER_CMD+=(--node-num "${NODE_NUM}")

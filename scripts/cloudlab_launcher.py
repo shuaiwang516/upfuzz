@@ -416,7 +416,7 @@ def cmd_launch(assignments: List[MachineAssignment], args):
     sync_local_upfuzz_overlay(assignments)
 
     for a in assignments:
-        trace_flags = ("--use-trace true --print-trace true --require-trace-signal"
+        trace_flags = ("--use-trace true --print-trace false --require-trace-signal"
                        if a.mode == 5 else "--use-trace false --print-trace false")
         checkpoint_flags = checkpoint_flag_block(a, args)
         config_mutator_flags = ""

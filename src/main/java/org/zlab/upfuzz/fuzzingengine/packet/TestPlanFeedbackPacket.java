@@ -52,6 +52,10 @@ public class TestPlanFeedbackPacket extends Packet implements Serializable {
     // Windowed trace for stage-aware comparison
     public WindowedTrace windowedTrace;
 
+    // Bounded workdir artifacts captured before teardown. The server persists
+    // this only for rounds classified as rolling-upgrade bug candidates.
+    public CandidateArtifactBundle candidateArtifacts;
+
     // Phase 0: topology snapshot captured on the executor side so the
     // fuzzing server can resolve raw peer ids (IPs, hostnames,
     // container aliases) back to role + node index without having to

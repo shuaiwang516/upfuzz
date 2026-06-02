@@ -350,6 +350,11 @@ public class Config {
         public long timeInterval = 600; // seconds, record time
         public boolean keepDir = true; // set to false if start a long-running
                                        // test
+        public boolean preserveCandidateArtifacts = true;
+        public int candidateArtifactMaxFiles = 64;
+        public long candidateArtifactMaxBytesPerFile = 512 * 1024;
+        public long candidateArtifactMaxTotalBytes = 4 * 1024 * 1024;
+        public int candidateTraceSnippetMaxEntries = 500;
         public int nodeNum = 3;
 
         // ------------Branch Coverage------------

@@ -98,6 +98,15 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
         executor.teardown();
     }
 
+    private void attachCandidateArtifacts(TestPlanFeedbackPacket packet,
+            String laneName) {
+        if (packet == null || packet.candidateArtifacts != null) {
+            return;
+        }
+        packet.candidateArtifacts = CandidateArtifactCollector.capture(executor,
+                laneName);
+    }
+
     public StackedFeedbackPacket runTestBatchBeforeChangingTheVersion(
             Executor executor, StackedTestPacket stackedTestPacket,
             int direction) {
@@ -370,6 +379,7 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
                             executor.executorID, testPlanPacket.configFileName,
                             recordTestPlanPacket(testPlanPacket)) + "Exception:"
                             + e;
+                    attachCandidateArtifacts(testPlanFeedbackPacket, laneName);
                     tearDownExecutor();
                     return testPlanFeedbackPacket;
                 }
@@ -427,6 +437,7 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
                             executor.executorID, testPlanPacket.configFileName,
                             recordTestPlanPacket(testPlanPacket)) + "Exception:"
                             + e;
+                    attachCandidateArtifacts(testPlanFeedbackPacket, laneName);
                     tearDownExecutor();
                     return testPlanFeedbackPacket;
                 }
@@ -466,6 +477,7 @@ class RegularTestPlanThread implements Callable<TestPlanFeedbackPacket> {
 
             logger.info("[Fuzzing Client] Call to teardown executor");
         }
+        attachCandidateArtifacts(testPlanFeedbackPacket, laneName);
         tearDownExecutor();
         executorStartedForThisCall = false;
         if (Config.getConf().debug) {

@@ -1,11 +1,15 @@
 package org.zlab.upfuzz.fuzzingengine.server;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -3673,6 +3677,10 @@ public class FuzzingServer {
             }
         }
 
+        if (candidateDir != null) {
+            saveCandidateArtifacts(candidateDir, testPlanDiffFeedbackPacket);
+        }
+
         // Phase 0: emit a per-round admission summary row for this
         // completed differential execution. Cumulative counts embedded in
         // the row reflect the state *after* any admission recorded above.
@@ -4907,6 +4915,219 @@ public class FuzzingServer {
                 reportName);
         Utilities.write2TXT(fullSequenceReportPath.toFile(), fullSequence,
                 false);
+    }
+
+    private void saveCandidateArtifacts(Path candidateDir,
+            TestPlanDiffFeedbackPacket diffFeedbackPacket) {
+        if (!Config.getConf().preserveCandidateArtifacts
+                || candidateDir == null
+                || diffFeedbackPacket == null
+                || diffFeedbackPacket.testPlanFeedbackPackets == null) {
+            return;
+        }
+        Path artifactsDir = candidateDir.resolve("artifacts");
+        try {
+            Files.createDirectories(artifactsDir);
+        } catch (IOException e) {
+            logger.warn("failed to create candidate artifacts dir {}: {}",
+                    artifactsDir, e.toString());
+            return;
+        }
+
+        for (int i = 0; i < diffFeedbackPacket.testPlanFeedbackPackets.length; i++) {
+            TestPlanFeedbackPacket lanePacket = diffFeedbackPacket.testPlanFeedbackPackets[i];
+            String laneName = laneNameForArtifact(i, lanePacket);
+            Path laneDir = artifactsDir.resolve(sanitizePathSegment(laneName));
+            try {
+                Files.createDirectories(laneDir);
+                saveCandidateWorkdirArtifacts(laneDir, lanePacket);
+                saveCandidateTraceSnippets(laneDir, laneName, lanePacket);
+            } catch (IOException e) {
+                logger.warn("failed to save candidate artifacts for lane {}: {}",
+                        laneName, e.toString());
+            }
+        }
+    }
+
+    private void saveCandidateWorkdirArtifacts(Path laneDir,
+            TestPlanFeedbackPacket lanePacket) throws IOException {
+        Path manifestPath = laneDir.resolve("manifest.txt");
+        StringBuilder manifest = new StringBuilder();
+        manifest.append("candidate_artifact_version=1\n");
+        if (lanePacket == null || lanePacket.candidateArtifacts == null) {
+            manifest.append("workdir_artifacts=missing\n");
+            writeText(manifestPath, manifest.toString());
+            return;
+        }
+
+        CandidateArtifactBundle bundle = lanePacket.candidateArtifacts;
+        manifest.append("lane=").append(nullToEmpty(bundle.laneName))
+                .append('\n');
+        manifest.append("workdir=").append(nullToEmpty(bundle.workdirPath))
+                .append('\n');
+        manifest.append("capturedAtMillis=")
+                .append(bundle.capturedAtMillis).append('\n');
+        manifest.append("fileCount=").append(bundle.files.size())
+                .append('\n');
+        manifest.append("totalOriginalBytes=")
+                .append(bundle.totalOriginalBytes).append('\n');
+        manifest.append("totalCapturedBytes=")
+                .append(bundle.totalCapturedBytes).append('\n');
+        manifest.append("fileLimitReached=")
+                .append(bundle.fileLimitReached).append('\n');
+        manifest.append("byteLimitReached=")
+                .append(bundle.byteLimitReached).append('\n');
+        for (String note : bundle.notes) {
+            manifest.append("note=").append(nullToEmpty(note)).append('\n');
+        }
+
+        Path filesDir = laneDir.resolve("workdir_files");
+        Files.createDirectories(filesDir);
+        for (CandidateArtifactBundle.FileSnippet file : bundle.files) {
+            Path dest = safeResolve(filesDir, file.relativePath);
+            Files.createDirectories(dest.getParent());
+            Files.write(dest, file.content == null ? new byte[0]
+                    : file.content);
+            manifest.append("file=").append(file.relativePath)
+                    .append(" captured=")
+                    .append(file.capturedBytes)
+                    .append(" original=")
+                    .append(file.originalSize)
+                    .append(" tailTruncated=")
+                    .append(file.tailTruncated)
+                    .append(" savedAs=")
+                    .append(filesDir.relativize(dest).toString())
+                    .append('\n');
+        }
+        writeText(manifestPath, manifest.toString());
+    }
+
+    private void saveCandidateTraceSnippets(Path laneDir, String laneName,
+            TestPlanFeedbackPacket lanePacket) throws IOException {
+        Path traceDir = laneDir.resolve("trace_snippets");
+        Files.createDirectories(traceDir);
+        Path summaryPath = traceDir.resolve("trace_summary.txt");
+        StringBuilder sb = new StringBuilder();
+        sb.append("lane=").append(laneName).append('\n');
+        int entryLimit = Math.max(0,
+                Config.getConf().candidateTraceSnippetMaxEntries);
+        int emitted = 0;
+
+        if (lanePacket == null) {
+            sb.append("trace=missing lane packet\n");
+            writeText(summaryPath, sb.toString());
+            return;
+        }
+
+        WindowedTrace windowedTrace = lanePacket.windowedTrace;
+        if (windowedTrace != null) {
+            sb.append("windowedTraceSize=").append(windowedTrace.size())
+                    .append('\n');
+            for (TraceWindow window : windowedTrace.getWindows()) {
+                sb.append(window).append('\n');
+                if (window.nodeTraces == null) {
+                    continue;
+                }
+                for (int nodeIdx = 0; nodeIdx < window.nodeTraces.length; nodeIdx++) {
+                    Trace trace = window.nodeTraces[nodeIdx];
+                    int traceSize = trace == null ? 0 : trace.size();
+                    sb.append("window=").append(window.ordinal)
+                            .append(" node=").append(nodeIdx)
+                            .append(" events=").append(traceSize)
+                            .append('\n');
+                    if (trace == null || emitted >= entryLimit) {
+                        continue;
+                    }
+                    for (TraceEntry entry : trace.getTraceEntries()) {
+                        if (emitted >= entryLimit) {
+                            break;
+                        }
+                        sb.append("entry window=").append(window.ordinal)
+                                .append(" node=").append(nodeIdx)
+                                .append(' ').append(entry).append('\n');
+                        emitted++;
+                    }
+                }
+            }
+        } else if (lanePacket.trace != null) {
+            sb.append("legacyTraceNodes=").append(lanePacket.trace.length)
+                    .append('\n');
+            for (int nodeIdx = 0; nodeIdx < lanePacket.trace.length; nodeIdx++) {
+                Trace trace = lanePacket.trace[nodeIdx];
+                int traceSize = trace == null ? 0 : trace.size();
+                sb.append("node=").append(nodeIdx).append(" events=")
+                        .append(traceSize).append('\n');
+                if (trace == null || emitted >= entryLimit) {
+                    continue;
+                }
+                for (TraceEntry entry : trace.getTraceEntries()) {
+                    if (emitted >= entryLimit) {
+                        break;
+                    }
+                    sb.append("entry node=").append(nodeIdx).append(' ')
+                            .append(entry).append('\n');
+                    emitted++;
+                }
+            }
+        } else {
+            sb.append("trace=not collected\n");
+        }
+        sb.append("emittedEntries=").append(emitted)
+                .append(" maxEntries=").append(entryLimit).append('\n');
+        writeText(summaryPath, sb.toString());
+    }
+
+    private static String laneNameForArtifact(int laneIdx,
+            TestPlanFeedbackPacket lanePacket) {
+        if (lanePacket != null && lanePacket.laneName != null
+                && !lanePacket.laneName.trim().isEmpty()) {
+            return lanePacket.laneName.trim();
+        }
+        return testPlanID2Setup.getOrDefault(laneIdx, "lane-" + laneIdx)
+                .replace(" ", "");
+    }
+
+    private static Path safeResolve(Path root, String relativePath) {
+        Path dest = root;
+        if (relativePath == null || relativePath.isEmpty()) {
+            return dest.resolve("_empty");
+        }
+        String[] parts = relativePath.replace('\\', '/').split("/");
+        for (String part : parts) {
+            if (part == null || part.isEmpty() || part.equals(".")
+                    || part.equals("..")) {
+                continue;
+            }
+            dest = dest.resolve(sanitizePathSegment(part));
+        }
+        return dest;
+    }
+
+    private static String sanitizePathSegment(String value) {
+        if (value == null || value.isEmpty()) {
+            return "_";
+        }
+        String sanitized = value.replaceAll("[^A-Za-z0-9._=-]", "_");
+        if (sanitized.isEmpty()) {
+            return "_";
+        }
+        return sanitized.length() <= 160 ? sanitized
+                : sanitized.substring(0, 160);
+    }
+
+    private static void writeText(Path path, String content)
+            throws IOException {
+        try (BufferedWriter writer = Files.newBufferedWriter(path,
+                StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING,
+                StandardOpenOption.WRITE)) {
+            writer.write(content == null ? "" : content);
+        }
+    }
+
+    private static String nullToEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     private void saveFullStopCrashReport(Path failureDir,
