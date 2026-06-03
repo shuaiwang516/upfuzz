@@ -42,6 +42,7 @@ import org.zlab.upfuzz.State;
 import org.zlab.upfuzz.cassandra.CassandraCommandPool;
 import org.zlab.upfuzz.cassandra.CassandraConfigGen;
 import org.zlab.upfuzz.cassandra.CassandraExecutor;
+import org.zlab.upfuzz.cassandra.CassandraSchemaTransientOracle;
 import org.zlab.upfuzz.cassandra.CassandraState;
 import org.zlab.upfuzz.fuzzingengine.Config;
 import org.zlab.upfuzz.fuzzingengine.FeedBack;
@@ -3030,6 +3031,11 @@ public class FuzzingServer {
         if (checkerDGateOpen) {
             crossClusterOutcome = checkCrossClusterInconsistencyStructured(
                     testPlanFeedbackPackets);
+            if (executor instanceof CassandraExecutor) {
+                crossClusterOutcome = CassandraSchemaTransientOracle
+                        .demoteIfUnconfirmed(crossClusterOutcome,
+                                testPlanFeedbackPackets);
+            }
             logger.info(
                     "[CheckerD] diverged={}, strength={}, containsUnknown={}, containsDaemonError={}",
                     crossClusterOutcome.diverged,
