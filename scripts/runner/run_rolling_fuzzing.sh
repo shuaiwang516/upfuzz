@@ -42,6 +42,7 @@ TEST_REMAIN_CONFIG=false
 TEST_BOUNDARY_UPGRADE_CONFIG_RATIO=1
 TEST_UPGRADE_CONFIG_RATIO=0.4
 TEST_REMAIN_UPGRADE_CONFIG_RATIO=0.4
+SHUFFLE_UPGRADE_ORDER=true
 CASSANDRA_RETRY_TIMEOUT=300
 DIFF_LANE_TIMEOUT_SEC=1200
 ENABLE_CHECKPOINT_RESTORE=false
@@ -127,6 +128,7 @@ Options:
   --test-boundary-upgrade-config-ratio <N> Boundary config mutation ratio (default: ${TEST_BOUNDARY_UPGRADE_CONFIG_RATIO})
   --test-upgrade-config-ratio <N>        Added/deleted/common config mutation ratio (default: ${TEST_UPGRADE_CONFIG_RATIO})
   --test-remain-upgrade-config-ratio <N> Remaining config mutation ratio (default: ${TEST_REMAIN_UPGRADE_CONFIG_RATIO})
+  --shuffle-upgrade-order <true|false>   Shuffle rolling upgrade node order in generated plans (default: ${SHUFFLE_UPGRADE_ORDER})
   --server-port <port>                   Server port (default: ${SERVER_PORT}, auto-shift if busy)
   --client-port <port>                   Client port (default: ${CLIENT_PORT}, auto-shift if busy)
   --server-start-timeout-sec <N>         Max wait for server port listen before client launch (default: ${SERVER_START_TIMEOUT_SEC})
@@ -482,6 +484,7 @@ write_config_json() {
     local test_deleted_config_json
     local test_common_config_json
     local test_remain_config_json
+    local shuffle_upgrade_order_json
     diff_json="$(bool_json "${USE_DIFF}")"
     trace_json="$(bool_json "${USE_TRACE}")"
     print_trace_json="$(bool_json "${PRINT_TRACE}")"
@@ -500,6 +503,7 @@ write_config_json() {
     test_deleted_config_json="$(bool_json "${TEST_DELETED_CONFIG}")"
     test_common_config_json="$(bool_json "${TEST_COMMON_CONFIG}")"
     test_remain_config_json="$(bool_json "${TEST_REMAIN_CONFIG}")"
+    shuffle_upgrade_order_json="$(bool_json "${SHUFFLE_UPGRADE_ORDER}")"
 
     local phase5_block
     phase5_block="$(build_phase5_block \
@@ -524,6 +528,7 @@ write_config_json() {
   "sequenceMutationEpoch" : 80,
   "nodeNum" : ${node_num},
   "faultMaxNum" : 0,
+  "shuffleUpgradeOrder" : ${shuffle_upgrade_order_json},
   "loadInitCorpus" : false,
   "saveCorpusToDisk" : true,
   "keepDir" : false,
@@ -600,6 +605,7 @@ JSON
   "sequenceMutationEpoch" : 80,
   "nodeNum" : ${node_num},
   "faultMaxNum" : 0,
+  "shuffleUpgradeOrder" : ${shuffle_upgrade_order_json},
   "loadInitCorpus" : false,
   "saveCorpusToDisk" : true,
   "keepDir" : false,
@@ -676,6 +682,7 @@ JSON
   "sequenceMutationEpoch" : 80,
   "nodeNum" : ${node_num},
   "faultMaxNum" : 0,
+  "shuffleUpgradeOrder" : ${shuffle_upgrade_order_json},
   "loadInitCorpus" : false,
   "saveCorpusToDisk" : true,
   "keepDir" : false,
@@ -933,6 +940,10 @@ while [[ $# -gt 0 ]]; do
             TEST_REMAIN_UPGRADE_CONFIG_RATIO="$2"
             shift 2
             ;;
+        --shuffle-upgrade-order)
+            SHUFFLE_UPGRADE_ORDER="$2"
+            shift 2
+            ;;
         --server-port)
             SERVER_PORT="$2"
             shift 2
@@ -1043,6 +1054,7 @@ validate_bool "--test-added-config" "${TEST_ADDED_CONFIG}"
 validate_bool "--test-deleted-config" "${TEST_DELETED_CONFIG}"
 validate_bool "--test-common-config" "${TEST_COMMON_CONFIG}"
 validate_bool "--test-remain-config" "${TEST_REMAIN_CONFIG}"
+validate_bool "--shuffle-upgrade-order" "${SHUFFLE_UPGRADE_ORDER}"
 validate_nonnegative_number "--test-boundary-upgrade-config-ratio" "${TEST_BOUNDARY_UPGRADE_CONFIG_RATIO}"
 validate_nonnegative_number "--test-upgrade-config-ratio" "${TEST_UPGRADE_CONFIG_RATIO}"
 validate_nonnegative_number "--test-remain-upgrade-config-ratio" "${TEST_REMAIN_UPGRADE_CONFIG_RATIO}"
@@ -1252,6 +1264,7 @@ TEST_ADDED_CONFIG=${TEST_ADDED_CONFIG}
 TEST_DELETED_CONFIG=${TEST_DELETED_CONFIG}
 TEST_COMMON_CONFIG=${TEST_COMMON_CONFIG}
 TEST_REMAIN_CONFIG=${TEST_REMAIN_CONFIG}
+SHUFFLE_UPGRADE_ORDER=${SHUFFLE_UPGRADE_ORDER}
 TEST_BOUNDARY_UPGRADE_CONFIG_RATIO=${TEST_BOUNDARY_UPGRADE_CONFIG_RATIO}
 TEST_UPGRADE_CONFIG_RATIO=${TEST_UPGRADE_CONFIG_RATIO}
 TEST_REMAIN_UPGRADE_CONFIG_RATIO=${TEST_REMAIN_UPGRADE_CONFIG_RATIO}
@@ -1295,6 +1308,7 @@ test_added_config: ${TEST_ADDED_CONFIG}
 test_deleted_config: ${TEST_DELETED_CONFIG}
 test_common_config: ${TEST_COMMON_CONFIG}
 test_remain_config: ${TEST_REMAIN_CONFIG}
+shuffle_upgrade_order: ${SHUFFLE_UPGRADE_ORDER}
 test_boundary_upgrade_config_ratio: ${TEST_BOUNDARY_UPGRADE_CONFIG_RATIO}
 test_upgrade_config_ratio: ${TEST_UPGRADE_CONFIG_RATIO}
 test_remain_upgrade_config_ratio: ${TEST_REMAIN_UPGRADE_CONFIG_RATIO}

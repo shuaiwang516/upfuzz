@@ -40,6 +40,7 @@ TEST_REMAIN_CONFIG=false
 TEST_BOUNDARY_UPGRADE_CONFIG_RATIO=1
 TEST_UPGRADE_CONFIG_RATIO=0.4
 TEST_REMAIN_UPGRADE_CONFIG_RATIO=0.4
+SHUFFLE_UPGRADE_ORDER=true
 
 usage() {
     cat <<'USAGE'
@@ -86,6 +87,8 @@ Options:
   --test-upgrade-config-ratio <N>    Added/deleted/common config mutation ratio (default: 0.4)
   --test-remain-upgrade-config-ratio <N>
                                      Remaining config mutation ratio (default: 0.4)
+  --shuffle-upgrade-order <true|false>
+                                     Shuffle rolling upgrade node order in generated plans (default: true)
   --dry-run                          Mock a CloudLab launch locally: validate and print runner command only
   --skip-docker-build                Skip docker image build step
   --skip-build                       Skip './gradlew classes -x test'
@@ -473,6 +476,10 @@ while [[ $# -gt 0 ]]; do
             TEST_REMAIN_UPGRADE_CONFIG_RATIO="$2"
             shift 2
             ;;
+        --shuffle-upgrade-order)
+            SHUFFLE_UPGRADE_ORDER="$2"
+            shift 2
+            ;;
         --dry-run)
             DRY_RUN=true
             shift 1
@@ -541,6 +548,7 @@ validate_bool "--test-added-config" "${TEST_ADDED_CONFIG}"
 validate_bool "--test-deleted-config" "${TEST_DELETED_CONFIG}"
 validate_bool "--test-common-config" "${TEST_COMMON_CONFIG}"
 validate_bool "--test-remain-config" "${TEST_REMAIN_CONFIG}"
+validate_bool "--shuffle-upgrade-order" "${SHUFFLE_UPGRADE_ORDER}"
 validate_nonnegative_number "--test-boundary-upgrade-config-ratio" "${TEST_BOUNDARY_UPGRADE_CONFIG_RATIO}"
 validate_nonnegative_number "--test-upgrade-config-ratio" "${TEST_UPGRADE_CONFIG_RATIO}"
 validate_nonnegative_number "--test-remain-upgrade-config-ratio" "${TEST_REMAIN_UPGRADE_CONFIG_RATIO}"
@@ -639,6 +647,7 @@ RUNNER_CMD=(
     --test-boundary-upgrade-config-ratio "${TEST_BOUNDARY_UPGRADE_CONFIG_RATIO}"
     --test-upgrade-config-ratio "${TEST_UPGRADE_CONFIG_RATIO}"
     --test-remain-upgrade-config-ratio "${TEST_REMAIN_UPGRADE_CONFIG_RATIO}"
+    --shuffle-upgrade-order "${SHUFFLE_UPGRADE_ORDER}"
     --run-name "${RUN_NAME}"
 )
 # Mode-dependent trace arguments
@@ -676,6 +685,7 @@ test_added_config: ${TEST_ADDED_CONFIG}
 test_deleted_config: ${TEST_DELETED_CONFIG}
 test_common_config: ${TEST_COMMON_CONFIG}
 test_remain_config: ${TEST_REMAIN_CONFIG}
+shuffle_upgrade_order: ${SHUFFLE_UPGRADE_ORDER}
 test_boundary_upgrade_config_ratio: ${TEST_BOUNDARY_UPGRADE_CONFIG_RATIO}
 test_upgrade_config_ratio: ${TEST_UPGRADE_CONFIG_RATIO}
 test_remain_upgrade_config_ratio: ${TEST_REMAIN_UPGRADE_CONFIG_RATIO}
@@ -760,6 +770,7 @@ original_version: ${ORIGINAL_VERSION}
 upgraded_version: ${UPGRADED_VERSION}
 strong_candidates: ${_strong_cand}
 weak_candidates: ${_weak_cand}
+shuffle_upgrade_order: ${SHUFFLE_UPGRADE_ORDER}
 candidate_dir: ${_cand_dir}
 observability_present: ${_obs_present:-none}
 observability_missing: ${_obs_missing:-none}
