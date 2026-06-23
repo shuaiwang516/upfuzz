@@ -233,6 +233,14 @@ public class FuzzingServer {
     // old-old vs new-new comm-divergence screen (Directions B/C).
     java.util.Set<String> commCovOld;
     java.util.Set<String> commCovNew;
+    // Finer "shape" tier: keyed by dir|roles|messageType|messageShapeHash, i.e.
+    // data-structure-aware communication (Direction B). The GUIDANCE tier is
+    // too
+    // coarse (~16 keys, constant version delta) to discriminate seeds; the
+    // shape
+    // tier captures which message STRUCTURES are exercised.
+    java.util.Set<String> commCovOldShape;
+    java.util.Set<String> commCovNewShape;
 
     // Execute a test in new version
     ExecutionDataStore curUpCoverage;
@@ -325,6 +333,8 @@ public class FuzzingServer {
         screenNewOnlyCoverage = new ExecutionDataStore();
         commCovOld = new java.util.HashSet<>();
         commCovNew = new java.util.HashSet<>();
+        commCovOldShape = new java.util.HashSet<>();
+        commCovNewShape = new java.util.HashSet<>();
 
         // skip upgrade check
 
@@ -2101,6 +2111,15 @@ public class FuzzingServer {
                 newNewLaneCollectionFailureNum);
     }
 
+    // Exp2 shape-tier comm key: data-structure-aware identity
+    // (direction|roles|messageType|messageShapeHash). Finer than the GUIDANCE
+    // canonical key so it can discriminate which message STRUCTURES a seed
+    // exercises (Direction B). Stable across lanes for set comparison.
+    private static String shapeKey(org.zlab.net.tracker.TraceEntry e) {
+        return e.eventType + "|" + e.nodeRole + "->" + e.peerRole + "|"
+                + e.messageType + "|" + e.messageShapeHash;
+    }
+
     public synchronized void updateStatus(
             TestPlanDiffFeedbackPacket testPlanDiffFeedbackPacket) {
         logger.info("TestPlanDiffFeedbackPacket received");
@@ -2264,6 +2283,14 @@ public class FuzzingServer {
         double comm_jaccard = 1.0;
         int oo_changed = 0;
         int nn_changed = 0;
+        // Shape tier (data-structure-aware): dir|roles|messageType|shapeHash.
+        int oo_shape_keys = 0;
+        int nn_shape_keys = 0;
+        int oo_shape_new = 0;
+        int nn_shape_new = 0;
+        int shape_excl_oo = 0;
+        int shape_excl_nn = 0;
+        double shape_jaccard = 1.0;
 
         if (Config.getConf().useBranchCoverage) {
             java.util.Map<Long, java.util.BitSet> oldVersionBaselineNew = Utilities
@@ -2375,18 +2402,48 @@ public class FuzzingServer {
             comm_jaccard = uni > 0 ? ((double) inter) / uni : 1.0;
             commCovOld.addAll(ooKeys);
             commCovNew.addAll(nnKeys);
+            // Shape tier: build data-structure-aware keys + count
+            // changedMessage
+            // in one pass over entries (exclude RECV_END to match GUIDANCE).
+            java.util.Set<String> ooShape = new java.util.HashSet<>();
+            java.util.Set<String> nnShape = new java.util.HashSet<>();
             if (serializedTraces[0] != null) {
                 for (org.zlab.net.tracker.TraceEntry e : serializedTraces[0]
-                        .getTraceEntries())
+                        .getTraceEntries()) {
                     if (e.changedMessage)
                         oo_changed++;
+                    if (e.eventType != org.zlab.net.tracker.TraceEntry.EventType.RECV_END)
+                        ooShape.add(shapeKey(e));
+                }
             }
             if (serializedTraces[2] != null) {
                 for (org.zlab.net.tracker.TraceEntry e : serializedTraces[2]
-                        .getTraceEntries())
+                        .getTraceEntries()) {
                     if (e.changedMessage)
                         nn_changed++;
+                    if (e.eventType != org.zlab.net.tracker.TraceEntry.EventType.RECV_END)
+                        nnShape.add(shapeKey(e));
+                }
             }
+            oo_shape_keys = ooShape.size();
+            nn_shape_keys = nnShape.size();
+            for (String k : ooShape) {
+                if (!commCovOldShape.contains(k))
+                    oo_shape_new++;
+                if (!nnShape.contains(k))
+                    shape_excl_oo++;
+            }
+            for (String k : nnShape) {
+                if (!commCovNewShape.contains(k))
+                    nn_shape_new++;
+                if (!ooShape.contains(k))
+                    shape_excl_nn++;
+            }
+            int sInter = oo_shape_keys - shape_excl_oo;
+            int sUni = oo_shape_keys + nn_shape_keys - sInter;
+            shape_jaccard = sUni > 0 ? ((double) sInter) / sUni : 1.0;
+            commCovOldShape.addAll(ooShape);
+            commCovNewShape.addAll(nnShape);
         }
 
         // Phase 5: classify the round's branch novelty from the probe
@@ -3873,7 +3930,10 @@ public class FuzzingServer {
                             + "rolling_new_excl={} oo_keys={} nn_keys={} "
                             + "oo_comm_new={} nn_comm_new={} comm_excl_oo={} "
                             + "comm_excl_nn={} comm_jaccard={} oo_changed={} "
-                            + "nn_changed={} newOriBC={} newUpgradeBC={} "
+                            + "nn_changed={} oo_shape_keys={} nn_shape_keys={} "
+                            + "oo_shape_new={} nn_shape_new={} shape_excl_oo={} "
+                            + "shape_excl_nn={} shape_jaccard={} "
+                            + "newOriBC={} newUpgradeBC={} "
                             + "newBranchCov={} traceInteresting={} "
                             + "structured={} noveltyClass={} verdict={} "
                             + "admitted={}",
@@ -3883,6 +3943,9 @@ public class FuzzingServer {
                     screen_rolling_new_excl, oo_keys, nn_keys, oo_comm_new,
                     nn_comm_new, comm_excl_oo, comm_excl_nn,
                     String.format("%.4f", comm_jaccard), oo_changed, nn_changed,
+                    oo_shape_keys, nn_shape_keys, oo_shape_new, nn_shape_new,
+                    shape_excl_oo, shape_excl_nn,
+                    String.format("%.4f", shape_jaccard),
                     newOriBC, newUpgradeBC,
                     newBranchCoverage, traceInteresting, structuredCandidate,
                     branchNoveltyClass,
