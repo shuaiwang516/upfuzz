@@ -226,6 +226,14 @@ public class FuzzingServer {
     ExecutionDataStore screenOldOnlyCoverage;
     ExecutionDataStore screenNewOnlyCoverage;
 
+    // Exp2 screen-signal: accumulated per-version COMMUNICATION coverage
+    // (canonical message-key sets) for the cheap baseline lanes. Baseline
+    // lanes are branch-coverage-dead by construction, so the network trace is
+    // the only cheap signal they produce. These drive the comm-novelty and
+    // old-old vs new-new comm-divergence screen (Directions B/C).
+    java.util.Set<String> commCovOld;
+    java.util.Set<String> commCovNew;
+
     // Execute a test in new version
     ExecutionDataStore curUpCoverage;
     // Coverage after downgrade to old version
@@ -315,6 +323,8 @@ public class FuzzingServer {
         curUpCoverageAfterUpgrade = new ExecutionDataStore();
         screenOldOnlyCoverage = new ExecutionDataStore();
         screenNewOnlyCoverage = new ExecutionDataStore();
+        commCovOld = new java.util.HashSet<>();
+        commCovNew = new java.util.HashSet<>();
 
         // skip upgrade check
 
@@ -2236,6 +2246,25 @@ public class FuzzingServer {
         int screen_rolling_old_excl = 0;
         int screen_rolling_new_excl = 0;
 
+        // Exp2 communication-screen locals (Directions B/C). Computed from the
+        // baseline-lane traces, which (unlike branch coverage) ARE collected.
+        // oo_keys/nn_keys: distinct canonical message keys in old-old/new-new.
+        // oo_comm_new/nn_comm_new: keys novel vs that version's accumulated
+        // comm coverage (would a comm-novelty screen flag this seed?).
+        // comm_excl_oo/comm_excl_nn: keys present in one baseline but not the
+        // other (old-old vs new-new comm DIVERGENCE — version-affected comm).
+        // comm_jaccard: old-old vs new-new canonical-key Jaccard.
+        // oo_changed/nn_changed: TraceEntries flagged changedMessage.
+        int oo_keys = 0;
+        int nn_keys = 0;
+        int oo_comm_new = 0;
+        int nn_comm_new = 0;
+        int comm_excl_oo = 0;
+        int comm_excl_nn = 0;
+        double comm_jaccard = 1.0;
+        int oo_changed = 0;
+        int nn_changed = 0;
+
         if (Config.getConf().useBranchCoverage) {
             java.util.Map<Long, java.util.BitSet> oldVersionBaselineNew = Utilities
                     .collectNewProbeIds(curOriCoverage,
@@ -2313,6 +2342,51 @@ public class FuzzingServer {
                     .countProbes(Utilities.collectNewProbeIds(
                             screenNewOnlyCoverage,
                             fbRolling.upgradedCodeCoverage));
+        }
+
+        // Exp2 communication-screen (Directions B/C).
+        // serializedTraces[0]=old-old,
+        // [2]=new-new were merged above when useTrace is on.
+        if (Config.getConf().logScreenSignal && Config.getConf().useTrace) {
+            java.util.Set<String> ooKeys = (serializedTraces[0] != null)
+                    ? new java.util.HashSet<>(
+                            serializedTraces[0].getCanonicalKeysForDiff())
+                    : new java.util.HashSet<>();
+            java.util.Set<String> nnKeys = (serializedTraces[2] != null)
+                    ? new java.util.HashSet<>(
+                            serializedTraces[2].getCanonicalKeysForDiff())
+                    : new java.util.HashSet<>();
+            oo_keys = ooKeys.size();
+            nn_keys = nnKeys.size();
+            for (String k : ooKeys) {
+                if (!commCovOld.contains(k))
+                    oo_comm_new++;
+                if (!nnKeys.contains(k))
+                    comm_excl_oo++;
+            }
+            for (String k : nnKeys) {
+                if (!commCovNew.contains(k))
+                    nn_comm_new++;
+                if (!ooKeys.contains(k))
+                    comm_excl_nn++;
+            }
+            int inter = oo_keys - comm_excl_oo;
+            int uni = oo_keys + nn_keys - inter;
+            comm_jaccard = uni > 0 ? ((double) inter) / uni : 1.0;
+            commCovOld.addAll(ooKeys);
+            commCovNew.addAll(nnKeys);
+            if (serializedTraces[0] != null) {
+                for (org.zlab.net.tracker.TraceEntry e : serializedTraces[0]
+                        .getTraceEntries())
+                    if (e.changedMessage)
+                        oo_changed++;
+            }
+            if (serializedTraces[2] != null) {
+                for (org.zlab.net.tracker.TraceEntry e : serializedTraces[2]
+                        .getTraceEntries())
+                    if (e.changedMessage)
+                        nn_changed++;
+            }
         }
 
         // Phase 5: classify the round's branch novelty from the probe
@@ -3796,14 +3870,20 @@ public class FuzzingServer {
             logger.info(
                     "[SCREEN_SIGNAL] round={} testPacketID={} oo_new={} "
                             + "nn_new={} rolling_old_excl={} "
-                            + "rolling_new_excl={} newOriBC={} newUpgradeBC={} "
+                            + "rolling_new_excl={} oo_keys={} nn_keys={} "
+                            + "oo_comm_new={} nn_comm_new={} comm_excl_oo={} "
+                            + "comm_excl_nn={} comm_jaccard={} oo_changed={} "
+                            + "nn_changed={} newOriBC={} newUpgradeBC={} "
                             + "newBranchCov={} traceInteresting={} "
                             + "structured={} noveltyClass={} verdict={} "
                             + "admitted={}",
                     finishedTestID,
                     testPlanDiffFeedbackPacket.testPacketID,
                     screen_oo_new, screen_nn_new, screen_rolling_old_excl,
-                    screen_rolling_new_excl, newOriBC, newUpgradeBC,
+                    screen_rolling_new_excl, oo_keys, nn_keys, oo_comm_new,
+                    nn_comm_new, comm_excl_oo, comm_excl_nn,
+                    String.format("%.4f", comm_jaccard), oo_changed, nn_changed,
+                    newOriBC, newUpgradeBC,
                     newBranchCoverage, traceInteresting, structuredCandidate,
                     branchNoveltyClass,
                     overallVerdict == null ? "NONE" : overallVerdict.name(),
