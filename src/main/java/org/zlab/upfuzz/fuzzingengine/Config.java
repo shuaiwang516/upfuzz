@@ -12,8 +12,7 @@ import org.zlab.net.tracker.CanonicalKeyMode;
 public class Config {
 
     public static final String ROLLING_GENERATION_POLICY_GUIDED = "guided";
-    public static final String ROLLING_GENERATION_POLICY_PURE_RANDOM =
-            "pure_random";
+    public static final String ROLLING_GENERATION_POLICY_PURE_RANDOM = "pure_random";
 
     public static Configuration instance;
 
@@ -116,8 +115,7 @@ public class Config {
         // Rolling-only fuzzing input generation policy. "guided" is the
         // existing mode-5 corpus/mutation scheduler; "pure_random" generates
         // a fresh random seed and test plan for every queued rolling round.
-        public String rollingGenerationPolicy =
-                ROLLING_GENERATION_POLICY_GUIDED;
+        public String rollingGenerationPolicy = ROLLING_GENERATION_POLICY_GUIDED;
 
         // ---------------- Mutation ---------------
         // For the first firstMutationSeedLimit seeds added
@@ -359,6 +357,13 @@ public class Config {
 
         // ------------Branch Coverage------------
         public boolean useBranchCoverage = true;
+        // Exp2 (deep-idea-search): when true, FuzzingServer maintains
+        // independent per-baseline-lane (old-old, new-new) accumulated
+        // coverage maps and emits a per-round [SCREEN_SIGNAL] log line that
+        // pairs cheap baseline-observable signals with the rolling-lane
+        // ground truth. Behavior-preserving measurement only; does not change
+        // corpus admission or execution.
+        public boolean logScreenSignal = false;
         public boolean enableHitCount = false;
         public boolean debugHitCount = false;
         public boolean collUpFeedBack = true;

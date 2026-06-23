@@ -218,6 +218,14 @@ public class FuzzingServer {
     // Coverage after upgrade to new version
     ExecutionDataStore curUpCoverageAfterUpgrade;
 
+    // Exp2 (deep-idea-search): independent accumulated coverage for the two
+    // cheap baseline lanes ONLY (no rolling lane merged in). Used to measure,
+    // per round, whether the old-old / new-new baseline alone would have
+    // flagged the seed as coverage-novel, and how much coverage is exclusive
+    // to the expensive rolling lane. Guarded by Config.logScreenSignal.
+    ExecutionDataStore screenOldOnlyCoverage;
+    ExecutionDataStore screenNewOnlyCoverage;
+
     // Execute a test in new version
     ExecutionDataStore curUpCoverage;
     // Coverage after downgrade to old version
@@ -305,6 +313,8 @@ public class FuzzingServer {
         curUpCoverage = new ExecutionDataStore();
         curOriCoverageAfterDowngrade = new ExecutionDataStore();
         curUpCoverageAfterUpgrade = new ExecutionDataStore();
+        screenOldOnlyCoverage = new ExecutionDataStore();
+        screenNewOnlyCoverage = new ExecutionDataStore();
 
         // skip upgrade check
 
@@ -2213,6 +2223,19 @@ public class FuzzingServer {
         int newVersionRollingOnlyProbes = 0;
         int newVersionSharedProbes = 0;
 
+        // Exp2 screen-signal locals (computed below, logged near end of round).
+        // screen_oo_new / screen_nn_new: new branches the cheap baseline lane
+        // finds in its OWN version vs that lane's independent history (i.e.
+        // would an old-old-only / new-new-only screen flag this seed?).
+        // screen_rolling_old_excl / screen_rolling_new_excl: branches the
+        // expensive rolling lane finds that the corresponding baseline lane
+        // never covers (even after folding this round) — the unavoidable
+        // miss set of a baseline-only screen.
+        int screen_oo_new = 0;
+        int screen_nn_new = 0;
+        int screen_rolling_old_excl = 0;
+        int screen_rolling_new_excl = 0;
+
         if (Config.getConf().useBranchCoverage) {
             java.util.Map<Long, java.util.BitSet> oldVersionBaselineNew = Utilities
                     .collectNewProbeIds(curOriCoverage,
@@ -2267,6 +2290,29 @@ public class FuzzingServer {
                 curUpCoverageAfterUpgrade.merge(fbNew.originalCodeCoverage);
                 newUpgradeBC = true;
             }
+        }
+
+        // Exp2 screen-signal: measure what the cheap baseline lanes would
+        // capture ALONE, and the coverage exclusive to the rolling lane.
+        // Order matters: compute baseline novelty BEFORE folding this round,
+        // then fold this round's baselines, then diff the rolling lane so the
+        // exclusive counts reflect "neither baseline ever covers it".
+        if (Config.getConf().logScreenSignal
+                && Config.getConf().useBranchCoverage) {
+            screen_oo_new = Utilities.countProbes(Utilities.collectNewProbeIds(
+                    screenOldOnlyCoverage, fbOld.originalCodeCoverage));
+            screen_nn_new = Utilities.countProbes(Utilities.collectNewProbeIds(
+                    screenNewOnlyCoverage, fbNew.originalCodeCoverage));
+            screenOldOnlyCoverage.merge(fbOld.originalCodeCoverage);
+            screenNewOnlyCoverage.merge(fbNew.originalCodeCoverage);
+            screen_rolling_old_excl = Utilities
+                    .countProbes(Utilities.collectNewProbeIds(
+                            screenOldOnlyCoverage,
+                            fbRolling.originalCodeCoverage));
+            screen_rolling_new_excl = Utilities
+                    .countProbes(Utilities.collectNewProbeIds(
+                            screenNewOnlyCoverage,
+                            fbRolling.upgradedCodeCoverage));
         }
 
         // Phase 5: classify the round's branch novelty from the probe
@@ -3741,6 +3787,29 @@ public class FuzzingServer {
                 newVersionNoveltySource,
                 branchNoveltyClass));
 
+        // Exp2 screen-signal: one parseable line per round pairing cheap
+        // baseline-observable signals with rolling-lane ground truth. Joined
+        // offline (by round) with trace_window_summary.csv (sim_baseline =
+        // old-old vs new-new comm similarity) to evaluate selective-execution
+        // predictive power. Behavior-preserving.
+        if (Config.getConf().logScreenSignal) {
+            logger.info(
+                    "[SCREEN_SIGNAL] round={} testPacketID={} oo_new={} "
+                            + "nn_new={} rolling_old_excl={} "
+                            + "rolling_new_excl={} newOriBC={} newUpgradeBC={} "
+                            + "newBranchCov={} traceInteresting={} "
+                            + "structured={} noveltyClass={} verdict={} "
+                            + "admitted={}",
+                    finishedTestID,
+                    testPlanDiffFeedbackPacket.testPacketID,
+                    screen_oo_new, screen_nn_new, screen_rolling_old_excl,
+                    screen_rolling_new_excl, newOriBC, newUpgradeBC,
+                    newBranchCoverage, traceInteresting, structuredCandidate,
+                    branchNoveltyClass,
+                    overallVerdict == null ? "NONE" : overallVerdict.name(),
+                    admittedThisRound);
+        }
+
         // Phase 3: run the decay sweep once per round so plans that
         // have been dequeued repeatedly without any payoff decay to a
         // cheaper class. Then emit a snapshot of scheduler counters
@@ -4949,7 +5018,8 @@ public class FuzzingServer {
                 saveCandidateWorkdirArtifacts(laneDir, lanePacket);
                 saveCandidateTraceSnippets(laneDir, laneName, lanePacket);
             } catch (IOException e) {
-                logger.warn("failed to save candidate artifacts for lane {}: {}",
+                logger.warn(
+                        "failed to save candidate artifacts for lane {}: {}",
                         laneName, e.toString());
             }
         }
