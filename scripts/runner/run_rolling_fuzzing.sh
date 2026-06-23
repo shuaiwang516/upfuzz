@@ -397,7 +397,8 @@ count_diff_feedback_packets() {
 #   enableLowerConfidenceTraceAdmission.
 # Override individual knobs by setting `traceSystemPreset: "GENERIC"` in
 # the JSON and emitting them yourself.
-PHASE_25_CONFIG='  "usePriorityTestPlanScheduler" : true,
+PHASE_25_CONFIG='  "logScreenSignal" : true,
+  "usePriorityTestPlanScheduler" : true,
   "mainExploitMutationEpoch" : 30,
   "branchScoutMutationEpoch" : 10,
   "shadowEvalMutationEpoch" : 4,
