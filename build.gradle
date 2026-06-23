@@ -16,6 +16,10 @@ tasks.withType(JavaCompile) {
 }
 
 repositories {
+	// Vendored local repo: gson-extras:2.8.5 is only served by the flaky
+	// artifactory.cronapp.io which times out from cloudlab. Resolve it from
+	// the committed libs-local/ first so fresh-machine builds are reliable.
+	maven { url "${rootDir}/libs-local" }
 	mavenCentral()
 	maven { url "https://jitpack.io" }
 	maven { url "https://artifactory.cronapp.io/public-release/" }
