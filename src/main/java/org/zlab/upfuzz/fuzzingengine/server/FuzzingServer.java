@@ -2374,7 +2374,11 @@ public class FuzzingServer {
         // Exp2 communication-screen (Directions B/C).
         // serializedTraces[0]=old-old,
         // [2]=new-new were merged above when useTrace is on.
-        if (Config.getConf().logScreenSignal && Config.getConf().useTrace) {
+        // Also runs when useShapeNoveltyGuidance is on (the treatment needs the
+        // shape-coverage bookkeeping + oo_shape_new/nn_shape_new every round).
+        if ((Config.getConf().logScreenSignal
+                || Config.getConf().useShapeNoveltyGuidance)
+                && Config.getConf().useTrace) {
             java.util.Set<String> ooKeys = (serializedTraces[0] != null)
                     ? new java.util.HashSet<>(
                             serializedTraces[0].getCanonicalKeysForDiff())
@@ -3267,9 +3271,20 @@ public class FuzzingServer {
         boolean effectiveTraceInteresting = isTraceAdmissible(
                 traceInteresting, traceEvidenceStrength,
                 phase4FlowSupportClass);
+        // Treatment: shape-novelty admission. A seed that reached a message
+        // STRUCTURE never seen before in either version's history is admitted
+        // even when it gains no new branch coverage — these carry ~all bug
+        // candidates and are otherwise discarded by the branch-only fuzzer.
+        boolean shapeNovel = Config.getConf().useShapeNoveltyGuidance
+                && (oo_shape_new > 0 || nn_shape_new > 0);
         boolean addToCorpus = newOriBC || newUpgradeBC
-                || effectiveTraceInteresting;
+                || effectiveTraceInteresting || shapeNovel;
         boolean newBranchCoverage = newOriBC || newUpgradeBC;
+        if (shapeNovel && !newBranchCoverage && !effectiveTraceInteresting) {
+            logger.info(
+                    "[SHAPE_GUIDANCE] admitting shape-novel seed: oo_shape_new={} nn_shape_new={}",
+                    oo_shape_new, nn_shape_new);
+        }
         if (traceInteresting && !effectiveTraceInteresting) {
             logger.info(
                     "[TRACE] Phase 3 demoted trace evidence: strength={}, "
@@ -3478,8 +3493,12 @@ public class FuzzingServer {
                 // cannot be produced by weak or unsupported trace. The
                 // CSV still receives the raw {@code traceInteresting}
                 // flag separately for observability.
+                // Treatment: route shape-novel admissions as branch-backed
+                // (first-class corpus seeds, not trace probation), since
+                // shape-novelty is a coverage-style structural signal rather
+                // than the gated trace-similarity signal.
                 AdmissionReason admissionReason = classifyAdmissionReason(
-                        newBranchCoverage,
+                        newBranchCoverage || shapeNovel,
                         effectiveTraceInteresting,
                         anyTriDiffExclusiveFired,
                         anyWindowSimFired,

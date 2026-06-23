@@ -426,6 +426,13 @@ PHASE_25_CONFIG='  "logScreenSignal" : true,
   "branchScoutMinOccupancy" : 5,
   "enableStageCoverageSnapshots" : false'
 
+# Treatment A/B: shape-novelty corpus guidance. Default false (control). Set env
+# SHAPE_NOVELTY_GUIDANCE=true for treatment runs. Prepended to the shared config
+# block so it lands in all three system configs.
+SHAPE_NOVELTY_GUIDANCE="${SHAPE_NOVELTY_GUIDANCE:-false}"
+PHASE_25_CONFIG="  \"useShapeNoveltyGuidance\" : ${SHAPE_NOVELTY_GUIDANCE},
+${PHASE_25_CONFIG}"
+
 # Phase 5 system preset + family-map profile JSON fragment, materialized
 # per-run so each generated config records which preset / profile / dump
 # state was active. The Java side resolves AUTO from the JSON `system`

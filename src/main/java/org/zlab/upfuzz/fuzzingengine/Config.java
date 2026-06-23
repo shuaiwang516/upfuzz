@@ -364,6 +364,16 @@ public class Config {
         // ground truth. Behavior-preserving measurement only; does not change
         // corpus admission or execution.
         public boolean logScreenSignal = false;
+        // Treatment (deep-idea-search): admit seeds that reach a NOVEL message
+        // STRUCTURE (direction|roles|messageType|messageShapeHash not seen
+        // before in that version's accumulated history) in addition to branch
+        // coverage. Validated: shape-novelty has ~100% bug-candidate recall and
+        // rescues ~48% of bug-candidate rounds whose seeds the branch-only
+        // fuzzer discards (newBranchCov=false). Keeps nettrace as ONLINE
+        // guidance (project rule) by improving message identity. Requires
+        // useTrace=true. Implies the shape-coverage bookkeeping runs each
+        // round.
+        public boolean useShapeNoveltyGuidance = false;
         public boolean enableHitCount = false;
         public boolean debugHitCount = false;
         public boolean collUpFeedBack = true;
