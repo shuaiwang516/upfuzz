@@ -276,12 +276,16 @@ public class CassandraDocker extends Docker {
                 runInContainer(new String[] { nt, "refresh", ks, "t" })
                         .waitFor();
             } else {
-                runInContainer(new String[] { "/bin/sh", "-c",
+                Process imp = runInContainer(new String[] { "/bin/sh", "-c",
                         "SD=$(ls -d /var/lib/cassandra/data/" + ks
                                 + "/t-*/snapshots/" + snap
-                                + " 2>/dev/null | head -1); " + nt
-                                + " import --copy-data " + ks + " t $SD" })
-                                        .waitFor();
+                                + " 2>/dev/null | head -1); echo SNAPDIR=$SD; ls "
+                                + "$SD 2>&1 | tr '\\n' ' '; echo; " + nt
+                                + " import " + ks + " t $SD 2>&1" });
+                imp.waitFor();
+                logger.info("[NATIVE_SNAPSHOT] restore_out: {}",
+                        Utilities.readProcess(imp).replaceAll("\\s+", " ")
+                                .trim());
             }
             long r1 = System.currentTimeMillis();
             String cnt = shell
