@@ -232,6 +232,53 @@ public class CassandraDocker extends Docker {
         }
     }
 
+    // Phase 0/1 full-loop: benchmark application-native snapshot/rollback on a
+    // throwaway keyspace, IN the running fuzzer (the only place the
+    // instrumented
+    // cluster is stable). Logs [NATIVE_SNAPSHOT] snapshot_ms / rollback_ms /
+    // count_after (expect 100). Validates that R (rollback, no restart) <<
+    // boot.
+    public void nativeSnapshotRollbackBenchmark() {
+        try {
+            String nt = "/" + system + "/" + originalVersion + "/bin/nodetool";
+            String ks = "snapbench";
+            shell.executeCommand("DROP KEYSPACE IF EXISTS " + ks + ";");
+            shell.executeCommand("CREATE KEYSPACE " + ks
+                    + " WITH replication={'class':'SimpleStrategy','replication_factor':1};");
+            shell.executeCommand(
+                    "CREATE TABLE " + ks + ".t (id int PRIMARY KEY, v text);");
+            for (int i = 0; i < 100; i++)
+                shell.executeCommand("INSERT INTO " + ks + ".t (id,v) VALUES ("
+                        + i + ",'p" + i + "');");
+            long s0 = System.currentTimeMillis();
+            runInContainer(new String[] { nt, "flush", ks }).waitFor();
+            String snap = "b" + System.currentTimeMillis();
+            runInContainer(new String[] { nt, "snapshot", "-t", snap, ks })
+                    .waitFor();
+            long s1 = System.currentTimeMillis();
+            for (int i = 100; i < 150; i++)
+                shell.executeCommand("INSERT INTO " + ks + ".t (id,v) VALUES ("
+                        + i + ",'c" + i + "');");
+            long r0 = System.currentTimeMillis();
+            shell.executeCommand("TRUNCATE " + ks + ".t;");
+            runInContainer(new String[] { "/bin/sh", "-c",
+                    "D=$(ls -d /var/lib/cassandra/data/" + ks
+                            + "/t-* 2>/dev/null | head -1); cp $D/snapshots/"
+                            + snap + "/*.db $D/ 2>/dev/null" }).waitFor();
+            runInContainer(new String[] { nt, "refresh", ks, "t" }).waitFor();
+            long r1 = System.currentTimeMillis();
+            String cnt = shell
+                    .executeCommand("SELECT count(*) FROM " + ks + ".t;");
+            shell.executeCommand("DROP KEYSPACE " + ks + ";");
+            logger.info(
+                    "[NATIVE_SNAPSHOT] snapshot_ms={} rollback_ms={} count_after={} (expect 100)",
+                    (s1 - s0), (r1 - r0),
+                    cnt == null ? "?" : cnt.replaceAll("\\s+", " ").trim());
+        } catch (Exception e) {
+            logger.warn("[NATIVE_SNAPSHOT] benchmark failed: {}", e.toString());
+        }
+    }
+
     public void drain() throws Exception {
         String mode = "drain";
         if (Config.getConf().originalVersion.contains("cassandra-2.")) {

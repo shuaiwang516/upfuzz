@@ -430,7 +430,9 @@ PHASE_25_CONFIG='  "logScreenSignal" : true,
 # SHAPE_NOVELTY_GUIDANCE=true for treatment runs. Prepended to the shared config
 # block so it lands in all three system configs.
 SHAPE_NOVELTY_GUIDANCE="${SHAPE_NOVELTY_GUIDANCE:-false}"
-PHASE_25_CONFIG="  \"useShapeNoveltyGuidance\" : ${SHAPE_NOVELTY_GUIDANCE},
+VALIDATE_NATIVE_SNAPSHOT="${VALIDATE_NATIVE_SNAPSHOT:-false}"
+PHASE_25_CONFIG="  \"validateNativeSnapshot\" : ${VALIDATE_NATIVE_SNAPSHOT},
+  \"useShapeNoveltyGuidance\" : ${SHAPE_NOVELTY_GUIDANCE},
 ${PHASE_25_CONFIG}"
 
 # Phase 5 system preset + family-map profile JSON fragment, materialized

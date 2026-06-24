@@ -374,6 +374,14 @@ public class Config {
         // useTrace=true. Implies the shape-coverage bookkeeping runs each
         // round.
         public boolean useShapeNoveltyGuidance = false;
+        // Phase 0/1 (deep-idea-search full loop): when true, after a Cassandra
+        // cluster is ready, run an in-fuzzer benchmark of APPLICATION-NATIVE
+        // snapshot/rollback (nodetool snapshot + restore SSTables + refresh,
+        // no process restart) on a throwaway keyspace, logging
+        // [NATIVE_SNAPSHOT]
+        // snapshot_ms / rollback_ms / correctness. This is the cheap-restore
+        // mechanism the snapshot loop depends on (R must be << boot ~86s).
+        public boolean validateNativeSnapshot = false;
         public boolean enableHitCount = false;
         public boolean debugHitCount = false;
         public boolean collUpFeedBack = true;

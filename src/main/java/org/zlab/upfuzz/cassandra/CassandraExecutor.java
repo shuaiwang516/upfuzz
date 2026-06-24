@@ -101,6 +101,16 @@ public class CassandraExecutor extends Executor {
             logger.error("docker cluster start up failed", e);
             return false;
         }
+        // Phase 0/1 full-loop: validate application-native snapshot/rollback
+        // latency + correctness in-fuzzer (the only stable-cluster context).
+        if (Config.getConf().validateNativeSnapshot) {
+            try {
+                ((CassandraDocker) dockerCluster.getDocker(0))
+                        .nativeSnapshotRollbackBenchmark();
+            } catch (Exception e) {
+                logger.warn("[NATIVE_SNAPSHOT] hook failed: {}", e.toString());
+            }
+        }
         return true;
     }
 
