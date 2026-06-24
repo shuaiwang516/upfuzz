@@ -261,11 +261,28 @@ public class CassandraDocker extends Docker {
                         + i + ",'c" + i + "');");
             long r0 = System.currentTimeMillis();
             shell.executeCommand("TRUNCATE " + ks + ".t;");
-            runInContainer(new String[] { "/bin/sh", "-c",
-                    "D=$(ls -d /var/lib/cassandra/data/" + ks
-                            + "/t-* 2>/dev/null | head -1); cp $D/snapshots/"
-                            + snap + "/*.db $D/ 2>/dev/null" }).waitFor();
-            runInContainer(new String[] { nt, "refresh", ks, "t" }).waitFor();
+            // Restore the snapshot SSTables without a process restart. On
+            // Cassandra 4.x/5.x use `nodetool import` (refresh is unreliable
+            // for
+            // this); on 3.x copy SSTables into the table dir + `nodetool
+            // refresh`.
+            boolean is3x = originalVersion.contains("cassandra-2.")
+                    || originalVersion.contains("cassandra-3.");
+            if (is3x) {
+                runInContainer(new String[] { "/bin/sh", "-c",
+                        "D=$(ls -d /var/lib/cassandra/data/" + ks
+                                + "/t-* 2>/dev/null | head -1); cp $D/snapshots/"
+                                + snap + "/*.db $D/ 2>/dev/null" }).waitFor();
+                runInContainer(new String[] { nt, "refresh", ks, "t" })
+                        .waitFor();
+            } else {
+                runInContainer(new String[] { "/bin/sh", "-c",
+                        "SD=$(ls -d /var/lib/cassandra/data/" + ks
+                                + "/t-*/snapshots/" + snap
+                                + " 2>/dev/null | head -1); " + nt
+                                + " import --copy-data " + ks + " t $SD" })
+                                        .waitFor();
+            }
             long r1 = System.currentTimeMillis();
             String cnt = shell
                     .executeCommand("SELECT count(*) FROM " + ks + ".t;");
