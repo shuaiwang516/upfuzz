@@ -382,6 +382,12 @@ public class Config {
         // snapshot_ms / rollback_ms / correctness. This is the cheap-restore
         // mechanism the snapshot loop depends on (R must be << boot ~86s).
         public boolean validateNativeSnapshot = false;
+        // Warm-cluster native-snapshot loop (Phase 2/3 integration entry point).
+        // When on, baseline lanes (old-old, new-new) stay warm across children:
+        // boot once, snapshot a base, and roll back (R~5s, no restart) between
+        // children instead of rebooting. Default off; the lifecycle wiring lands
+        // incrementally on top of the validated snapshot/rollback API.
+        public boolean useNativeSnapshotWarmLoop = false;
         public boolean enableHitCount = false;
         public boolean debugHitCount = false;
         public boolean collUpFeedBack = true;

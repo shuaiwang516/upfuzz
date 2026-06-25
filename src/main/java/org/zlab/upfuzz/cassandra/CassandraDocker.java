@@ -379,6 +379,58 @@ public class CassandraDocker extends Docker {
         }
     }
 
+    // ---- Reusable native-snapshot warm-loop API (Phase 2/3 integration) ----
+    // Extracted from the validated nativeSnapshotRollbackBenchmark. The warm
+    // lifecycle calls snapshotKeyspaceAllNodes() once on a parent state, then
+    // rollbackTableAllNodes() (R~5s, no restart, correct+repeatable) between
+    // children. Snapshot/rollback run on EVERY node (RF<nodeNum token split) and
+    // use the version-correct JAVA_HOME for nodetool (4.x=11, 5.x=17, 2/3.x=8).
+
+    /** Flush + snapshot keyspace `ks` on every node; returns the snapshot tag. */
+    public String snapshotKeyspaceAllNodes(DockerCluster cluster, String ks,
+            String tag) throws Exception {
+        String nt = "/" + system + "/" + originalVersion + "/bin/nodetool";
+        String jh = javaHomeForCassandra(originalVersion);
+        for (int n = 0; n < cluster.nodeNum; n++) {
+            CassandraDocker d = (CassandraDocker) cluster.getDocker(n);
+            d.nodetool(jh, nt, "flush " + ks).waitFor();
+            d.nodetool(jh, nt, "snapshot -t " + tag + " " + ks).waitFor();
+        }
+        return tag;
+    }
+
+    /**
+     * Roll back `ks.table` to snapshot `tag` on every node with no process
+     * restart: TRUNCATE (cluster-wide via cqlsh) + `nodetool import --copy-data`
+     * per node (copy-data leaves the snapshot intact for the next rollback).
+     */
+    public void rollbackTableAllNodes(DockerCluster cluster, String ks,
+            String table, String tag) throws Exception {
+        String nt = "/" + system + "/" + originalVersion + "/bin/nodetool";
+        String jh = javaHomeForCassandra(originalVersion);
+        boolean is3x = originalVersion.contains("cassandra-2.")
+                || originalVersion.contains("cassandra-3.");
+        shell.executeCommand("TRUNCATE " + ks + "." + table + ";");
+        for (int n = 0; n < cluster.nodeNum; n++) {
+            CassandraDocker d = (CassandraDocker) cluster.getDocker(n);
+            if (is3x) {
+                d.runInContainer(new String[] { "/bin/sh", "-c",
+                        "D=$(ls -d /var/lib/cassandra/data/" + ks + "/" + table
+                                + "-* 2>/dev/null | head -1); cp $D/snapshots/"
+                                + tag + "/*.db $D/ 2>/dev/null" }).waitFor();
+                d.nodetool(jh, nt, "refresh " + ks + " " + table).waitFor();
+            } else {
+                d.runInContainer(new String[] { "/bin/sh", "-c",
+                        "SD=$(ls -d /var/lib/cassandra/data/" + ks + "/" + table
+                                + "-*/snapshots/" + tag
+                                + " 2>/dev/null | head -1); "
+                                + (jh.isEmpty() ? "" : "JAVA_HOME=" + jh + " ")
+                                + nt + " import --copy-data " + ks + " " + table
+                                + " $SD" }).waitFor();
+            }
+        }
+    }
+
     public void drain() throws Exception {
         String mode = "drain";
         if (Config.getConf().originalVersion.contains("cassandra-2.")) {
