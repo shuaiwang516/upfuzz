@@ -279,11 +279,12 @@ public class CassandraDocker extends Docker {
     // (TRUNCATE + `nodetool import --copy-data`, which restores correctly AND
     // leaves the snapshot intact for the next rollback). Measures rollback
     // latency per cycle and verifies each rollback restores exactly the base.
-    public void nativeSnapshotRollbackBenchmark() {
+    public void nativeSnapshotRollbackBenchmark(DockerCluster cluster) {
         try {
             String nt = "/" + system + "/" + originalVersion + "/bin/nodetool";
             String jh = javaHomeForCassandra(originalVersion);
             String ks = "snapbench";
+            int nodes = cluster.nodeNum;
             boolean is3x = originalVersion.contains("cassandra-2.")
                     || originalVersion.contains("cassandra-3.");
             shell.executeCommand("DROP KEYSPACE IF EXISTS " + ks + ";");
@@ -299,10 +300,16 @@ public class CassandraDocker extends Docker {
             int baseCount = parseCount(
                     shell.executeCommand("SELECT count(*) FROM " + ks + ".t;"));
 
+            // Snapshot on EVERY node: with RF<nodeNum the rows are token-split
+            // across nodes, so the whole-cluster state lives on all nodes and
+            // each must be snapshotted/rolled-back for a correct restore.
             long s0 = System.currentTimeMillis();
-            nodetool(jh, nt, "flush " + ks).waitFor();
             String snap = "base" + System.currentTimeMillis();
-            nodetool(jh, nt, "snapshot -t " + snap + " " + ks).waitFor();
+            for (int n = 0; n < nodes; n++) {
+                CassandraDocker d = (CassandraDocker) cluster.getDocker(n);
+                d.nodetool(jh, nt, "flush " + ks).waitFor();
+                d.nodetool(jh, nt, "snapshot -t " + snap + " " + ks).waitFor();
+            }
             long s1 = System.currentTimeMillis();
 
             int cycles = 3;
@@ -318,21 +325,26 @@ public class CassandraDocker extends Docker {
 
                 long r0 = System.currentTimeMillis();
                 shell.executeCommand("TRUNCATE " + ks + ".t;");
-                if (is3x) {
-                    runInContainer(new String[] { "/bin/sh", "-c",
-                            "D=$(ls -d /var/lib/cassandra/data/" + ks
-                                    + "/t-* 2>/dev/null | head -1); cp $D/snapshots/"
-                                    + snap + "/*.db $D/ 2>/dev/null" }).waitFor();
-                    nodetool(jh, nt, "refresh " + ks + " t").waitFor();
-                } else {
-                    runInContainer(new String[] { "/bin/sh", "-c",
-                            "SD=$(ls -d /var/lib/cassandra/data/" + ks
-                                    + "/t-*/snapshots/" + snap
-                                    + " 2>/dev/null | head -1); "
-                                    + (jh.isEmpty() ? "" : "JAVA_HOME=" + jh
-                                            + " ")
-                                    + nt + " import --copy-data " + ks
-                                    + " t $SD" }).waitFor();
+                // Roll back on every node from its own snapshot (no restart).
+                for (int n = 0; n < nodes; n++) {
+                    CassandraDocker d = (CassandraDocker) cluster.getDocker(n);
+                    if (is3x) {
+                        d.runInContainer(new String[] { "/bin/sh", "-c",
+                                "D=$(ls -d /var/lib/cassandra/data/" + ks
+                                        + "/t-* 2>/dev/null | head -1); cp $D/snapshots/"
+                                        + snap + "/*.db $D/ 2>/dev/null" })
+                                .waitFor();
+                        d.nodetool(jh, nt, "refresh " + ks + " t").waitFor();
+                    } else {
+                        d.runInContainer(new String[] { "/bin/sh", "-c",
+                                "SD=$(ls -d /var/lib/cassandra/data/" + ks
+                                        + "/t-*/snapshots/" + snap
+                                        + " 2>/dev/null | head -1); "
+                                        + (jh.isEmpty() ? "" : "JAVA_HOME=" + jh
+                                                + " ")
+                                        + nt + " import --copy-data " + ks
+                                        + " t $SD" }).waitFor();
+                    }
                 }
                 long r1 = System.currentTimeMillis();
                 rb[c] = r1 - r0;

@@ -106,7 +106,7 @@ public class CassandraExecutor extends Executor {
         if (Config.getConf().validateNativeSnapshot) {
             try {
                 ((CassandraDocker) dockerCluster.getDocker(0))
-                        .nativeSnapshotRollbackBenchmark();
+                        .nativeSnapshotRollbackBenchmark(dockerCluster);
             } catch (Exception e) {
                 logger.warn("[NATIVE_SNAPSHOT] hook failed: {}", e.toString());
             }
