@@ -111,6 +111,16 @@ public class CassandraExecutor extends Executor {
                 logger.warn("[NATIVE_SNAPSHOT] hook failed: {}", e.toString());
             }
         }
+        // Warm-loop run: boot once, snapshot a multi-table parent, run K children
+        // from native-snapshot rollback (steps 1-5), measuring throughput.
+        if (Config.getConf().useNativeSnapshotWarmLoop) {
+            try {
+                ((CassandraDocker) dockerCluster.getDocker(0))
+                        .nativeSnapshotWarmLoopRun(dockerCluster, 20);
+            } catch (Exception e) {
+                logger.warn("[WARM_LOOP] hook failed: {}", e.toString());
+            }
+        }
         return true;
     }
 

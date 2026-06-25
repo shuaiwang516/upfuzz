@@ -431,7 +431,9 @@ PHASE_25_CONFIG='  "logScreenSignal" : true,
 # block so it lands in all three system configs.
 SHAPE_NOVELTY_GUIDANCE="${SHAPE_NOVELTY_GUIDANCE:-false}"
 VALIDATE_NATIVE_SNAPSHOT="${VALIDATE_NATIVE_SNAPSHOT:-false}"
+USE_NATIVE_SNAPSHOT_WARM_LOOP="${USE_NATIVE_SNAPSHOT_WARM_LOOP:-false}"
 PHASE_25_CONFIG="  \"validateNativeSnapshot\" : ${VALIDATE_NATIVE_SNAPSHOT},
+  \"useNativeSnapshotWarmLoop\" : ${USE_NATIVE_SNAPSHOT_WARM_LOOP},
   \"useShapeNoveltyGuidance\" : ${SHAPE_NOVELTY_GUIDANCE},
 ${PHASE_25_CONFIG}"
 

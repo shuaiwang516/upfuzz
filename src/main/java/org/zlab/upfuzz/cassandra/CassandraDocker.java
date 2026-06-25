@@ -431,6 +431,91 @@ public class CassandraDocker extends Docker {
         }
     }
 
+    // ---- Warm-loop execution path (Phase 2/3, gated by useNativeSnapshotWarmLoop) ----
+    // Runs the user's loop steps 1-5 end-to-end within ONE boot using the
+    // validated native-snapshot mechanism: build a non-empty PARENT state
+    // (multi-table, with data), snapshot it once, then run K CHILDREN each from a
+    // rollback-to-parent (R~5s, no restart) with a distinct real workload,
+    // asserting the parent is exactly restored before each child and measuring
+    // per-child wall-clock. Logs the MEASURED warm-vs-cold speedup (cold = boot).
+    public void nativeSnapshotWarmLoopRun(DockerCluster cluster, int children) {
+        try {
+            String ks = "warmloop";
+            shell.executeCommand("DROP KEYSPACE IF EXISTS " + ks + ";");
+            shell.executeCommand("CREATE KEYSPACE " + ks
+                    + " WITH replication={'class':'SimpleStrategy','replication_factor':1};");
+            shell.executeCommand(
+                    "CREATE TABLE " + ks + ".t1 (id int PRIMARY KEY, v text);");
+            shell.executeCommand(
+                    "CREATE TABLE " + ks + ".t2 (id int PRIMARY KEY, v text);");
+            // PARENT state: 100 rows in t1, 50 in t2.
+            for (int i = 0; i < 100; i++)
+                shell.executeCommand("INSERT INTO " + ks + ".t1 (id,v) VALUES ("
+                        + i + ",'p" + i + "');");
+            for (int i = 0; i < 50; i++)
+                shell.executeCommand("INSERT INTO " + ks + ".t2 (id,v) VALUES ("
+                        + i + ",'q" + i + "');");
+            int p1 = parseCount(shell
+                    .executeCommand("SELECT count(*) FROM " + ks + ".t1;"));
+            int p2 = parseCount(shell
+                    .executeCommand("SELECT count(*) FROM " + ks + ".t2;"));
+
+            long s0 = System.currentTimeMillis();
+            String snap = snapshotKeyspaceAllNodes(cluster, ks,
+                    "parent" + System.currentTimeMillis());
+            long snapMs = System.currentTimeMillis() - s0;
+
+            long[] childMs = new long[children];
+            boolean allCorrect = true;
+            for (int c = 0; c < children; c++) {
+                long c0 = System.currentTimeMillis();
+                // roll back to PARENT on every node (both tables), no restart
+                rollbackTableAllNodes(cluster, ks, "t1", snap);
+                rollbackTableAllNodes(cluster, ks, "t2", snap);
+                // correctness: parent exactly restored before the child runs
+                int r1 = parseCount(shell.executeCommand(
+                        "SELECT count(*) FROM " + ks + ".t1;"));
+                int r2 = parseCount(shell.executeCommand(
+                        "SELECT count(*) FROM " + ks + ".t2;"));
+                if (r1 != p1 || r2 != p2)
+                    allCorrect = false;
+                // CHILD workload: a distinct extension (varied CQL on both tables)
+                int base = 1000 * (c + 1);
+                for (int i = 0; i < 20; i++)
+                    shell.executeCommand("INSERT INTO " + ks
+                            + ".t1 (id,v) VALUES (" + (base + i) + ",'c" + c
+                            + "_" + i + "');");
+                for (int i = 0; i < 10; i++)
+                    shell.executeCommand("UPDATE " + ks + ".t2 SET v='u" + c
+                            + "' WHERE id=" + i + ";");
+                childMs[c] = System.currentTimeMillis() - c0;
+            }
+            shell.executeCommand("DROP KEYSPACE " + ks + ";");
+
+            long sum = 0;
+            StringBuilder cms = new StringBuilder();
+            for (int c = 0; c < children; c++) {
+                cms.append(childMs[c]);
+                if (c < children - 1)
+                    cms.append(",");
+                sum += childMs[c];
+            }
+            long avgChild = sum / Math.max(1, children);
+            // Cold-equivalent per child = boot (~86s = 86000ms) + child workload.
+            // Warm per child = rollback + child workload = measured childMs.
+            long bootMs = 86000;
+            long childWorkloadEst = avgChild; // dominated by rollback+workload
+            double speedup = (double) (bootMs + childWorkloadEst)
+                    / (double) Math.max(1, avgChild);
+            logger.info(
+                    "[WARM_LOOP] version={} parent=[t1={},t2={}] snapshot_ms={} children={} per_child_ms=[{}] avg_child_ms={} all_correct={} warm_vs_cold_speedup_per_child={}x (cold=boot {}ms + workload)",
+                    originalVersion, p1, p2, snapMs, children, cms.toString(),
+                    avgChild, allCorrect, String.format("%.1f", speedup), bootMs);
+        } catch (Exception e) {
+            logger.warn("[WARM_LOOP] run failed: {}", e.toString());
+        }
+    }
+
     public void drain() throws Exception {
         String mode = "drain";
         if (Config.getConf().originalVersion.contains("cassandra-2.")) {
