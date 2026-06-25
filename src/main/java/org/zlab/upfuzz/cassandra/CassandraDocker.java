@@ -238,63 +238,129 @@ public class CassandraDocker extends Docker {
     // cluster is stable). Logs [NATIVE_SNAPSHOT] snapshot_ms / rollback_ms /
     // count_after (expect 100). Validates that R (rollback, no restart) <<
     // boot.
+    // Cassandra 4.x nodetool needs Java 11, 5.x needs Java 11/17, but the
+    // multi-version upfuzz image defaults JAVA_HOME to Java 8 (for 2.x/3.x).
+    // nodetool therefore fails with UnsupportedClassVersionError unless we point
+    // it at the right JVM. cqlsh is Python and is unaffected.
+    private String javaHomeForCassandra(String v) {
+        if (v.contains("cassandra-5.") || v.contains("cassandra-4."))
+            return "/usr/lib/jvm/java-11-openjdk-amd64";
+        return ""; // 2.x/3.x: container default (Java 8) is correct
+    }
+
+    private Process nodetool(String javaHome, String ntPath, String argline)
+            throws Exception {
+        String cmd = (javaHome.isEmpty() ? "" : "JAVA_HOME=" + javaHome + " ")
+                + ntPath + " " + argline;
+        return runInContainer(new String[] { "/bin/sh", "-c", cmd });
+    }
+
+    // Extract the integer value from a `SELECT count(*)` cqlsh result (ignores
+    // the trailing "(N rows)" line).
+    private int parseCount(String out) {
+        if (out == null)
+            return -1;
+        String s = out.replaceAll("\\(\\d+ rows?\\)", " ");
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\d+")
+                .matcher(s);
+        int last = -1;
+        while (m.find()) {
+            try {
+                last = Integer.parseInt(m.group());
+            } catch (NumberFormatException ignore) {
+            }
+        }
+        return last;
+    }
+
+    // Phase 1 + Phase 2 validation of the warm-cluster native-snapshot loop:
+    // boot once, snapshot a base ("parent") state, then for several children
+    // diverge differently and roll back to the base WITHOUT a process restart
+    // (TRUNCATE + `nodetool import --copy-data`, which restores correctly AND
+    // leaves the snapshot intact for the next rollback). Measures rollback
+    // latency per cycle and verifies each rollback restores exactly the base.
     public void nativeSnapshotRollbackBenchmark() {
         try {
             String nt = "/" + system + "/" + originalVersion + "/bin/nodetool";
+            String jh = javaHomeForCassandra(originalVersion);
             String ks = "snapbench";
+            boolean is3x = originalVersion.contains("cassandra-2.")
+                    || originalVersion.contains("cassandra-3.");
             shell.executeCommand("DROP KEYSPACE IF EXISTS " + ks + ";");
             shell.executeCommand("CREATE KEYSPACE " + ks
                     + " WITH replication={'class':'SimpleStrategy','replication_factor':1};");
             shell.executeCommand(
                     "CREATE TABLE " + ks + ".t (id int PRIMARY KEY, v text);");
+            StringBuilder base = new StringBuilder();
             for (int i = 0; i < 100; i++)
-                shell.executeCommand("INSERT INTO " + ks + ".t (id,v) VALUES ("
-                        + i + ",'p" + i + "');");
+                base.append("INSERT INTO ").append(ks).append(
+                        ".t (id,v) VALUES (").append(i).append(",'p").append(i)
+                        .append("');");
+            shell.executeCommand(base.toString());
+
             long s0 = System.currentTimeMillis();
-            runInContainer(new String[] { nt, "flush", ks }).waitFor();
-            String snap = "b" + System.currentTimeMillis();
-            runInContainer(new String[] { nt, "snapshot", "-t", snap, ks })
-                    .waitFor();
+            nodetool(jh, nt, "flush " + ks).waitFor();
+            String snap = "base" + System.currentTimeMillis();
+            nodetool(jh, nt, "snapshot -t " + snap + " " + ks).waitFor();
             long s1 = System.currentTimeMillis();
-            for (int i = 100; i < 150; i++)
-                shell.executeCommand("INSERT INTO " + ks + ".t (id,v) VALUES ("
-                        + i + ",'c" + i + "');");
-            long r0 = System.currentTimeMillis();
-            shell.executeCommand("TRUNCATE " + ks + ".t;");
-            // Restore the snapshot SSTables without a process restart. On
-            // Cassandra 4.x/5.x use `nodetool import` (refresh is unreliable
-            // for
-            // this); on 3.x copy SSTables into the table dir + `nodetool
-            // refresh`.
-            boolean is3x = originalVersion.contains("cassandra-2.")
-                    || originalVersion.contains("cassandra-3.");
-            if (is3x) {
-                runInContainer(new String[] { "/bin/sh", "-c",
-                        "D=$(ls -d /var/lib/cassandra/data/" + ks
-                                + "/t-* 2>/dev/null | head -1); cp $D/snapshots/"
-                                + snap + "/*.db $D/ 2>/dev/null" }).waitFor();
-                runInContainer(new String[] { nt, "refresh", ks, "t" })
-                        .waitFor();
-            } else {
-                Process imp = runInContainer(new String[] { "/bin/sh", "-c",
-                        "SD=$(ls -d /var/lib/cassandra/data/" + ks
-                                + "/t-*/snapshots/" + snap
-                                + " 2>/dev/null | head -1); echo SNAPDIR=$SD; ls "
-                                + "$SD 2>&1 | tr '\\n' ' '; echo; " + nt
-                                + " import " + ks + " t $SD 2>&1" });
-                imp.waitFor();
-                logger.info("[NATIVE_SNAPSHOT] restore_out: {}",
-                        Utilities.readProcess(imp).replaceAll("\\s+", " ")
-                                .trim());
+
+            int cycles = 3;
+            long[] rb = new long[cycles];
+            int[] cnts = new int[cycles];
+            boolean allCorrect = true;
+            for (int c = 0; c < cycles; c++) {
+                // each child diverges from the base differently
+                StringBuilder div = new StringBuilder();
+                int extra = 10 * (c + 1);
+                for (int i = 100; i < 100 + extra; i++)
+                    div.append("INSERT INTO ").append(ks).append(
+                            ".t (id,v) VALUES (").append(i).append(",'c")
+                            .append(i).append("');");
+                shell.executeCommand(div.toString());
+
+                long r0 = System.currentTimeMillis();
+                shell.executeCommand("TRUNCATE " + ks + ".t;");
+                if (is3x) {
+                    runInContainer(new String[] { "/bin/sh", "-c",
+                            "D=$(ls -d /var/lib/cassandra/data/" + ks
+                                    + "/t-* 2>/dev/null | head -1); cp $D/snapshots/"
+                                    + snap + "/*.db $D/ 2>/dev/null" }).waitFor();
+                    nodetool(jh, nt, "refresh " + ks + " t").waitFor();
+                } else {
+                    runInContainer(new String[] { "/bin/sh", "-c",
+                            "SD=$(ls -d /var/lib/cassandra/data/" + ks
+                                    + "/t-*/snapshots/" + snap
+                                    + " 2>/dev/null | head -1); "
+                                    + (jh.isEmpty() ? "" : "JAVA_HOME=" + jh
+                                            + " ")
+                                    + nt + " import --copy-data " + ks
+                                    + " t $SD" }).waitFor();
+                }
+                long r1 = System.currentTimeMillis();
+                rb[c] = r1 - r0;
+                cnts[c] = parseCount(shell
+                        .executeCommand("SELECT count(*) FROM " + ks + ".t;"));
+                if (cnts[c] != 100)
+                    allCorrect = false;
             }
-            long r1 = System.currentTimeMillis();
-            String cnt = shell
-                    .executeCommand("SELECT count(*) FROM " + ks + ".t;");
             shell.executeCommand("DROP KEYSPACE " + ks + ";");
+
+            StringBuilder rbs = new StringBuilder();
+            StringBuilder cs = new StringBuilder();
+            long sum = 0;
+            for (int c = 0; c < cycles; c++) {
+                rbs.append(rb[c]);
+                cs.append(cnts[c]);
+                if (c < cycles - 1) {
+                    rbs.append(",");
+                    cs.append(",");
+                }
+                sum += rb[c];
+            }
             logger.info(
-                    "[NATIVE_SNAPSHOT] snapshot_ms={} rollback_ms={} count_after={} (expect 100)",
-                    (s1 - s0), (r1 - r0),
-                    cnt == null ? "?" : cnt.replaceAll("\\s+", " ").trim());
+                    "[NATIVE_SNAPSHOT] version={} snapshot_ms={} cycles={} rollback_ms=[{}] avg_rollback_ms={} counts=[{}] all_correct={} (expect each=100)",
+                    originalVersion, (s1 - s0), cycles, rbs.toString(),
+                    (sum / cycles), cs.toString(), allCorrect);
         } catch (Exception e) {
             logger.warn("[NATIVE_SNAPSHOT] benchmark failed: {}", e.toString());
         }
