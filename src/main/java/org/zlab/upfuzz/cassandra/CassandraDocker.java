@@ -291,12 +291,13 @@ public class CassandraDocker extends Docker {
                     + " WITH replication={'class':'SimpleStrategy','replication_factor':1};");
             shell.executeCommand(
                     "CREATE TABLE " + ks + ".t (id int PRIMARY KEY, v text);");
-            StringBuilder base = new StringBuilder();
+            // Per-statement inserts: the cqlsh daemon executes one statement per
+            // call (a batched multi-statement string is not reliably run).
             for (int i = 0; i < 100; i++)
-                base.append("INSERT INTO ").append(ks).append(
-                        ".t (id,v) VALUES (").append(i).append(",'p").append(i)
-                        .append("');");
-            shell.executeCommand(base.toString());
+                shell.executeCommand("INSERT INTO " + ks + ".t (id,v) VALUES ("
+                        + i + ",'p" + i + "');");
+            int baseCount = parseCount(
+                    shell.executeCommand("SELECT count(*) FROM " + ks + ".t;"));
 
             long s0 = System.currentTimeMillis();
             nodetool(jh, nt, "flush " + ks).waitFor();
@@ -310,13 +311,10 @@ public class CassandraDocker extends Docker {
             boolean allCorrect = true;
             for (int c = 0; c < cycles; c++) {
                 // each child diverges from the base differently
-                StringBuilder div = new StringBuilder();
                 int extra = 10 * (c + 1);
                 for (int i = 100; i < 100 + extra; i++)
-                    div.append("INSERT INTO ").append(ks).append(
-                            ".t (id,v) VALUES (").append(i).append(",'c")
-                            .append(i).append("');");
-                shell.executeCommand(div.toString());
+                    shell.executeCommand("INSERT INTO " + ks
+                            + ".t (id,v) VALUES (" + i + ",'c" + i + "');");
 
                 long r0 = System.currentTimeMillis();
                 shell.executeCommand("TRUNCATE " + ks + ".t;");
@@ -358,8 +356,8 @@ public class CassandraDocker extends Docker {
                 sum += rb[c];
             }
             logger.info(
-                    "[NATIVE_SNAPSHOT] version={} snapshot_ms={} cycles={} rollback_ms=[{}] avg_rollback_ms={} counts=[{}] all_correct={} (expect each=100)",
-                    originalVersion, (s1 - s0), cycles, rbs.toString(),
+                    "[NATIVE_SNAPSHOT] version={} base_count={} snapshot_ms={} cycles={} rollback_ms=[{}] avg_rollback_ms={} counts=[{}] all_correct={} (expect base=100, each rollback=100)",
+                    originalVersion, baseCount, (s1 - s0), cycles, rbs.toString(),
                     (sum / cycles), cs.toString(), allCorrect);
         } catch (Exception e) {
             logger.warn("[NATIVE_SNAPSHOT] benchmark failed: {}", e.toString());
