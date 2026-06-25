@@ -243,7 +243,10 @@ public class CassandraDocker extends Docker {
     // nodetool therefore fails with UnsupportedClassVersionError unless we point
     // it at the right JVM. cqlsh is Python and is unaffected.
     private String javaHomeForCassandra(String v) {
-        if (v.contains("cassandra-5.") || v.contains("cassandra-4."))
+        if (v.contains("cassandra-5.")) // 5.x NodeTool needs Java 17 (Java 11
+                                        // gives LinkageError)
+            return "/usr/lib/jvm/java-17-openjdk-amd64";
+        if (v.contains("cassandra-4."))
             return "/usr/lib/jvm/java-11-openjdk-amd64";
         return ""; // 2.x/3.x: container default (Java 8) is correct
     }
